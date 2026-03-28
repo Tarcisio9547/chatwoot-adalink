@@ -39,9 +39,11 @@ const tailwindConfig = {
   theme: {
     extend: {
       fontFamily: {
-        sans: defaultSansFonts,
-        inter: ['Inter', ...defaultSansFonts],
-        interDisplay: ['InterDisplay', ...defaultSansFonts],
+        sans: ['"DM Sans"', ...defaultSansFonts],
+        inter: ['"DM Sans"', 'Inter', ...defaultSansFonts],
+        interDisplay: ['"Sora"', 'InterDisplay', ...defaultSansFonts],
+        sora: ['"Sora"', ...defaultSansFonts],
+        'dm-sans': ['"DM Sans"', ...defaultSansFonts],
       },
       fontWeight: {
         420: '420',
