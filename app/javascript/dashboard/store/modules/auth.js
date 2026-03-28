@@ -109,7 +109,10 @@ export const actions = {
       context.commit(types.SET_CURRENT_USER, currentUser);
     } catch (error) {
       if (error?.response?.status === 401) {
-        clearCookiesOnLogout();
+        // Don't clear on iframe token auth — just means token expired
+        if (!window.__cw_iframe_token) {
+          clearCookiesOnLogout();
+        }
       }
     }
   },

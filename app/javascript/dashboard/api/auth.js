@@ -29,10 +29,28 @@ export default {
     return fetchPromise;
   },
   hasAuthCookie() {
+    // Support iframe token-based auth (no cookies needed)
+    const urlToken = new URLSearchParams(window.location.search).get('token');
+    if (urlToken) {
+      window.__cw_iframe_token = urlToken;
+      return true;
+    }
+    if (window.__cw_iframe_token) return true;
     return !!Cookies.get('cw_d_session_info');
   },
   getAuthData() {
-    if (this.hasAuthCookie()) {
+    // If using iframe token, return token-based auth headers
+    if (window.__cw_iframe_token) {
+      return {
+        'access-token': '',
+        'token-type': '',
+        client: '',
+        expiry: '',
+        uid: '',
+        api_access_token: window.__cw_iframe_token,
+      };
+    }
+    if (Cookies.get('cw_d_session_info')) {
       const savedAuthInfo = Cookies.get('cw_d_session_info');
       return JSON.parse(savedAuthInfo || '{}');
     }
