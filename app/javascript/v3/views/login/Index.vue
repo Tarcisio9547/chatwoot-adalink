@@ -104,6 +104,12 @@ export default {
     if (this.ssoAuthToken) {
       this.submitLogin();
     }
+    // Auto-login via user_access_token param (CRM iframe integration)
+    const urlParams = new URLSearchParams(window.location.search);
+    const userAccessToken = urlParams.get('user_access_token');
+    if (userAccessToken && !this.ssoAuthToken) {
+      this.submitTokenLogin(userAccessToken);
+    }
     if (this.authError) {
       const messageKey = ERROR_MESSAGES[this.authError] ?? 'LOGIN.API.UNAUTH';
       // Use a method to get the translated text to avoid dynamic key warning
@@ -213,6 +219,31 @@ export default {
       this.mfaRequired = false;
       this.mfaToken = null;
       this.credentials.password = '';
+    },
+    async submitTokenLogin(token) {
+      // Auto-login using user_access_token (CRM iframe integration)
+      this.loginApi.showLoading = true;
+      try {
+        // Store the token directly and redirect as authenticated
+        const { setAuthCredentials } = await import('dashboard/store/utils/api');
+        // Call profile endpoint to get user data for this token
+        const response = await fetch('/auth/sign_in', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_access_token: token }),
+        });
+        if (response.ok) {
+          window.location = '/app';
+        } else {
+          // Try alternative: set token in localStorage directly and go to app
+          localStorage.setItem('access_token', JSON.stringify({ access_token: token }));
+          window.location = '/app';
+        }
+      } catch (e) {
+        // Fallback: store token and try to load app
+        localStorage.setItem('access_token', JSON.stringify({ access_token: token }));
+        window.location = '/app';
+      }
     },
   },
 };
