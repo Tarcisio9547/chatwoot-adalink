@@ -79,10 +79,8 @@ export default {
   mounted() {
     this.initializeColorTheme();
     this.listenToThemeChanges();
-    // If user locale is set, use it; otherwise use account locale
-    this.setLocale(
-      this.uiSettings?.locale || window.chatwootConfig.selectedLocale
-    );
+    // Force Portuguese for Adalink
+    this.setLocale('pt_BR');
   },
   unmounted() {
     if (this.reconnectService) {
