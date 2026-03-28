@@ -7,9 +7,13 @@ class TokenLoginController < ActionController::Base
     if access_token&.owner.is_a?(User)
       user = access_token.owner
       sso_token = user.generate_sso_auth_token
-      redirect_to "/app/login?email=#{CGI.escape(user.email)}&sso_auth_token=#{sso_token}", allow_other_host: false
+      login_path = "/app/login?email=#{CGI.escape(user.email)}&sso_auth_token=#{sso_token}"
+      # Force relative redirect — critical for same-origin proxy to work
+      response.headers['Location'] = login_path
+      head :found
     else
-      redirect_to '/app/login'
+      response.headers['Location'] = '/app/login'
+      head :found
     end
   end
 end
