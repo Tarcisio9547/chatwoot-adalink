@@ -148,18 +148,18 @@
   }
 
   .dark {
-    // slate — Adalink purple-dark tones instead of pure black
-    --slate-1: 10 4 24;
-    --slate-2: 15 7 32;
-    --slate-3: 22 14 42;
-    --slate-4: 30 20 52;
-    --slate-5: 38 28 62;
-    --slate-6: 48 38 72;
-    --slate-7: 62 52 88;
-    --slate-8: 85 75 110;
-    --slate-9: 120 110 140;
-    --slate-10: 140 130 160;
-    --slate-11: 180 175 200;
+    // slate — Adalink purple tones (visible purple, not black)
+    --slate-1: 22 12 45;
+    --slate-2: 28 16 55;
+    --slate-3: 36 22 65;
+    --slate-4: 44 30 75;
+    --slate-5: 52 38 85;
+    --slate-6: 62 48 100;
+    --slate-7: 78 62 118;
+    --slate-8: 100 85 138;
+    --slate-9: 130 118 160;
+    --slate-10: 150 138 178;
+    --slate-11: 190 182 215;
     --slate-12: 241 240 255;
 
     --iris-1: 19 19 30;
@@ -227,18 +227,18 @@
     --teal-11: 11 216 182;
     --teal-12: 173 240 221;
 
-    // gray — purple-tinted grays for Adalink
-    --gray-1: 10 4 24;
-    --gray-2: 15 7 32;
-    --gray-3: 22 14 42;
-    --gray-4: 30 20 52;
-    --gray-5: 38 28 62;
-    --gray-6: 48 38 72;
-    --gray-7: 62 52 88;
-    --gray-8: 85 75 110;
-    --gray-9: 120 110 140;
-    --gray-10: 140 130 160;
-    --gray-11: 180 175 200;
+    // gray — purple tones for Adalink
+    --gray-1: 22 12 45;
+    --gray-2: 28 16 55;
+    --gray-3: 36 22 65;
+    --gray-4: 44 30 75;
+    --gray-5: 52 38 85;
+    --gray-6: 62 48 100;
+    --gray-7: 78 62 118;
+    --gray-8: 100 85 138;
+    --gray-9: 130 118 160;
+    --gray-10: 150 138 178;
+    --gray-11: 190 182 215;
     --gray-12: 241 240 255;
 
     --violet-1: 20 17 31;
@@ -254,22 +254,22 @@
     --violet-11: 169 153 236;
     --violet-12: 226 221 254;
 
-    // Adalink dark backgrounds — purple-tinted, not pure black
-    --background-color: 15 7 32;
-    --surface-1: 10 4 24;
-    --surface-2: 13 6 28;
-    --surface-active: 40 30 60;
+    // Adalink dark backgrounds — visible purple
+    --background-color: 22 12 45;
+    --surface-1: 18 8 38;
+    --surface-2: 22 12 45;
+    --surface-active: 52 38 85;
     --background-input-box: 255, 255, 255, 0.03;
     --text-blue: 225 210 255;
     --text-purple: 241 240 255;
     --text-amber: 255 247 234;
-    --border-strong: 60 40 90;
-    --border-weak: 40 25 65;
+    --border-strong: 75 55 115;
+    --border-weak: 55 38 88;
     --border-blue-strong: 225 210 255;
-    --solid-1: 12 5 26;
-    --solid-2: 18 10 35;
-    --solid-3: 30 20 52;
-    --solid-active: 40 30 60;
+    --solid-1: 20 10 42;
+    --solid-2: 26 14 50;
+    --solid-3: 36 22 65;
+    --solid-active: 52 38 85;
     --solid-amber: 56 50 41;
     --solid-blue: 40 22 90;
     --solid-blue-2: 18 10 35;
@@ -277,12 +277,12 @@
     --solid-purple: 51 30 107;
     --solid-red: 90 33 34;
     --solid-amber-button: 255 221 141;
-    --card-color: 18 10 35;
+    --card-color: 26 14 50;
     --overlay: 0, 0, 0, 0.4;
     --overlay-avatar: 0, 0, 0, 0.05;
-    --button-color: 30 20 52;
+    --button-color: 36 22 65;
     --button-hover-color: 50, 30, 80, 0.4;
-    --label-background: 25 15 45;
+    --label-background: 32 18 58;
     --label-border: 168, 85, 247, 0.08;
 
     --alpha-1: 30, 20, 52, 0.8;
