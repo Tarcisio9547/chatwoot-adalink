@@ -49,7 +49,7 @@ const menuItems = computed(() => {
     {
       show: showChatSupport.value,
       showOnCustomBrandedInstance: false,
-      label: t('SIDEBAR_ITEMS.CONTACT_SUPPORT'),
+      label: 'Suporte',
       icon: 'i-lucide-life-buoy',
       click: () => {
         window.$chatwoot.toggle();
@@ -58,7 +58,7 @@ const menuItems = computed(() => {
     {
       show: true,
       showOnCustomBrandedInstance: true,
-      label: t('SIDEBAR_ITEMS.KEYBOARD_SHORTCUTS'),
+      label: 'Atalhos de teclado',
       icon: 'i-lucide-keyboard',
       click: () => {
         emit('openKeyShortcutModal');
@@ -67,14 +67,14 @@ const menuItems = computed(() => {
     {
       show: true,
       showOnCustomBrandedInstance: true,
-      label: t('SIDEBAR_ITEMS.PROFILE_SETTINGS'),
+      label: 'Configurações do Perfil',
       icon: 'i-lucide-user-pen',
       link: { name: 'profile_settings_index' },
     },
     {
       show: currentUser.value.type === 'SuperAdmin',
       showOnCustomBrandedInstance: true,
-      label: t('SIDEBAR_ITEMS.SUPER_ADMIN_CONSOLE'),
+      label: 'Painel Admin',
       icon: 'i-lucide-castle',
       link: '/super_admin',
       nativeLink: true,

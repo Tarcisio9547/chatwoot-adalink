@@ -225,7 +225,7 @@ const menuItems = computed(() => {
   return [
     {
       name: 'Inbox',
-      label: t('SIDEBAR.INBOX'),
+      label: 'Caixa de Entrada',
       icon: 'i-lucide-inbox',
       to: accountScopedRoute('inbox_view'),
       activeOn: ['inbox_view', 'inbox_view_conversation'],
@@ -235,30 +235,30 @@ const menuItems = computed(() => {
     },
     {
       name: 'Conversation',
-      label: t('SIDEBAR.CONVERSATIONS'),
+      label: 'Conversas',
       icon: 'i-lucide-message-circle',
       children: [
         {
           name: 'All',
-          label: t('SIDEBAR.ALL_CONVERSATIONS'),
+          label: 'Todas as conversas',
           activeOn: ['inbox_conversation'],
           to: accountScopedRoute('home'),
         },
         {
           name: 'Mentions',
-          label: t('SIDEBAR.MENTIONED_CONVERSATIONS'),
+          label: 'Menções',
           activeOn: ['conversation_through_mentions'],
           to: accountScopedRoute('conversation_mentions'),
         },
         {
           name: 'Unattended',
           activeOn: ['conversation_through_unattended'],
-          label: t('SIDEBAR.UNATTENDED_CONVERSATIONS'),
+          label: 'Por responder',
           to: accountScopedRoute('conversation_unattended'),
         },
         {
           name: 'Folders',
-          label: t('SIDEBAR.CUSTOM_VIEWS_FOLDER'),
+          label: 'Pastas',
           icon: 'i-lucide-folder',
           activeOn: ['conversations_through_folders'],
           children: conversationCustomViews.value.map(view => ({
@@ -269,7 +269,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Teams',
-          label: t('SIDEBAR.TEAMS'),
+          label: 'Times',
           icon: 'i-lucide-users',
           activeOn: ['conversations_through_team'],
           children: teams.value.map(team => ({
@@ -280,7 +280,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Channels',
-          label: t('SIDEBAR.CHANNELS'),
+          label: 'Canais',
           icon: 'i-lucide-mailbox',
           activeOn: ['conversation_through_inbox'],
           children: sortedInboxes.value.map(inbox => ({
@@ -298,7 +298,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Labels',
-          label: t('SIDEBAR.LABELS'),
+          label: 'Etiquetas',
           icon: 'i-lucide-tag',
           activeOn: ['conversations_through_label'],
           children: labels.value.map(label => ({
@@ -318,12 +318,12 @@ const menuItems = computed(() => {
     {
       name: 'Captain',
       icon: 'i-woot-captain',
-      label: t('SIDEBAR.CAPTAIN'),
+      label: 'Captain IA',
       activeOn: ['captain_assistants_create_index'],
       children: [
         {
           name: 'FAQs',
-          label: t('SIDEBAR.CAPTAIN_RESPONSES'),
+          label: 'FAQs',
           activeOn: [
             'captain_assistants_responses_index',
             'captain_assistants_responses_pending',
@@ -334,7 +334,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Documents',
-          label: t('SIDEBAR.CAPTAIN_DOCUMENTS'),
+          label: 'Documentos',
           activeOn: ['captain_assistants_documents_index'],
           to: accountScopedRoute('captain_assistants_index', {
             navigationPath: 'captain_assistants_documents_index',
@@ -342,7 +342,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Scenarios',
-          label: t('SIDEBAR.CAPTAIN_SCENARIOS'),
+          label: 'Cenários',
           activeOn: ['captain_assistants_scenarios_index'],
           to: accountScopedRoute('captain_assistants_index', {
             navigationPath: 'captain_assistants_scenarios_index',
@@ -350,7 +350,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Playground',
-          label: t('SIDEBAR.CAPTAIN_PLAYGROUND'),
+          label: 'Playground',
           activeOn: ['captain_assistants_playground_index'],
           to: accountScopedRoute('captain_assistants_index', {
             navigationPath: 'captain_assistants_playground_index',
@@ -358,7 +358,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Inboxes',
-          label: t('SIDEBAR.CAPTAIN_INBOXES'),
+          label: 'Caixas de Entrada',
           activeOn: ['captain_assistants_inboxes_index'],
           to: accountScopedRoute('captain_assistants_index', {
             navigationPath: 'captain_assistants_inboxes_index',
@@ -366,7 +366,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Tools',
-          label: t('SIDEBAR.CAPTAIN_TOOLS'),
+          label: 'Ferramentas',
           activeOn: ['captain_tools_index'],
           to: accountScopedRoute('captain_assistants_index', {
             navigationPath: 'captain_tools_index',
@@ -374,7 +374,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Settings',
-          label: t('SIDEBAR.CAPTAIN_SETTINGS'),
+          label: 'Configurações',
           activeOn: [
             'captain_assistants_settings_index',
             'captain_assistants_guidelines_index',
@@ -388,12 +388,12 @@ const menuItems = computed(() => {
     },
     {
       name: 'Contacts',
-      label: t('SIDEBAR.CONTACTS'),
+      label: 'Contatos',
       icon: 'i-lucide-contact',
       children: [
         {
           name: 'All Contacts',
-          label: t('SIDEBAR.ALL_CONTACTS'),
+          label: 'Todos os Contatos',
           to: accountScopedRoute(
             'contacts_dashboard_index',
             {},
@@ -403,14 +403,14 @@ const menuItems = computed(() => {
         },
         {
           name: 'Active',
-          label: t('SIDEBAR.ACTIVE'),
+          label: 'Ativos',
           to: accountScopedRoute('contacts_dashboard_active'),
           activeOn: ['contacts_dashboard_active'],
         },
         {
           name: 'Segments',
           icon: 'i-lucide-group',
-          label: t('SIDEBAR.CUSTOM_VIEWS_SEGMENTS'),
+          label: 'Segmentos',
           children: contactCustomViews.value.map(view => ({
             name: `${view.name}-${view.id}`,
             label: view.name,
@@ -428,7 +428,7 @@ const menuItems = computed(() => {
         {
           name: 'Tagged With',
           icon: 'i-lucide-tag',
-          label: t('SIDEBAR.TAGGED_WITH'),
+          label: 'Marcados com',
           children: labels.value.map(label => ({
             name: `${label.title}-${label.id}`,
             label: label.title,
@@ -451,12 +451,12 @@ const menuItems = computed(() => {
     },
     {
       name: 'Companies',
-      label: t('SIDEBAR.COMPANIES'),
+      label: 'Empresas',
       icon: 'i-lucide-building-2',
       children: [
         {
           name: 'All Companies',
-          label: t('SIDEBAR.ALL_COMPANIES'),
+          label: 'Todas as Empresas',
           to: accountScopedRoute(
             'companies_dashboard_index',
             {},
@@ -468,55 +468,55 @@ const menuItems = computed(() => {
     },
     {
       name: 'Reports',
-      label: t('SIDEBAR.REPORTS'),
+      label: 'Relatórios',
       icon: 'i-lucide-chart-spline',
       children: [
         {
           name: 'Report Overview',
-          label: t('SIDEBAR.REPORTS_OVERVIEW'),
+          label: 'Visão Geral',
           to: accountScopedRoute('account_overview_reports'),
         },
         {
           name: 'Report Conversation',
-          label: t('SIDEBAR.REPORTS_CONVERSATION'),
+          label: 'Conversas',
           to: accountScopedRoute('conversation_reports'),
         },
         ...reportRoutes.value,
         {
           name: 'Reports CSAT',
-          label: t('SIDEBAR.CSAT'),
+          label: 'CSAT',
           to: accountScopedRoute('csat_reports'),
         },
         {
           name: 'Reports SLA',
-          label: t('SIDEBAR.REPORTS_SLA'),
+          label: 'SLA',
           to: accountScopedRoute('sla_reports'),
         },
         {
           name: 'Reports Bot',
-          label: t('SIDEBAR.REPORTS_BOT'),
+          label: 'Robôs',
           to: accountScopedRoute('bot_reports'),
         },
       ],
     },
     {
       name: 'Campaigns',
-      label: t('SIDEBAR.CAMPAIGNS'),
+      label: 'Campanhas',
       icon: 'i-lucide-megaphone',
       children: [
         {
           name: 'Live chat',
-          label: t('SIDEBAR.LIVE_CHAT'),
+          label: 'Chat ao vivo',
           to: accountScopedRoute('campaigns_livechat_index'),
         },
         {
           name: 'SMS',
-          label: t('SIDEBAR.SMS'),
+          label: 'SMS',
           to: accountScopedRoute('campaigns_sms_index'),
         },
         {
           name: 'WhatsApp',
-          label: t('SIDEBAR.WHATSAPP'),
+          label: 'WhatsApp',
           to: accountScopedRoute('campaigns_whatsapp_index'),
         },
       ],
@@ -593,7 +593,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Settings Teams',
-          label: t('SIDEBAR.TEAMS'),
+          label: 'Times',
           icon: 'i-lucide-users',
           activeOn: [
             'settings_teams_list',
@@ -642,7 +642,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Settings Labels',
-          label: t('SIDEBAR.LABELS'),
+          label: 'Etiquetas',
           icon: 'i-lucide-tags',
           to: accountScopedRoute('labels_list'),
         },
