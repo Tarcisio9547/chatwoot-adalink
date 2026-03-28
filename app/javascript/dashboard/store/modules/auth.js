@@ -103,16 +103,24 @@ export const getters = {
 export const actions = {
   async validityCheck(context) {
     try {
-      const response = await authAPI.validityCheck();
-      const currentUser = response.data.payload.data;
-      setUser(currentUser);
-      context.commit(types.SET_CURRENT_USER, currentUser);
+      if (window.__cw_iframe_token) {
+        // Iframe token auth: fetch profile via API token (no cookies needed)
+        const res = await fetch('/api/v1/profile', {
+          headers: { api_access_token: window.__cw_iframe_token },
+        });
+        if (!res.ok) throw { response: { status: res.status } };
+        const currentUser = await res.json();
+        setUser(currentUser);
+        context.commit(types.SET_CURRENT_USER, currentUser);
+      } else {
+        const response = await authAPI.validityCheck();
+        const currentUser = response.data.payload.data;
+        setUser(currentUser);
+        context.commit(types.SET_CURRENT_USER, currentUser);
+      }
     } catch (error) {
-      if (error?.response?.status === 401) {
-        // Don't clear on iframe token auth — just means token expired
-        if (!window.__cw_iframe_token) {
-          clearCookiesOnLogout();
-        }
+      if (error?.response?.status === 401 && !window.__cw_iframe_token) {
+        clearCookiesOnLogout();
       }
     }
   },
