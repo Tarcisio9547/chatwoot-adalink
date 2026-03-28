@@ -14,7 +14,8 @@ class ApplicationController < ActionController::Base
   private
 
   def allow_iframe
-    response.headers.except! 'X-Frame-Options'
+    response.headers.delete 'X-Frame-Options'
+    response.headers['Content-Security-Policy'] = "frame-ancestors 'self' localhost:* *.up.railway.app *.vercel.app adalinda-crm.vercel.app"
   end
 
   def set_current_user
