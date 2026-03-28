@@ -1,10 +1,8 @@
 # Auto-login via API access token for iframe embedding
-# GET /auth/token_login?token=xxx
+# GET /sso/login?token=xxx
 # Validates the API token, generates a short-lived SSO token,
 # and redirects to the login page which auto-authenticates.
-class TokenLoginController < ApplicationController
-  skip_before_action :verify_authenticity_token, raise: false
-
+class TokenLoginController < ActionController::Base
   def create
     access_token = AccessToken.find_by(token: params[:token])
 
@@ -13,7 +11,8 @@ class TokenLoginController < ApplicationController
       sso_token = user.generate_sso_auth_token
       redirect_to "/app/login?email=#{CGI.escape(user.email)}&sso_auth_token=#{sso_token}", allow_other_host: false
     else
-      redirect_to '/app/login'
+      # Debug: show what happened instead of silent redirect
+      render plain: "Token not found or owner is not a User. Token received: #{params[:token].present? ? 'yes' : 'no'}", status: :unauthorized
     end
   end
 end
