@@ -91,6 +91,7 @@ export default {
   },
   methods: {
     initializeColorTheme() {
+      // Respect localStorage color_scheme (set by CRM) before falling back to OS preference
       setColorTheme(window.matchMedia('(prefers-color-scheme: dark)').matches);
     },
     listenToThemeChanges() {
