@@ -9,7 +9,7 @@ Rails.application.routes.draw do
   }, via: [:get, :post]
 
   # Token-based auto-login for iframe embedding (Adalink CRM)
-  get '/auth/token_login', to: 'token_login#create'
+  get '/sso/login', to: 'token_login#create'
 
   ## renders the frontend paths only if its not an api only server
   if ActiveModel::Type::Boolean.new.cast(ENV.fetch('CW_API_ONLY_SERVER', false))
