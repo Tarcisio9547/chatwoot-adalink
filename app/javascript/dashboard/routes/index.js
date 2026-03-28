@@ -14,7 +14,10 @@ export const validateAuthenticateRoutePermission = (to, next) => {
   const { isLoggedIn, getCurrentUser: user } = store.getters;
 
   if (!isLoggedIn) {
-    window.location.assign('/app/login');
+    // Preserve iframe token in redirect so login page can use it
+    const token = window.__cw_iframe_token || new URLSearchParams(window.location.search).get('token');
+    const loginUrl = token ? `/app/login?token=${token}` : '/app/login';
+    window.location.assign(loginUrl);
     return '';
   }
 

@@ -104,11 +104,11 @@ export default {
     if (this.ssoAuthToken) {
       this.submitLogin();
     }
-    // Auto-login via user_access_token param (CRM iframe integration)
+    // Auto-login via token param (CRM iframe integration)
     const urlParams = new URLSearchParams(window.location.search);
-    const userAccessToken = urlParams.get('user_access_token');
-    if (userAccessToken && !this.ssoAuthToken) {
-      this.submitTokenLogin(userAccessToken);
+    const apiToken = urlParams.get('token') || urlParams.get('user_access_token');
+    if (apiToken && !this.ssoAuthToken) {
+      this.submitTokenLogin(apiToken);
     }
     if (this.authError) {
       const messageKey = ERROR_MESSAGES[this.authError] ?? 'LOGIN.API.UNAUTH';
@@ -221,29 +221,27 @@ export default {
       this.credentials.password = '';
     },
     async submitTokenLogin(token) {
-      // Auto-login using user_access_token (CRM iframe integration)
+      // CRM iframe integration: use api_access_token to validate and get profile
       this.loginApi.showLoading = true;
       try {
-        // Store the token directly and redirect as authenticated
-        const { setAuthCredentials } = await import('dashboard/store/utils/api');
-        // Call profile endpoint to get user data for this token
-        const response = await fetch('/auth/sign_in', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_access_token: token }),
+        const res = await fetch('/auth/validate_token', {
+          method: 'GET',
+          headers: { api_access_token: token },
         });
-        if (response.ok) {
-          window.location = '/app';
-        } else {
-          // Try alternative: set token in localStorage directly and go to app
-          localStorage.setItem('access_token', JSON.stringify({ access_token: token }));
-          window.location = '/app';
+        if (res.ok) {
+          const data = await res.json();
+          // Store token globally for the dashboard app to use
+          window.__cw_iframe_token = token;
+          localStorage.setItem('cw_iframe_token', token);
+          // Redirect to dashboard with token preserved
+          window.location = `/app?token=${token}`;
+          return;
         }
-      } catch (e) {
-        // Fallback: store token and try to load app
-        localStorage.setItem('access_token', JSON.stringify({ access_token: token }));
-        window.location = '/app';
+      } catch {
+        // validation failed
       }
+      this.loginApi.showLoading = false;
+      this.loginApi.hasErrored = true;
     },
   },
 };

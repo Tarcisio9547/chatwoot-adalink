@@ -33,6 +33,12 @@ export default {
     const urlToken = new URLSearchParams(window.location.search).get('token');
     if (urlToken) {
       window.__cw_iframe_token = urlToken;
+      localStorage.setItem('cw_iframe_token', urlToken);
+      return true;
+    }
+    const storedToken = localStorage.getItem('cw_iframe_token');
+    if (storedToken) {
+      window.__cw_iframe_token = storedToken;
       return true;
     }
     if (window.__cw_iframe_token) return true;
