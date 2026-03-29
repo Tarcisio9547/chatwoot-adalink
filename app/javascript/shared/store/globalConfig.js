@@ -54,8 +54,9 @@ const state = {
 export const getters = {
   get: $state => $state,
   isOnChatwootCloud: $state => $state.deploymentEnv === 'cloud',
-  isACustomBrandedInstance: $state => $state.installationName !== 'Chatwoot',
-  isAChatwootInstance: $state => $state.installationName === 'Chatwoot',
+  // Adalink: always custom branded — unlocks all features, no paywalls
+  isACustomBrandedInstance: () => true,
+  isAChatwootInstance: () => false,
 };
 
 export const actions = {};

@@ -50,12 +50,8 @@ const isFeatureEnabledOnAccount = useMapGetter(
 
 const currentAccountId = useMapGetter('getCurrentAccountId');
 
-const isBehindAPaywall = computed(() => {
-  return !isFeatureEnabledOnAccount.value(
-    currentAccountId.value,
-    'custom_roles'
-  );
-});
+// Adalink: all features unlocked
+const isBehindAPaywall = computed(() => false);
 
 const fetchCustomRoles = async () => {
   try {

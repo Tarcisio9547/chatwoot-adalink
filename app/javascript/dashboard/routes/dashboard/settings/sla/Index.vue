@@ -58,7 +58,7 @@ export default {
       return ` ${this.selectedResponse.name}`;
     },
     isBehindAPaywall() {
-      return !this.isFeatureEnabledonAccount(this.accountId, 'sla');
+      return false; // Adalink: all features unlocked
     },
     isSuperAdmin() {
       return this.currentUser.type === 'SuperAdmin';
