@@ -196,24 +196,24 @@ const onComposeClose = () => {
 const newReportRoutes = () => [
   {
     name: 'Reports Agent',
-    label: t('SIDEBAR.REPORTS_AGENT'),
+    label: 'Agentes',
     to: accountScopedRoute('agent_reports_index'),
     activeOn: ['agent_reports_show'],
   },
   {
     name: 'Reports Label',
-    label: t('SIDEBAR.REPORTS_LABEL'),
+    label: 'Etiquetas',
     to: accountScopedRoute('label_reports_index'),
   },
   {
     name: 'Reports Inbox',
-    label: t('SIDEBAR.REPORTS_INBOX'),
+    label: 'Caixa de Entrada',
     to: accountScopedRoute('inbox_reports_index'),
     activeOn: ['inbox_reports_show'],
   },
   {
     name: 'Reports Team',
-    label: t('SIDEBAR.REPORTS_TEAM'),
+    label: 'Equipe',
     to: accountScopedRoute('team_reports_index'),
     activeOn: ['team_reports_show'],
   },
@@ -452,12 +452,12 @@ const menuItems = computed(() => {
     },
     {
       name: 'Portals',
-      label: t('SIDEBAR.HELP_CENTER.TITLE'),
+      label: 'Central de Ajuda',
       icon: 'i-lucide-library-big',
       children: [
         {
           name: 'Articles',
-          label: t('SIDEBAR.HELP_CENTER.ARTICLES'),
+          label: 'Artigos',
           activeOn: [
             'portals_articles_index',
             'portals_articles_new',
@@ -469,7 +469,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Categories',
-          label: t('SIDEBAR.HELP_CENTER.CATEGORIES'),
+          label: 'Categorias',
           activeOn: [
             'portals_categories_index',
             'portals_categories_articles_index',
@@ -481,7 +481,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Locales',
-          label: t('SIDEBAR.HELP_CENTER.LOCALES'),
+          label: 'Idiomas',
           activeOn: ['portals_locales_index'],
           to: accountScopedRoute('portals_index', {
             navigationPath: 'portals_locales_index',
@@ -489,7 +489,7 @@ const menuItems = computed(() => {
         },
         {
           name: 'Settings',
-          label: t('SIDEBAR.HELP_CENTER.SETTINGS'),
+          label: 'Configurações',
           activeOn: ['portals_settings_index'],
           to: accountScopedRoute('portals_index', {
             navigationPath: 'portals_settings_index',
@@ -499,24 +499,24 @@ const menuItems = computed(() => {
     },
     {
       name: 'Settings',
-      label: t('SIDEBAR.SETTINGS'),
+      label: 'Configurações',
       icon: 'i-lucide-bolt',
       children: [
         {
           name: 'Settings Account Settings',
-          label: t('SIDEBAR.ACCOUNT_SETTINGS'),
+          label: 'Conta',
           icon: 'i-lucide-briefcase',
           to: accountScopedRoute('general_settings_index'),
         },
         // {
         //   name: 'Settings Captain',
-        //   label: t('SIDEBAR.CAPTAIN_AI'),
+        //   label: 'Captain IA',
         //   icon: 'i-woot-captain',
         //   to: accountScopedRoute('captain_settings_index'),
         // },
         {
           name: 'Settings Agents',
-          label: t('SIDEBAR.AGENTS'),
+          label: 'Agentes',
           icon: 'i-lucide-square-user',
           to: accountScopedRoute('agent_list'),
         },
@@ -540,7 +540,7 @@ const menuItems = computed(() => {
           ? [
               {
                 name: 'Settings Agent Assignment',
-                label: t('SIDEBAR.AGENT_ASSIGNMENT'),
+                label: 'Atribuição de Agentes',
                 icon: 'i-lucide-user-cog',
                 activeOn: [
                   'assignment_policy_index',
@@ -557,7 +557,7 @@ const menuItems = computed(() => {
           : []),
         {
           name: 'Settings Inboxes',
-          label: t('SIDEBAR.INBOXES'),
+          label: 'Caixas de Entrada',
           icon: 'i-lucide-inbox',
           activeOn: [
             'settings_inbox_list',
@@ -577,73 +577,73 @@ const menuItems = computed(() => {
         },
         {
           name: 'Settings Custom Attributes',
-          label: t('SIDEBAR.CUSTOM_ATTRIBUTES'),
+          label: 'Atributos Personalizados',
           icon: 'i-lucide-code',
           to: accountScopedRoute('attributes_list'),
         },
         {
           name: 'Settings Automation',
-          label: t('SIDEBAR.AUTOMATION'),
+          label: 'Automação',
           icon: 'i-lucide-repeat',
           to: accountScopedRoute('automation_list'),
         },
         {
           name: 'Settings Agent Bots',
-          label: t('SIDEBAR.AGENT_BOTS'),
+          label: 'Robôs',
           icon: 'i-lucide-bot',
           to: accountScopedRoute('agent_bots'),
         },
         {
           name: 'Settings Macros',
-          label: t('SIDEBAR.MACROS'),
+          label: 'Macros',
           icon: 'i-lucide-toy-brick',
           to: accountScopedRoute('macros_wrapper'),
         },
         {
           name: 'Settings Canned Responses',
-          label: t('SIDEBAR.CANNED_RESPONSES'),
+          label: 'Respostas Prontas',
           icon: 'i-lucide-message-square-quote',
           to: accountScopedRoute('canned_list'),
         },
         {
           name: 'Settings Integrations',
-          label: t('SIDEBAR.INTEGRATIONS'),
+          label: 'Integrações',
           icon: 'i-lucide-blocks',
           to: accountScopedRoute('settings_applications'),
         },
         {
           name: 'Settings Audit Logs',
-          label: t('SIDEBAR.AUDIT_LOGS'),
+          label: 'Logs de Auditoria',
           icon: 'i-lucide-briefcase',
           to: accountScopedRoute('auditlogs_list'),
         },
         {
           name: 'Settings Custom Roles',
-          label: t('SIDEBAR.CUSTOM_ROLES'),
+          label: 'Funções Personalizadas',
           icon: 'i-lucide-shield-plus',
           to: accountScopedRoute('custom_roles_list'),
         },
         {
           name: 'Settings Sla',
-          label: t('SIDEBAR.SLA'),
+          label: 'SLA',
           icon: 'i-lucide-clock-alert',
           to: accountScopedRoute('sla_list'),
         },
         {
           name: 'Conversation Workflow',
-          label: t('SIDEBAR.CONVERSATION_WORKFLOW'),
+          label: 'Fluxo de Conversa',
           icon: 'i-lucide-workflow',
           to: accountScopedRoute('conversation_workflow_index'),
         },
         {
           name: 'Settings Security',
-          label: t('SIDEBAR.SECURITY'),
+          label: 'Segurança',
           icon: 'i-lucide-shield',
           to: accountScopedRoute('security_settings_index'),
         },
         {
           name: 'Settings Billing',
-          label: t('SIDEBAR.BILLING'),
+          label: 'Cobrança',
           icon: 'i-lucide-credit-card',
           to: accountScopedRoute('billing_settings_index'),
         },
