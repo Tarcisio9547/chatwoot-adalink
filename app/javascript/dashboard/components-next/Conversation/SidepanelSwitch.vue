@@ -57,33 +57,17 @@ useKeyboardEvents(keyboardEvents);
 
 <template>
   <ButtonGroup
-    class="flex flex-col justify-center items-center absolute top-36 xl:top-24 ltr:right-2 rtl:left-2 bg-n-solid-2/90 backdrop-blur-lg border border-n-weak/50 rounded-full gap-1.5 p-1.5 shadow-sm transition-shadow duration-200 hover:shadow"
+    class="flex flex-col justify-center items-center absolute top-36 xl:top-24 ltr:right-2 rtl:left-2 rounded-full gap-1.5 p-1 transition-shadow duration-200"
   >
     <Button
-      v-tooltip.top="$t('CONVERSATION.SIDEBAR.CONTACT')"
-      ghost
-      slate
+      v-tooltip.top="'Dados do Contato'"
       sm
-      class="!rounded-full transition-all duration-[250ms] ease-out active:!scale-95 active:!brightness-105 active:duration-75"
-      :class="{
-        'bg-n-alpha-2 active:shadow-sm': isContactSidebarOpen,
-      }"
+      class="!rounded-full !w-10 !h-10 transition-all duration-[250ms] ease-out active:!scale-95 active:duration-75 shadow-lg"
+      :class="isContactSidebarOpen
+        ? '!bg-[rgb(124,58,237)] !text-white shadow-[rgb(124,58,237)]/30'
+        : '!bg-[rgb(124,58,237)]/15 !text-[rgb(124,58,237)] !border !border-[rgb(124,58,237)]/30 hover:!bg-[rgb(124,58,237)] hover:!text-white'"
       icon="i-ph-user-bold"
       @click="handleConversationSidebarToggle"
-    />
-    <Button
-      v-if="showCopilotTab"
-      v-tooltip.bottom="$t('CONVERSATION.SIDEBAR.COPILOT')"
-      ghost
-      slate
-      sm
-      class="!rounded-full transition-all duration-[250ms] ease-out active:!scale-95 active:duration-75"
-      :class="{
-        'bg-n-alpha-2 !text-n-iris-9 active:!brightness-105 active:shadow-sm':
-          isCopilotPanelOpen,
-      }"
-      icon="i-woot-captain"
-      @click="handleCopilotSidebarToggle"
     />
   </ButtonGroup>
 </template>
