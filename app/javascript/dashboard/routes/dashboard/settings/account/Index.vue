@@ -103,9 +103,9 @@ export default {
         const { name, locale, id, domain, support_email, features } =
           this.getAccount(this.accountId);
 
-        this.$root.$i18n.locale = this.uiSettings?.locale || locale;
+        this.$root.$i18n.locale = 'pt_BR';
         this.name = name;
-        this.locale = locale;
+        this.locale = 'pt_BR';
         this.id = id;
         this.domain = domain;
         this.supportEmail = support_email;
@@ -128,13 +128,7 @@ export default {
           domain: this.domain,
           support_email: this.supportEmail,
         });
-        // If user locale is set, update the locale with user locale
-        if (this.uiSettings?.locale) {
-          this.$root.$i18n.locale = this.uiSettings?.locale;
-        } else {
-          // If user locale is not set, update the locale with account locale
-          this.$root.$i18n.locale = this.locale;
-        }
+        this.$root.$i18n.locale = 'pt_BR';
         this.getAccount(this.id).locale = this.locale;
         useAlert(this.$t('GENERAL_SETTINGS.UPDATE.SUCCESS'));
       } catch (error) {
