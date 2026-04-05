@@ -37,16 +37,11 @@ class ChatwootHub
   end
 
   def self.pricing_plan
-    return ENV.fetch('CHATWOOT_PRICING_PLAN', 'Enterprise') unless ChatwootApp.enterprise?
-
-    InstallationConfig.find_by(name: 'INSTALLATION_PRICING_PLAN')&.value ||
-      ENV.fetch('CHATWOOT_PRICING_PLAN', 'Enterprise')
+    'Enterprise'
   end
 
   def self.pricing_plan_quantity
-    return 999 unless ChatwootApp.enterprise?
-
-    InstallationConfig.find_by(name: 'INSTALLATION_PRICING_PLAN_QUANTITY')&.value || 999
+    999
   end
 
   def self.support_config
