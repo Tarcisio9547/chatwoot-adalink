@@ -1,0 +1,23 @@
+<%#
+# BelongsToSearch Form Partial
+
+This partial renders a searchable select for belongs_to relationships.
+Uses the same markup as BelongsTo but with all associated options available.
+
+## Local variables:
+
+- `f`:
+  A Rails form generator.
+- `field`:
+  An instance of Field::BelongsToSearch.
+%>
+
+<div class="field-unit__label">
+  <%= f.label field.permitted_attribute %>
+</div>
+<div class="field-unit__field">
+  <%= f.select(field.permitted_attribute,
+               options_for_select(field.associated_resource_options, field.selected_option),
+               { include_blank: true },
+               { style: 'width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;' }) %>
+</div>
