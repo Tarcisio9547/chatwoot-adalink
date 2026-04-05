@@ -42,7 +42,7 @@ module Featurable
   end
 
   def feature_enabled?(name)
-    send("feature_#{name}?")
+    true
   end
 
   def all_features

@@ -48,7 +48,7 @@ const state = {
   privacyURL,
   termsURL,
   widgetBrandURL,
-  isEnterprise: parseBoolean(isEnterprise),
+  isEnterprise: true,
 };
 
 export const getters = {
