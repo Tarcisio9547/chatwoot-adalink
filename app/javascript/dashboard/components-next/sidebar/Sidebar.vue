@@ -316,6 +316,77 @@ const menuItems = computed(() => {
       ],
     },
     {
+      name: 'Captain',
+      icon: 'i-woot-captain',
+      label: 'Captain IA',
+      activeOn: ['captain_assistants_create_index'],
+      children: [
+        {
+          name: 'FAQs',
+          label: 'FAQs',
+          activeOn: [
+            'captain_assistants_responses_index',
+            'captain_assistants_responses_pending',
+          ],
+          to: accountScopedRoute('captain_assistants_index', {
+            navigationPath: 'captain_assistants_responses_index',
+          }),
+        },
+        {
+          name: 'Documents',
+          label: 'Documentos',
+          activeOn: ['captain_assistants_documents_index'],
+          to: accountScopedRoute('captain_assistants_index', {
+            navigationPath: 'captain_assistants_documents_index',
+          }),
+        },
+        {
+          name: 'Scenarios',
+          label: 'Cenários',
+          activeOn: ['captain_assistants_scenarios_index'],
+          to: accountScopedRoute('captain_assistants_index', {
+            navigationPath: 'captain_assistants_scenarios_index',
+          }),
+        },
+        {
+          name: 'Playground',
+          label: 'Playground',
+          activeOn: ['captain_assistants_playground_index'],
+          to: accountScopedRoute('captain_assistants_index', {
+            navigationPath: 'captain_assistants_playground_index',
+          }),
+        },
+        {
+          name: 'Inboxes',
+          label: 'Caixas de Entrada',
+          activeOn: ['captain_assistants_inboxes_index'],
+          to: accountScopedRoute('captain_assistants_index', {
+            navigationPath: 'captain_assistants_inboxes_index',
+          }),
+        },
+        {
+          name: 'Tools',
+          label: 'Ferramentas',
+          activeOn: ['captain_tools_index'],
+          to: accountScopedRoute('captain_assistants_index', {
+            navigationPath: 'captain_tools_index',
+          }),
+        },
+        {
+          name: 'Settings',
+          label: 'Configurações',
+          activeOn: [
+            'captain_assistants_settings_index',
+            'captain_assistants_guidelines_index',
+            'captain_assistants_guardrails_index',
+          ],
+          to: accountScopedRoute('captain_assistants_index', {
+            navigationPath: 'captain_assistants_settings_index',
+          }),
+        },
+      ],
+    },
+    {
       name: 'Contacts',
       label: 'Contatos',
       icon: 'i-lucide-contact',
@@ -508,12 +579,12 @@ const menuItems = computed(() => {
           icon: 'i-lucide-briefcase',
           to: accountScopedRoute('general_settings_index'),
         },
-        // {
-        //   name: 'Settings Captain',
-        //   label: 'Captain IA',
-        //   icon: 'i-woot-captain',
-        //   to: accountScopedRoute('captain_settings_index'),
-        // },
+        {
+          name: 'Settings Captain',
+          label: 'Captain IA',
+          icon: 'i-woot-captain',
+          to: accountScopedRoute('captain_settings_index'),
+        },
         {
           name: 'Settings Agents',
           label: 'Agentes',
@@ -759,36 +830,8 @@ const menuItems = computed(() => {
         />
       </ul>
     </nav>
-    <section
-      class="flex relative flex-col flex-shrink-0 gap-1 justify-between items-center"
-    >
-      <div
-        class="pointer-events-none absolute inset-x-0 -top-[1.938rem] h-8 bg-gradient-to-t from-n-background to-transparent"
-      />
-      <SidebarChangelogCard
-        v-if="
-          isOnChatwootCloud &&
-          !isACustomBrandedInstance &&
-          !isEffectivelyCollapsed
-        "
-      />
-      <SidebarChangelogButton
-        v-if="
-          isOnChatwootCloud &&
-          !isACustomBrandedInstance &&
-          isEffectivelyCollapsed
-        "
-      />
-      <div
-        class="px-1 py-1.5 flex-shrink-0 flex w-full z-50 gap-2 items-center border-t border-n-weak shadow-[0px_-2px_4px_0px_rgba(27,28,29,0.02)]"
-        :class="isEffectivelyCollapsed ? 'justify-center' : 'justify-between'"
-      >
-        <SidebarProfileMenu
-          :is-collapsed="isEffectivelyCollapsed"
-          @open-key-shortcut-modal="emit('openKeyShortcutModal')"
-        />
-      </div>
-    </section>
+    <!-- Profile menu hidden — managed by Adalink CRM navbar -->
+
     <!-- Resize Handle (desktop only) -->
     <div
       class="hidden md:block absolute top-0 h-full w-1 cursor-col-resize z-40 ltr:right-0 rtl:left-0 group"

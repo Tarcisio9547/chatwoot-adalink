@@ -53,45 +53,8 @@ const emitNewAccount = () => {
 <template>
   <DropdownContainer>
     <template #trigger="{ toggle, isOpen }">
-      <!-- Collapsed view: Logo trigger -->
-      <button
-        v-if="isCollapsed"
-        class="grid flex-shrink-0 place-content-center p-2 rounded-lg cursor-pointer hover:bg-n-alpha-1"
-        :class="{ 'bg-n-alpha-1': isOpen }"
-        :title="currentAccount.name"
-        @click="toggle"
-      >
-        <Logo class="size-7" />
-      </button>
-      <!-- Expanded view: Account name trigger -->
-      <button
-        v-else
-        id="sidebar-account-switcher"
-        :data-account-id="accountId"
-        aria-haspopup="listbox"
-        aria-controls="account-options"
-        class="flex items-center gap-2 justify-between w-full rounded-lg px-2"
-        :class="[
-          isOpen && 'bg-n-alpha-1',
-          showAccountSwitcher
-            ? 'hover:bg-n-alpha-1 cursor-pointer'
-            : 'cursor-default',
-        ]"
-        @click="() => showAccountSwitcher && toggle()"
-      >
-        <span
-          class="text-sm font-medium leading-5 text-n-slate-12 truncate"
-          aria-live="polite"
-        >
-          {{ currentAccount.name }}
-        </span>
-
-        <span
-          v-if="showAccountSwitcher"
-          aria-hidden="true"
-          class="i-lucide-chevron-down size-4 text-n-slate-10 flex-shrink-0"
-        />
-      </button>
+      <!-- Account switcher hidden - managed via CRM -->
+      <span v-if="false" />
     </template>
     <DropdownBody
       v-if="showAccountSwitcher || isCollapsed"

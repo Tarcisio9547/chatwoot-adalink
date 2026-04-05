@@ -79,12 +79,16 @@ export default {
   mounted() {
     this.initializeColorTheme();
     this.listenToThemeChanges();
+    this.listenToCrmNavigation();
     // Force Portuguese for Adalink
     this.setLocale('pt_BR');
   },
   unmounted() {
     if (this.reconnectService) {
       this.reconnectService.disconnect();
+    }
+    if (this._crmNavigationHandler) {
+      window.removeEventListener('message', this._crmNavigationHandler);
     }
   },
   methods: {
@@ -95,6 +99,27 @@ export default {
     listenToThemeChanges() {
       const mql = window.matchMedia('(prefers-color-scheme: dark)');
       mql.onchange = e => setColorTheme(e.matches);
+    },
+    listenToCrmNavigation() {
+      this._crmNavigationHandler = event => {
+        const { type } = event.data || {};
+        if (type === 'adalink-navigate' && event.data.route) {
+          this.router.push(event.data.route);
+        }
+        if (type === 'adalink-availability-changed' && event.data.availability) {
+          this.store.dispatch('updateAvailability', {
+            availability: event.data.availability,
+            account_id: this.currentAccountId,
+          });
+        }
+        if (type === 'adalink-auto-offline-changed' && event.data.autoOffline !== undefined) {
+          this.store.dispatch('updateAutoOffline', {
+            accountId: this.currentAccountId,
+            autoOffline: event.data.autoOffline,
+          });
+        }
+      };
+      window.addEventListener('message', this._crmNavigationHandler);
     },
     setLocale(locale) {
       this.$root.$i18n.locale = locale;
