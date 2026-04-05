@@ -63,11 +63,9 @@ export function usePolicy() {
 
   const shouldShow = (featureFlag, permissions, installationTypes) => {
     const perms = unref(permissions);
-    const installation = unref(installationTypes);
 
-    // Adalink: only check permissions and installation type, all features unlocked
+    // Adalink: only check role permissions; installation type and feature flags unlocked
     if (!checkPermissions(perms)) return false;
-    if (!checkInstallationType(installation)) return false;
     return true;
   };
 
