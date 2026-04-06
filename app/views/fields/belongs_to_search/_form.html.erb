@@ -1,23 +1,22 @@
 <%#
 # BelongsToSearch Form Partial
 
-This partial renders a searchable select for belongs_to relationships.
-Uses the same markup as BelongsTo but with all associated options available.
-
-## Local variables:
-
-- `f`:
-  A Rails form generator.
-- `field`:
-  An instance of Field::BelongsToSearch.
+Renders a standard HTML select with all available options.
+No JavaScript dependency (Selectize not needed for small datasets).
 %>
 
 <div class="field-unit__label">
   <%= f.label field.permitted_attribute %>
 </div>
 <div class="field-unit__field">
+  <%
+    # Build options from the associated class directly
+    klass = field.associated_class
+    options = klass.order(:id).map { |r| ["##{r.id} #{r.try(:name) || r.try(:email) || r.to_s}", r.id] }
+    selected = field.data&.id
+  %>
   <%= f.select(field.permitted_attribute,
-               options_for_select(field.associated_resource_options, field.selected_option),
-               { include_blank: true },
-               { style: 'width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;' }) %>
+               options_for_select(options, selected),
+               { include_blank: '— Selecionar —' },
+               { style: 'width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; background: #fff;' }) %>
 </div>
