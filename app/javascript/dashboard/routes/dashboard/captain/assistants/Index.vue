@@ -117,20 +117,15 @@ const handleCardClick = id => {
 
     <template v-if="!isEmpty" #default>
       <div class="grid gap-3 p-4">
-        <div
+        <AssistantCard
           v-for="assistant in assistants"
           :key="assistant.id"
-          class="cursor-pointer"
-          @click="handleCardClick(assistant.id)"
-        >
-          <AssistantCard
-            :id="assistant.id"
-            :name="assistant.name"
-            :description="assistant.description"
-            :updated-at="assistant.updated_at"
-            @action="handleCardAction"
-          />
-        </div>
+          :id="assistant.id"
+          :name="assistant.name"
+          :description="assistant.description"
+          :updated-at="assistant.updated_at"
+          @action="handleCardAction"
+        />
       </div>
     </template>
 
