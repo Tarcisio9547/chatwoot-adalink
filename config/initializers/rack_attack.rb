@@ -47,6 +47,11 @@ class Rack::Attack
 
   Rack::Attack.safelist('trusted IPs', &:allowed_ip?)
 
+  # SSO login from CRM iframe should never be rate-limited
+  Rack::Attack.safelist('sso_login') do |req|
+    req.path_without_extentions == '/sso/login'
+  end
+
   # Safelist health check endpoint so it never touches Redis for throttle tracking.
   # This keeps /health fully dependency-free for ALB liveness checks.
   Rack::Attack.safelist('health check') do |req|
@@ -89,17 +94,15 @@ class Rack::Attack
   end
 
   # ### Prevent Brute-Force Login Attacks ###
-  # Exclude MFA verification attempts from regular login throttling
+  # Exclude MFA verification and SSO attempts from regular login throttling
   throttle('login/ip', limit: 5, period: 5.minutes) do |req|
-    if req.path_without_extentions == '/auth/sign_in' && req.post? && req.params['mfa_token'].blank?
-      # Skip if this is an MFA verification request
+    if req.path_without_extentions == '/auth/sign_in' && req.post? && req.params['mfa_token'].blank? && req.params['sso_auth_token'].blank?
       req.ip
     end
   end
 
   throttle('login/email', limit: 10, period: 15.minutes) do |req|
-    # Skip if this is an MFA verification request
-    if req.path_without_extentions == '/auth/sign_in' && req.post? && req.params['mfa_token'].blank?
+    if req.path_without_extentions == '/auth/sign_in' && req.post? && req.params['mfa_token'].blank? && req.params['sso_auth_token'].blank?
       # ref: https://github.com/rack/rack-attack/issues/399
       # NOTE: This line used to throw ArgumentError /rails/action_mailbox/sendgrid/inbound_emails : invalid byte sequence in UTF-8
       # Hence placed in the if block
