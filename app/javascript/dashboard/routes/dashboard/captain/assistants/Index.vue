@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref, nextTick } from 'vue';
+import { computed, ref, nextTick, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useStore } from 'vuex';
 import { useMapGetter } from 'dashboard/composables/store';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import { useAccount } from 'dashboard/composables/useAccount';
@@ -12,14 +13,22 @@ import AssistantPageEmptyState from 'dashboard/components-next/captain/pageCompo
 import FeatureSpotlightPopover from 'dashboard/components-next/feature-spotlight/FeatureSpotlightPopover.vue';
 
 const { isOnChatwootCloud } = useAccount();
+const store = useStore();
 
 const dialogType = ref('');
 const uiFlags = useMapGetter('captainAssistants/getUIFlags');
 const isFetching = computed(() => uiFlags.value.fetchingList);
 
+const assistants = computed(() => store.getters['captainAssistants/getRecords']);
+const isEmpty = computed(() => !isFetching.value && assistants.value.length === 0);
+
 const selectedAssistant = ref(null);
 const createAssistantDialog = ref(null);
 const router = useRouter();
+
+onMounted(() => {
+  store.dispatch('captainAssistants/get');
+});
 
 const handleCreate = () => {
   dialogType.value = 'create';
@@ -31,8 +40,17 @@ const handleCreateClose = () => {
   selectedAssistant.value = null;
 };
 
+const handleEdit = assistant => {
+  router.push({
+    name: 'captain_assistants_settings_index',
+    params: {
+      accountId: router.currentRoute.value.params.accountId,
+      assistantId: assistant.id,
+    },
+  });
+};
+
 const handleAfterCreate = newAssistant => {
-  // Navigate directly to documents page with the new assistant ID
   if (newAssistant?.id) {
     router.push({
       name: 'captain_assistants_responses_index',
@@ -51,7 +69,7 @@ const handleAfterCreate = newAssistant => {
     :show-pagination-footer="false"
     :is-fetching="isFetching"
     :feature-flag="FEATURE_FLAGS.CAPTAIN"
-    is-empty
+    :is-empty="isEmpty"
     @click="handleCreate"
   >
     <template #knowMore>
@@ -71,6 +89,29 @@ const handleAfterCreate = newAssistant => {
 
     <template #paywall>
       <CaptainPaywall />
+    </template>
+
+    <!-- Lista de assistentes existentes -->
+    <template v-if="!isEmpty" #default>
+      <div class="grid gap-3 p-6">
+        <div
+          v-for="assistant in assistants"
+          :key="assistant.id"
+          class="flex items-center justify-between p-4 rounded-xl border border-n-weak bg-n-surface-2 hover:bg-n-surface-3 transition-colors cursor-pointer"
+          @click="handleEdit(assistant)"
+        >
+          <div class="flex-1 min-w-0">
+            <h3 class="text-sm font-semibold text-n-slate-12 truncate">{{ assistant.name }}</h3>
+            <p class="text-xs text-n-slate-11 mt-0.5 truncate">{{ assistant.description }}</p>
+          </div>
+          <button
+            class="ml-4 px-3 py-1.5 text-xs font-medium rounded-lg border border-n-weak text-n-slate-11 hover:text-n-slate-12 hover:bg-n-surface-4 transition-colors"
+            @click.stop="handleEdit(assistant)"
+          >
+            Editar
+          </button>
+        </div>
+      </div>
     </template>
 
     <CreateAssistantDialog
