@@ -1,5 +1,5 @@
 class Api::V1::Accounts::AgentsController < Api::V1::Accounts::BaseController
-  before_action :fetch_agent, except: [:create, :index, :bulk_create, :sso_token]
+  before_action :fetch_agent, except: [:create, :index, :bulk_create]
   before_action :check_authorization
   before_action :validate_limit, only: [:create]
   before_action :validate_limit_for_bulk_create, only: [:bulk_create]
@@ -28,8 +28,7 @@ class Api::V1::Accounts::AgentsController < Api::V1::Accounts::BaseController
   end
 
   def sso_token
-    agent = agents.find(params[:id])
-    access_token = AccessToken.find_or_create_by(owner: agent)
+    access_token = AccessToken.find_or_create_by(owner: @agent)
     render json: { sso_token: access_token.token }
   end
 
