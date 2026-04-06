@@ -322,6 +322,12 @@ const menuItems = computed(() => {
       activeOn: ['captain_assistants_create_index'],
       children: [
         {
+          name: 'Assistants',
+          label: 'Assistentes',
+          activeOn: ['captain_assistants_create_index'],
+          to: accountScopedRoute('captain_assistants_create_index'),
+        },
+        {
           name: 'FAQs',
           label: 'FAQs',
           activeOn: [
