@@ -102,12 +102,16 @@ export default {
   },
   created() {
     if (this.ssoAuthToken) {
+      // Force clear any existing Chatwoot session before SSO login
+      // This ensures the correct user identity when switching users
+      this.clearExistingSession();
       this.submitLogin();
     }
     // Auto-login via token param (CRM iframe integration)
     const urlParams = new URLSearchParams(window.location.search);
     const apiToken = urlParams.get('token') || urlParams.get('user_access_token');
     if (apiToken && !this.ssoAuthToken) {
+      this.clearExistingSession();
       this.submitTokenLogin(apiToken);
     }
     if (this.authError) {
@@ -124,6 +128,34 @@ export default {
     }
   },
   methods: {
+    clearExistingSession() {
+      // Clear all Chatwoot auth data from localStorage and IndexedDB
+      // so SSO login creates a fresh session with the correct user
+      try {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('cw') || key === 'access_token' ||
+              key === 'user:id' || key === 'auth_token')) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+
+        // Clear IndexedDB
+        if (indexedDB.databases) {
+          indexedDB.databases().then(dbs => {
+            dbs.forEach(db => {
+              if (db.name && db.name.startsWith('cw')) {
+                indexedDB.deleteDatabase(db.name);
+              }
+            });
+          });
+        }
+      } catch (e) {
+        // Silent fail — non-critical
+      }
+    },
     getTranslatedMessage(key) {
       // Avoid dynamic key warning by handling each case explicitly
       switch (key) {
