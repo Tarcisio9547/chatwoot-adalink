@@ -5,11 +5,13 @@ import { useStore } from 'vuex';
 import { useMapGetter } from 'dashboard/composables/store';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import { useAccount } from 'dashboard/composables/useAccount';
+import { useAlert } from 'dashboard/composables';
 
 import PageLayout from 'dashboard/components-next/captain/PageLayout.vue';
 import CaptainPaywall from 'dashboard/components-next/captain/pageComponents/Paywall.vue';
 import CreateAssistantDialog from 'dashboard/components-next/captain/pageComponents/assistant/CreateAssistantDialog.vue';
 import AssistantPageEmptyState from 'dashboard/components-next/captain/pageComponents/emptyStates/AssistantPageEmptyState.vue';
+import AssistantCard from 'dashboard/components-next/captain/assistant/AssistantCard.vue';
 import FeatureSpotlightPopover from 'dashboard/components-next/feature-spotlight/FeatureSpotlightPopover.vue';
 
 const { isOnChatwootCloud } = useAccount();
@@ -40,16 +42,6 @@ const handleCreateClose = () => {
   selectedAssistant.value = null;
 };
 
-const handleEdit = assistant => {
-  router.push({
-    name: 'captain_assistants_settings_index',
-    params: {
-      accountId: router.currentRoute.value.params.accountId,
-      assistantId: assistant.id,
-    },
-  });
-};
-
 const handleAfterCreate = newAssistant => {
   if (newAssistant?.id) {
     router.push({
@@ -60,6 +52,38 @@ const handleAfterCreate = newAssistant => {
       },
     });
   }
+};
+
+const handleCardAction = ({ action, id }) => {
+  const accountId = router.currentRoute.value.params.accountId;
+  if (action === 'edit') {
+    router.push({
+      name: 'captain_assistants_settings_index',
+      params: { accountId, assistantId: id },
+    });
+  } else if (action === 'viewConnectedInboxes') {
+    router.push({
+      name: 'captain_assistants_inboxes_index',
+      params: { accountId, assistantId: id },
+    });
+  } else if (action === 'delete') {
+    if (confirm('Tem certeza que deseja excluir este assistente?')) {
+      store.dispatch('captainAssistants/delete', id).then(() => {
+        useAlert('Assistente excluído com sucesso');
+        store.dispatch('captainAssistants/get');
+      });
+    }
+  }
+};
+
+const handleCardClick = id => {
+  router.push({
+    name: 'captain_assistants_responses_index',
+    params: {
+      accountId: router.currentRoute.value.params.accountId,
+      assistantId: id,
+    },
+  });
 };
 </script>
 
@@ -91,25 +115,21 @@ const handleAfterCreate = newAssistant => {
       <CaptainPaywall />
     </template>
 
-    <!-- Lista de assistentes existentes -->
     <template v-if="!isEmpty" #default>
-      <div class="grid gap-3 p-6">
+      <div class="grid gap-3 p-4">
         <div
           v-for="assistant in assistants"
           :key="assistant.id"
-          class="flex items-center justify-between p-4 rounded-xl border border-n-weak bg-n-surface-2 hover:bg-n-surface-3 transition-colors cursor-pointer"
-          @click="handleEdit(assistant)"
+          class="cursor-pointer"
+          @click="handleCardClick(assistant.id)"
         >
-          <div class="flex-1 min-w-0">
-            <h3 class="text-sm font-semibold text-n-slate-12 truncate">{{ assistant.name }}</h3>
-            <p class="text-xs text-n-slate-11 mt-0.5 truncate">{{ assistant.description }}</p>
-          </div>
-          <button
-            class="ml-4 px-3 py-1.5 text-xs font-medium rounded-lg border border-n-weak text-n-slate-11 hover:text-n-slate-12 hover:bg-n-surface-4 transition-colors"
-            @click.stop="handleEdit(assistant)"
-          >
-            Editar
-          </button>
+          <AssistantCard
+            :id="assistant.id"
+            :name="assistant.name"
+            :description="assistant.description"
+            :updated-at="assistant.updated_at"
+            @action="handleCardAction"
+          />
         </div>
       </div>
     </template>
