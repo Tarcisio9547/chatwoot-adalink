@@ -30,7 +30,7 @@ class AgentBuilder
     return user if user
 
     temp_password = "1!aA#{SecureRandom.alphanumeric(12)}"
-    User.create!(email: email, name: name, password: temp_password, password_confirmation: temp_password)
+    User.create!(email: email, name: name, password: temp_password, password_confirmation: temp_password, confirmed_at: Time.current)
   end
 
   # Checks if the user needs confirmation.
