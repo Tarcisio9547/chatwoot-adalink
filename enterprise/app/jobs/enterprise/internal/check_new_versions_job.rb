@@ -10,8 +10,9 @@ module Enterprise::Internal::CheckNewVersionsJob
   def update_plan_info
     return if @instance_info.blank?
 
-    update_installation_config(key: 'INSTALLATION_PRICING_PLAN', value: @instance_info['plan'])
-    update_installation_config(key: 'INSTALLATION_PRICING_PLAN_QUANTITY', value: @instance_info['plan_quantity'])
+    # Self-hosted enterprise: nunca sobrescrever o plano a partir do hub.
+    # O pricing_plan é controlado exclusivamente via chatwoot_hub.rb hardcoded.
+    # Apenas atualizar campos de suporte (não afetam licença).
     update_installation_config(key: 'CHATWOOT_SUPPORT_WEBSITE_TOKEN', value: @instance_info['chatwoot_support_website_token'])
     update_installation_config(key: 'CHATWOOT_SUPPORT_IDENTIFIER_HASH', value: @instance_info['chatwoot_support_identifier_hash'])
     update_installation_config(key: 'CHATWOOT_SUPPORT_SCRIPT_URL', value: @instance_info['chatwoot_support_script_url'])

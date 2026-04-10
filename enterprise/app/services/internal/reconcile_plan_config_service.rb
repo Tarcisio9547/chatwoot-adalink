@@ -1,8 +1,9 @@
 class Internal::ReconcilePlanConfigService
   def perform
-    # Self-hosted enterprise: always clear the warning and skip reconciliation.
-    # Features are managed manually via super admin.
+    # Self-hosted enterprise: sempre limpar o warning e garantir plano correto no banco.
+    # Features são gerenciadas manualmente via super admin.
     remove_premium_config_reset_warning
+    ensure_enterprise_plan
   end
 
   private
@@ -17,6 +18,14 @@ class Internal::ReconcilePlanConfigService
 
   def remove_premium_config_reset_warning
     Redis::Alfred.delete(Redis::Alfred::CHATWOOT_INSTALLATION_CONFIG_RESET_WARNING)
+  end
+
+  def ensure_enterprise_plan
+    config = InstallationConfig.find_or_initialize_by(name: 'INSTALLATION_PRICING_PLAN')
+    return if config.value == 'Enterprise'
+
+    config.value = 'Enterprise'
+    config.save!
   end
 
   def create_premium_config_reset_warning
