@@ -122,15 +122,20 @@ export default {
       window.addEventListener('message', this._crmNavigationHandler);
     },
     setLocale(locale) {
-      this.$root.$i18n.locale = locale;
+      // Vue-i18n 9 throws SyntaxError (NOT_SUPPORT_LOCALE_TYPE) on every $t() call
+      // when locale is undefined. Force fallback to pt_BR to keep iframe alive
+      // even when accounts/get fails (race vs CRM auth interceptor injection).
+      this.$root.$i18n.locale = locale || 'pt_BR';
     },
     async initializeAccount() {
       await this.$store.dispatch('accounts/get');
       this.$store.dispatch('setActiveAccount', {
         accountId: this.currentAccountId,
       });
+      // getAccount can return undefined if accounts/get failed silently (token race
+      // when running inside the Adalink CRM iframe). Default to {} to avoid crash.
       const { locale, latest_chatwoot_version: latestChatwootVersion } =
-        this.getAccount(this.currentAccountId);
+        this.getAccount(this.currentAccountId) || {};
       const { pubsub_token: pubsubToken } = this.currentUser || {};
       // If user locale is set, use it; otherwise use account locale
       this.setLocale(this.uiSettings?.locale || locale);
