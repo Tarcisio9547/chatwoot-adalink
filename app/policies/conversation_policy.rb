@@ -4,7 +4,17 @@ class ConversationPolicy < ApplicationPolicy
   end
 
   def destroy?
-    administrator?
+    return true if administrator?
+
+    # Adalink: dono de inbox pessoal (convenção: inbox com EXATAMENTE 1 agente
+    # associado pertence àquele agente — usado pra WhatsApp Pessoal). Permite
+    # ele apagar conversas que estão na própria caixa, sem afetar regras de
+    # inboxes compartilhadas (>1 agente) onde a default policy mantém apenas
+    # admin podendo deletar.
+    return false unless record.inbox
+
+    members = record.inbox.inbox_members
+    members.count == 1 && members.first&.user_id == user.id
   end
 
   def show?
