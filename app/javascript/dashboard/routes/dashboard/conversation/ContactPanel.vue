@@ -122,10 +122,11 @@ const closeContactPanel = () => {
 };
 
 // Adalink: Send contact data to CRM parent to create a deal
+// Type 'trama-criar-negocio' bate com listener no CRM (Atendimento.tsx).
 const criarNegocio = () => {
   if (!contact.value) return;
   window.parent.postMessage({
-    type: 'adalink-criar-negocio',
+    type: 'trama-criar-negocio',
     contato: {
       nome: contact.value.name || '',
       telefone: contact.value.phone_number || '',
