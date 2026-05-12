@@ -16,7 +16,14 @@ class Conversations::PermissionFilterService
   private
 
   def accessible_conversations
-    conversations.where(inbox: user.inboxes.where(account_id: account.id))
+    inbox_scope = conversations.where(inbox: user.inboxes.where(account_id: account.id))
+
+    # Adalink: inclui conversas onde o usuário é Participant explícito
+    # (ex.: gestor vendo conversa WA Pessoal marcada como "trabalho" pela corretora).
+    participant_ids = ConversationParticipant.where(user_id: user.id).pluck(:conversation_id)
+    return inbox_scope if participant_ids.empty?
+
+    inbox_scope.or(conversations.where(id: participant_ids))
   end
 
   def account_user
