@@ -24,7 +24,12 @@ class ConversationPolicy < ApplicationPolicy
   private
 
   def agent_can_view_conversation?
-    inbox_access? || team_access?
+    # `participant?` restaura o comportamento upstream do Chatwoot:
+    # quando o agente é adicionado como Participant de uma conversa específica,
+    # ele pode vê-la mesmo sem ser member da inbox. Necessário pra permitir
+    # gestor (organograma CRM) ver conversas de WA Pessoal marcadas como
+    # "trabalho" sem expor a inbox inteira do corretor. Adicionado em 2026-05-12.
+    inbox_access? || team_access? || participant?
   end
 
   def administrator?
