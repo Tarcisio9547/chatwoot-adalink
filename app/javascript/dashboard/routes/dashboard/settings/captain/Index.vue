@@ -82,9 +82,10 @@ const isFeatureAccessible = feature => {
 
   if (feature.enterprise) {
     // plan is shown, but is it accessible?
-    // This ensures that the instance has purchased the enterprise license, and only then we allow
-    // access
-    return isEnterprise && enterprisePlanName === 'enterprise';
+    // Use !== 'community' (same pattern as usePolicy.js) instead of === 'enterprise':
+    // the plan value casing varies ('Enterprise' vs 'enterprise') across self-hosted
+    // installs, and a strict lowercase match wrongly locks enterprise users out.
+    return isEnterprise && enterprisePlanName !== 'community';
   }
 
   return true;
