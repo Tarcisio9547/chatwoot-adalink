@@ -2,7 +2,10 @@ class Captain::Llm::AssistantChatService < Llm::BaseAiService
   include Captain::ChatHelper
 
   def initialize(assistant: nil, conversation: nil, source: nil)
-    super()
+    # `account:` permite base service ler `account.captain_assistant_model`
+    # (preferência do UI). Quando assistant for nil (caso teste), cai
+    # transparente no InstallationConfig.
+    super(account: assistant&.account)
 
     @assistant = assistant
     @conversation = conversation
@@ -28,6 +31,11 @@ class Captain::Llm::AssistantChatService < Llm::BaseAiService
   end
 
   private
+
+  # Mapeamento pra config/llm.yml — feature 'assistant' (default gpt-5.1).
+  def feature_key
+    'assistant'
+  end
 
   def build_tools
     [Captain::Tools::SearchDocumentationService.new(@assistant, user: nil)]

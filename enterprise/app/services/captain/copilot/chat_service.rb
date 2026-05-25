@@ -4,7 +4,9 @@ class Captain::Copilot::ChatService < Llm::BaseAiService
   attr_reader :assistant, :account, :user, :copilot_thread, :previous_history, :messages
 
   def initialize(assistant, config)
-    super()
+    # `account:` informa o base service pra resolver o modelo via
+    # `account.captain_copilot_model` (preferência do UI Configurações).
+    super(account: assistant.account)
 
     @assistant = assistant
     @account = assistant.account
@@ -123,6 +125,12 @@ class Captain::Copilot::ChatService < Llm::BaseAiService
   end
 
   def feature_name
+    'copilot'
+  end
+
+  # Mapeamento pra config/llm.yml — feature 'copilot' (default gpt-5.1).
+  # O base service usa isso pra ler account.captain_copilot_model.
+  def feature_key
     'copilot'
   end
 end
