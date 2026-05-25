@@ -1,10 +1,12 @@
-aproviders:
+providers:
   openai:
     display_name: 'OpenAI'
   anthropic:
     display_name: 'Anthropic'
   gemini:
     display_name: 'Gemini'
+  openrouter:
+    display_name: 'OpenRouter'
 
 models:
   gpt-4.1:
@@ -55,6 +57,16 @@ models:
     display_name: 'Gemini 3 Pro'
     coming_soon: true
     credit_multiplier: 3
+  # DeepSeek roteado via OpenRouter — model_id usa o naming oficial do OpenRouter
+  # (deepseek/<model>) e bate 1:1 com a tabela ai_model_pricing no CRM Supabase.
+  deepseek/deepseek-v4-flash:
+    provider: openrouter
+    display_name: 'DeepSeek V4 Flash (OpenRouter)'
+    credit_multiplier: 1
+  deepseek/deepseek-v4-pro:
+    provider: openrouter
+    display_name: 'DeepSeek V4 Pro (OpenRouter)'
+    credit_multiplier: 2
   whisper-1:
     provider: openai
     display_name: 'Whisper'
@@ -77,6 +89,8 @@ features:
         claude-haiku-4.5,
         gemini-3-flash,
         gemini-3-pro,
+        deepseek/deepseek-v4-flash,
+        deepseek/deepseek-v4-pro,
       ]
     default: gpt-4.1-mini
   assistant:
@@ -90,6 +104,8 @@ features:
         claude-sonnet-4.5,
         gemini-3-flash,
         gemini-3-pro,
+        deepseek/deepseek-v4-flash,
+        deepseek/deepseek-v4-pro,
       ]
     default: gpt-5.1
   copilot:
@@ -103,12 +119,23 @@ features:
         claude-sonnet-4.5,
         gemini-3-flash,
         gemini-3-pro,
+        deepseek/deepseek-v4-flash,
+        deepseek/deepseek-v4-pro,
       ]
     default: gpt-5.1
   label_suggestion:
     models:
-      [gpt-4.1-nano, gpt-4.1-mini, gpt-5-mini, gemini-3-flash, claude-haiku-4.5]
+      [
+        gpt-4.1-nano,
+        gpt-4.1-mini,
+        gpt-5-mini,
+        gemini-3-flash,
+        claude-haiku-4.5,
+        deepseek/deepseek-v4-flash,
+      ]
     default: gpt-4.1-nano
+  # Áudio (Whisper) e embeddings ficam OpenAI-only — outros providers não têm
+  # equivalente direto, e trocar embeddings invalida 1536-dim vectors existentes.
   audio_transcription:
     models: [whisper-1]
     default: whisper-1
