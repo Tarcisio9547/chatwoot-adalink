@@ -15,8 +15,9 @@ class Captain::ConversationCompletionService < Captain::BaseTaskService
     content = format_messages_as_string
     return default_incomplete_response('No messages found') if content.blank?
 
+    # Sem `model:`: o base resolve via feature_key (override abaixo). Esse
+    # service é interno (não cobra do tenant) então quer modelo system-wide.
     response = make_api_call(
-      model: InstallationConfig.find_by(name: 'CAPTAIN_OPEN_AI_MODEL')&.value.presence || GPT_MODEL,
       messages: [
         { role: 'system', content: prompt_from_file('conversation_completion') },
         { role: 'user', content: content }
@@ -56,12 +57,23 @@ class Captain::ConversationCompletionService < Captain::BaseTaskService
     { complete: false, reason: reason }
   end
 
-  # Prefer the system API key over the account's OpenAI hook key.
-  # This is an internal operational evaluation, not a customer-triggered feature,
-  # so it should not consume the customer's OpenAI credits on hosted platforms.
-  # Falls back to the account hook for self-hosted deployments without a system key.
-  def api_key
-    @api_key ||= system_api_key.presence || openai_hook&.settings&.dig('api_key')
+  # Modelo system-wide: lê CAPTAIN_OPEN_AI_MODEL InstallationConfig pra ficar
+  # invariante à preferência do tenant. É feature operacional interna, não
+  # customer-facing — Trama decide o modelo, não o tenant.
+  def model_for_feature
+    @model_for_feature ||= begin
+      system_model = InstallationConfig.find_by(name: 'CAPTAIN_OPEN_AI_MODEL')&.value
+      (system_model.presence || Llm::Config::DEFAULT_MODEL).to_s
+    end
+  end
+
+  # Prefer the system API key over the account's hook key.
+  # Internal operational evaluation — não consome créditos do tenant em hosted.
+  # Fallback no hook account-level só pra self-hosted sem system key.
+  def api_key_for(provider_id)
+    @api_keys_internal ||= {}
+    @api_keys_internal[provider_id] ||= system_api_key_for(provider_id).presence ||
+                                        account_hook_for(provider_id)&.settings&.dig('api_key')
   end
 
   def event_name

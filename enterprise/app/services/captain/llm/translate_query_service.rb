@@ -1,6 +1,4 @@
 class Captain::Llm::TranslateQueryService < Captain::BaseTaskService
-  MODEL = 'gpt-4.1-nano'.freeze
-
   pattr_initialize [:account!]
 
   def translate(query, target_language:)
@@ -11,7 +9,9 @@ class Captain::Llm::TranslateQueryService < Captain::BaseTaskService
       { role: 'user', content: query }
     ]
 
-    response = make_api_call(model: MODEL, messages: messages)
+    # Sem `model:`: o base resolve via feature_key 'label_suggestion'
+    # (mesma classe de modelo leve — gpt-4.1-nano default).
+    response = make_api_call(messages: messages)
     return query if response[:error]
 
     response[:message].strip
@@ -26,10 +26,18 @@ class Captain::Llm::TranslateQueryService < Captain::BaseTaskService
     'translate_query'
   end
 
+  # Tradução é tarefa leve — usa a mesma classe de modelo de label_suggestion
+  # (gpt-4.1-nano default no llm.yml). Admin troca pelo dropdown do Captain.
+  def feature_key
+    'label_suggestion'
+  end
+
   # Translation is an internal operation, not customer-initiated.
-  # Prefer the system key; fall back to the account's hook key for self-hosted setups without one.
-  def api_key
-    @api_key ||= system_api_key.presence || openai_hook&.settings&.dig('api_key')
+  # Prefere system key; fallback no hook account-level pra self-hosted sem one.
+  def api_key_for(provider_id)
+    @api_keys_internal ||= {}
+    @api_keys_internal[provider_id] ||= system_api_key_for(provider_id).presence ||
+                                        account_hook_for(provider_id)&.settings&.dig('api_key')
   end
 
   def query_in_target_language?(query)
