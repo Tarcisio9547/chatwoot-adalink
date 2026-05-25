@@ -1,3 +1,10 @@
+# Base class para todos os Captain V1 services (reply/label/summary/rewrite +
+# subclasses internas como ConversationCompletion). Inerentemente ampla porque
+# carrega: feature_key resolution, provider routing, instrumentation, e helpers
+# de credenciais cascateadas. Quebrar em módulos menores aqui adicionaria
+# indireção sem ganho real — toda a lógica é fortemente acoplada ao ciclo de
+# `make_api_call`.
+# rubocop:disable Metrics/ClassLength
 class Captain::BaseTaskService
   include Integrations::LlmInstrumentation
   include Captain::ToolInstrumentation
@@ -105,7 +112,7 @@ class Captain::BaseTaskService
     @system_keys ||= {}
     return @system_keys[provider_id] if @system_keys.key?(provider_id)
 
-    key, _ = Llm::Config.system_credentials_for(provider_id)
+    key, = Llm::Config.system_credentials_for(provider_id)
     @system_keys[provider_id] = key
   end
 
@@ -129,8 +136,8 @@ class Captain::BaseTaskService
   # Retrocompat — system key OpenAI (legacy callers do TranslateQuery e
   # ConversationCompletion que assumiam OpenAI single-provider).
   def system_api_key
-    @system_api_key_legacy ||= begin
-      key, _ = Llm::Config.system_credentials_for('openai')
+    @system_api_key ||= begin
+      key, = Llm::Config.system_credentials_for('openai')
       key
     end
   end
@@ -176,6 +183,7 @@ class Captain::BaseTaskService
     { error: e.message, request_messages: messages }
   end
 
+  # rubocop:disable Metrics/ParameterLists
   def build_chat(context, model:, provider:, messages:, schema: nil, tools: [])
     # Passa `provider:` explícito — evita ambiguidade na resolução do model_id
     # quando o mesmo nome existe em mais de um provider.
@@ -191,6 +199,7 @@ class Captain::BaseTaskService
 
     chat
   end
+  # rubocop:enable Metrics/ParameterLists
 
   def add_messages_if_needed(chat, conversation_messages)
     return if conversation_messages.length == 1
@@ -286,4 +295,5 @@ class Captain::BaseTaskService
     user_msg ? user_msg[:content] : nil
   end
 end
+# rubocop:enable Metrics/ClassLength
 Captain::BaseTaskService.prepend_mod_with('Captain::BaseTaskService')

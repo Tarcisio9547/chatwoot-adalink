@@ -51,11 +51,15 @@ class Llm::BaseAiService
   #   3. DEFAULT_MODEL global
   def setup_model
     feature = feature_key.to_s
-    account_pref = if @account && feature.present? && Llm::Models.feature_keys.include?(feature)
-                     @account.public_send("captain_#{feature}_model")
-                   end
+    account_pref = account_model_pref(feature)
     system_pref = InstallationConfig.find_by(name: 'CAPTAIN_OPEN_AI_MODEL')&.value
     @model = (account_pref.presence || system_pref.presence || DEFAULT_MODEL).to_s
+  end
+
+  def account_model_pref(feature)
+    return nil unless @account && feature.present? && Llm::Models.feature_keys.include?(feature)
+
+    @account.public_send("captain_#{feature}_model")
   end
 
   def setup_provider

@@ -39,7 +39,11 @@ module CaptainUsageLogger
     secret = ENV.fetch('CRM_LOG_USAGE_SECRET', nil)
     return if url.blank? || secret.blank?
 
-    payload = {
+    dispatch_usage_log(url, secret, build_usage_payload(model, provider_id, response))
+  end
+
+  def build_usage_payload(model, provider_id, response)
+    {
       chatwoot_account_id: account.id,
       agent_email: nil, # TODO: plumbar current user quando disparar de UI; nil em jobs background
       feature: event_name.to_s,
@@ -49,12 +53,8 @@ module CaptainUsageLogger
       model: model,
       input_tokens: response[:usage]['prompt_tokens'].to_i,
       output_tokens: response[:usage]['completion_tokens'].to_i,
-      # uses_own_key: a account usou um Hook custom (paga direto)?
-      # Multi-provider: checa o hook do provider real (account_hook_for é privado
-      # do BaseTaskService, mas como prepended ancestor a gente tem acesso).
       uses_own_key: account.hooks.exists?(
-        app_id: Llm::Config.hook_app_id_for(provider_id),
-        status: 'enabled'
+        app_id: Llm::Config.hook_app_id_for(provider_id), status: 'enabled'
       ),
       metadata: {
         conversation_id: conversation&.display_id,
@@ -62,17 +62,18 @@ module CaptainUsageLogger
         provider: provider_id
       }.compact
     }
+  end
 
+  def dispatch_usage_log(url, secret, payload)
     Thread.new do
       uri = URI(url)
       http = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = (uri.scheme == 'https')
       http.read_timeout = 5
       http.open_timeout = 3
-      req = Net::HTTP::Post.new(uri.request_uri, {
-                                  'Content-Type' => 'application/json',
-                                  'x-captain-secret' => secret
-                                })
+      req = Net::HTTP::Post.new(uri.request_uri,
+                                'Content-Type' => 'application/json',
+                                'x-captain-secret' => secret)
       req.body = payload.to_json
       http.request(req)
     rescue StandardError => e

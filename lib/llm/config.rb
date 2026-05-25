@@ -60,12 +60,8 @@ module Llm::Config
         # `respond_to?` defensivo: se a versão do ruby_llm não expõe o setter
         # desse provider (improvável em 1.9.2+, mas barato), evita NoMethodError
         # e cai num erro mais útil na hora da chamada `chat.ask`.
-        if config.respond_to?("#{cfg[:api_key_attr]}=")
-          config.public_send("#{cfg[:api_key_attr]}=", api_key)
-        end
-        if api_base && config.respond_to?("#{cfg[:api_base_attr]}=")
-          config.public_send("#{cfg[:api_base_attr]}=", api_base)
-        end
+        config.public_send("#{cfg[:api_key_attr]}=", api_key) if config.respond_to?("#{cfg[:api_key_attr]}=")
+        config.public_send("#{cfg[:api_base_attr]}=", api_base) if api_base && config.respond_to?("#{cfg[:api_base_attr]}=")
       end
 
       yield context
@@ -107,19 +103,20 @@ module Llm::Config
     # via `with_api_key` (scoping per-request).
     def configure_ruby_llm
       RubyLLM.configure do |config|
-        PROVIDER_CONFIG.each_value do |cfg|
-          api_key = InstallationConfig.find_by(name: cfg[:installation_key])&.value
-          api_base = InstallationConfig.find_by(name: cfg[:installation_base])&.value
-
-          if api_key.present? && config.respond_to?("#{cfg[:api_key_attr]}=")
-            config.public_send("#{cfg[:api_key_attr]}=", api_key)
-          end
-          if api_base.present? && config.respond_to?("#{cfg[:api_base_attr]}=")
-            config.public_send("#{cfg[:api_base_attr]}=", api_base.chomp('/'))
-          end
-        end
+        PROVIDER_CONFIG.each_value { |cfg| apply_system_credentials(config, cfg) }
         config.logger = Rails.logger
       end
+    end
+
+    # Lê CAPTAIN_<PROVIDER>_API_KEY/ENDPOINT do InstallationConfig e injeta
+    # no RubyLLM. Skip silencioso quando a key não está configurada OU quando
+    # o setter não existe na versão atual da gem (defensivo, ver `with_api_key`).
+    def apply_system_credentials(config, cfg)
+      api_key = InstallationConfig.find_by(name: cfg[:installation_key])&.value
+      api_base = InstallationConfig.find_by(name: cfg[:installation_base])&.value
+
+      config.public_send("#{cfg[:api_key_attr]}=", api_key) if api_key.present? && config.respond_to?("#{cfg[:api_key_attr]}=")
+      config.public_send("#{cfg[:api_base_attr]}=", api_base.chomp('/')) if api_base.present? && config.respond_to?("#{cfg[:api_base_attr]}=")
     end
   end
 end

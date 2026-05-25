@@ -101,7 +101,7 @@ module Enterprise::Concerns::Article
       return hook_key if hook_key.present?
     end
 
-    system_key, _ = Llm::Config.system_credentials_for(provider)
+    system_key, = Llm::Config.system_credentials_for(provider)
     return system_key if system_key.present?
 
     # Retrocompat: muitos setups antigos só tinham OPENAI_API_KEY no ENV
