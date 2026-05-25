@@ -18,13 +18,23 @@
 module CaptainUsageLogger
   private
 
-  def make_api_call(model:, messages:, schema: nil, tools: [])
-    response = super(model: model, messages: messages, schema: schema, tools: tools)
-    post_usage_to_crm(model, response) if response.is_a?(Hash) && response[:usage].present?
+  # Signature bate com Captain::BaseTaskService#make_api_call pós-refactor
+  # multi-provider: `messages` é o único kwarg obrigatório; `model` opcional.
+  def make_api_call(messages:, model: nil, schema: nil, tools: [])
+    response = super(messages: messages, model: model, schema: schema, tools: tools)
+    return response unless response.is_a?(Hash) && response[:usage].present?
+
+    # Resolve qual modelo/provider o base realmente usou. Quando caller passou
+    # `model:` explícito, prevalece; senão cai no `model_for_feature` (account
+    # preference -> llm.yml default -> DEFAULT_MODEL).
+    actual_model = (model.presence || model_for_feature).to_s
+    actual_provider = Llm::Config.provider_for(actual_model)
+
+    post_usage_to_crm(actual_model, actual_provider, response)
     response
   end
 
-  def post_usage_to_crm(model, response)
+  def post_usage_to_crm(model, provider_id, response)
     url = ENV.fetch('CRM_LOG_USAGE_URL', nil)
     secret = ENV.fetch('CRM_LOG_USAGE_SECRET', nil)
     return if url.blank? || secret.blank?
@@ -33,13 +43,23 @@ module CaptainUsageLogger
       chatwoot_account_id: account.id,
       agent_email: nil, # TODO: plumbar current user quando disparar de UI; nil em jobs background
       feature: event_name.to_s,
+      # v2 do log-captain-usage: campo `provider` é opcional, default 'openai'.
+      # Mandando explícito garante lookup correto em ai_model_pricing.
+      provider: provider_id,
       model: model,
       input_tokens: response[:usage]['prompt_tokens'].to_i,
       output_tokens: response[:usage]['completion_tokens'].to_i,
-      uses_own_key: openai_hook.present?,
+      # uses_own_key: a account usou um Hook custom (paga direto)?
+      # Multi-provider: checa o hook do provider real (account_hook_for é privado
+      # do BaseTaskService, mas como prepended ancestor a gente tem acesso).
+      uses_own_key: account.hooks.exists?(
+        app_id: Llm::Config.hook_app_id_for(provider_id),
+        status: 'enabled'
+      ),
       metadata: {
         conversation_id: conversation&.display_id,
-        channel_type: conversation&.inbox&.channel_type
+        channel_type: conversation&.inbox&.channel_type,
+        provider: provider_id
       }.compact
     }
 
