@@ -2,8 +2,9 @@ class Captain::ReplySuggestionService < Captain::BaseTaskService
   pattr_initialize [:account!, :conversation_display_id!, :user!]
 
   def perform
+    # model não é passado: BaseTaskService resolve via feature_key 'editor'
+    # + account.captain_editor_model (preferência da account no UI).
     make_api_call(
-      model: GPT_MODEL,
       messages: [
         { role: 'system', content: system_prompt },
         { role: 'user', content: formatted_conversation }

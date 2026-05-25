@@ -7,6 +7,10 @@ class Captain::BaseTaskService
   # sticking with 120000 to be safe
   # 120000 * 4 = 480,000 characters (rounding off downwards to 400,000 to be safe)
   TOKEN_LIMIT = 400_000
+
+  # Mantido pra retrocompat com callers externos. Subclasses devem deixar
+  # `make_api_call` resolver o modelo via `feature_key` — assim respeitam
+  # `account.captain_<feature>_model` (preferência setada pelo admin no UI).
   GPT_MODEL = Llm::Config::DEFAULT_MODEL
 
   # Prepend enterprise module to subclasses when they're defined.
@@ -26,27 +30,65 @@ class Captain::BaseTaskService
     raise NotImplementedError, "#{self.class} must implement #event_name"
   end
 
+  # Feature do config/llm.yml que governa a escolha do modelo pra essa service.
+  # Default 'editor' cobre rewrite/reply_suggestion/summary (geração de texto
+  # genérica). Subclasses override quando o domínio bate em outra feature
+  # (ex: LabelSuggestionService → 'label_suggestion').
+  def feature_key
+    'editor'
+  end
+
   def conversation
     @conversation ||= account.conversations.find_by(display_id: conversation_display_id)
   end
 
-  def api_base
-    endpoint = InstallationConfig.find_by(name: 'CAPTAIN_OPEN_AI_ENDPOINT')&.value.presence || 'https://api.openai.com/'
-    endpoint = endpoint.chomp('/')
-    "#{endpoint}/v1"
+  # Modelo a usar: preferência salva na account (via UI Configurações → Captain) >
+  # default declarado em llm.yml pra essa feature > DEFAULT_MODEL global.
+  # O concern CaptainFeaturable expõe `account.captain_<feature>_model` que
+  # já encapsula essa cascata.
+  def model_for_feature
+    @model_for_feature ||= begin
+      feature = feature_key.to_s
+      preferred = if Llm::Models.feature_keys.include?(feature)
+                    account.public_send("captain_#{feature}_model")
+                  else
+                    Rails.logger.warn("[Captain] feature '#{feature}' não declarada em config/llm.yml — usando DEFAULT_MODEL")
+                    nil
+                  end
+      (preferred.presence || Llm::Config::DEFAULT_MODEL).to_s
+    end
   end
 
-  def make_api_call(model:, messages:, schema: nil, tools: [])
+  # Provider canônico do modelo atual (openai, openrouter, ...).
+  # Lookup em llm.yml via Llm::Config.provider_for.
+  def provider
+    @provider ||= Llm::Config.provider_for(model_for_feature)
+  end
+
+  # Endpoint pro provider atual — InstallationConfig override > default oficial.
+  # Adiciona /v1 se ainda não tiver (compat com endpoints custom).
+  def api_base
+    _, configured_base = Llm::Config.system_credentials_for(provider)
+    endpoint = (configured_base.presence || Llm::Config.default_api_base_for(provider)).chomp('/')
+    endpoint.end_with?('/v1') ? endpoint : "#{endpoint}/v1"
+  end
+
+  # Aceita `model:` opcional. Quando omitido, resolve via `feature_key` +
+  # preferência da account. Manter a opção de passar model explícito ajuda
+  # em testes e callers especiais.
+  def make_api_call(messages:, model: nil, schema: nil, tools: [])
     # Community edition prerequisite checks
     # Enterprise module handles these with more specific error messages (cloud vs self-hosted)
     return { error: I18n.t('captain.disabled'), error_code: 403 } unless captain_tasks_enabled?
     return { error: I18n.t('captain.api_key_missing'), error_code: 401 } unless api_key_configured?
 
-    instrumentation_params = build_instrumentation_params(model, messages)
+    model_id = model.presence || model_for_feature
+
+    instrumentation_params = build_instrumentation_params(model_id, messages)
     instrumentation_method = tools.any? ? :instrument_tool_session : :instrument_llm_call
 
     response = send(instrumentation_method, instrumentation_params) do
-      execute_ruby_llm_request(model: model, messages: messages, schema: schema, tools: tools)
+      execute_ruby_llm_request(model: model_id, messages: messages, schema: schema, tools: tools)
     end
 
     return response unless build_follow_up_context? && response[:message].present?
@@ -55,7 +97,7 @@ class Captain::BaseTaskService
   end
 
   def execute_ruby_llm_request(model:, messages:, schema: nil, tools: [])
-    Llm::Config.with_api_key(api_key, api_base: api_base) do |context|
+    Llm::Config.with_api_key(api_key, api_base: api_base, provider: provider) do |context|
       chat = build_chat(context, model: model, messages: messages, schema: schema, tools: tools)
 
       conversation_messages = messages.reject { |m| m[:role] == 'system' }
@@ -70,7 +112,10 @@ class Captain::BaseTaskService
   end
 
   def build_chat(context, model:, messages:, schema: nil, tools: [])
-    chat = context.chat(model: model)
+    # Passa `provider:` explícito — evita ambiguidade na resolução do model_id
+    # quando o mesmo nome existe em mais de um provider (ex: 'deepseek-v4-flash'
+    # direto vs 'deepseek/deepseek-v4-flash' via OpenRouter).
+    chat = context.chat(model: model, provider: provider)
     system_msg = messages.find { |m| m[:role] == 'system' }
     chat.with_instructions(system_msg[:content]) if system_msg
     chat.with_schema(schema) if schema
@@ -118,7 +163,8 @@ class Captain::BaseTaskService
 
   def instrumentation_metadata
     {
-      channel_type: conversation&.inbox&.channel_type
+      channel_type: conversation&.inbox&.channel_type,
+      provider: provider
     }.compact
   end
 
@@ -150,16 +196,28 @@ class Captain::BaseTaskService
     api_key.present?
   end
 
+  # API key cascata: hook da account (per-tenant, configurado no admin do account)
+  # > system InstallationConfig (per-instância Chatwoot inteira).
   def api_key
-    @api_key ||= openai_hook&.settings&.dig('api_key') || system_api_key
+    @api_key ||= account_provider_hook&.settings&.dig('api_key') || system_api_key
   end
 
-  def openai_hook
-    @openai_hook ||= account.hooks.find_by(app_id: 'openai', status: 'enabled')
+  # Hook account-level pro provider atual.
+  # 'openai' → app_id='openai' (path histórico).
+  # 'openrouter' → app_id='openrouter' (nova convenção; admin precisa criar
+  # o hook no painel da account com api_key da OpenRouter).
+  def account_provider_hook
+    @account_provider_hook ||= account.hooks.find_by(
+      app_id: Llm::Config.hook_app_id_for(provider),
+      status: 'enabled'
+    )
   end
 
   def system_api_key
-    @system_api_key ||= InstallationConfig.find_by(name: 'CAPTAIN_OPEN_AI_API_KEY')&.value
+    @system_api_key ||= begin
+      key, _ = Llm::Config.system_credentials_for(provider)
+      key
+    end
   end
 
   def prompt_from_file(file_name)
