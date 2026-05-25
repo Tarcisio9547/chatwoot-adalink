@@ -114,7 +114,10 @@ class Integrations::LlmBaseService
     provider_id = Llm::Config.provider_for(model)
 
     Llm::Config.with_api_key(hook.settings['api_key'], api_base: api_base_for(provider_id), provider: provider_id) do |context|
-      chat = context.chat(model: model, provider: provider_id)
+      # `assume_model_exists: true` pula o registry interno do ruby_llm — necessário
+      # pra modelos não-OpenAI roteados via OpenRouter. Sem isso, ruby_llm rejeita
+      # localmente antes de chegar a fazer o HTTP.
+      chat = context.chat(model: model, provider: provider_id, assume_model_exists: true)
       setup_chat_with_messages(chat, messages)
     end
   rescue StandardError => e
