@@ -82,10 +82,18 @@ class Integrations::LlmBaseService
     self.class::CACHEABLE_EVENTS.include?(event_name)
   end
 
+  # Default api_base — usado quando o provider não pode ser derivado.
+  # Provider-aware lookup vai em api_base_for(provider_id).
   def api_base
-    endpoint = InstallationConfig.find_by(name: 'CAPTAIN_OPEN_AI_ENDPOINT')&.value.presence || 'https://api.openai.com/'
-    endpoint = endpoint.chomp('/')
-    "#{endpoint}/v1"
+    api_base_for('openai')
+  end
+
+  # Endpoint per-provider — pra integrations payloads que carregam model de
+  # provider não-OpenAI (ex: hook configurado com 'deepseek/deepseek-v4-flash').
+  def api_base_for(provider_id)
+    _, configured = Llm::Config.system_credentials_for(provider_id)
+    endpoint = (configured.presence || Llm::Config.default_api_base_for(provider_id)).chomp('/')
+    endpoint.end_with?('/v1') ? endpoint : "#{endpoint}/v1"
   end
 
   def make_api_call(body)
@@ -100,9 +108,13 @@ class Integrations::LlmBaseService
   def execute_ruby_llm_request(parsed_body)
     messages = parsed_body['messages']
     model = parsed_body['model']
+    # Provider derivado do model — se o hook for configurado com modelo
+    # OpenRouter (ex: deepseek/deepseek-v4-flash), routa via OpenRouter.
+    # Fallback 'openai' (comportamento legacy) pra qualquer model desconhecido.
+    provider_id = Llm::Config.provider_for(model)
 
-    Llm::Config.with_api_key(hook.settings['api_key'], api_base: api_base) do |context|
-      chat = context.chat(model: model)
+    Llm::Config.with_api_key(hook.settings['api_key'], api_base: api_base_for(provider_id), provider: provider_id) do |context|
+      chat = context.chat(model: model, provider: provider_id)
       setup_chat_with_messages(chat, messages)
     end
   rescue StandardError => e

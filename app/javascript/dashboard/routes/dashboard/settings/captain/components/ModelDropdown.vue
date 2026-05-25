@@ -23,6 +23,8 @@ const PROVIDER_ICONS = {
   anthropic: 'i-ri-anthropic-line',
   mistral: 'i-logos-mistral-icon',
   gemini: 'i-woot-gemini',
+  // OpenRouter sem ícone dedicado no Remix Icon — usa o nó genérico de roteamento.
+  openrouter: 'i-ri-router-line',
 };
 
 const iconForModel = model => {

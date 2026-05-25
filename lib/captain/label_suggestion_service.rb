@@ -10,9 +10,9 @@ class Captain::LabelSuggestionService < Captain::BaseTaskService
     content = labels_with_messages
     return nil if content.blank?
 
-    # Make API call
+    # Make API call — model resolvido pelo base via feature_key 'label_suggestion'
+    # (definido abaixo). Account muda no UI Configurações → Captain.
     response = make_api_call(
-      model: GPT_MODEL, # TODO: Use separate model for label suggestion
       messages: [
         { role: 'system', content: prompt_from_file('label_suggestion') },
         { role: 'user', content: content }
@@ -84,6 +84,12 @@ class Captain::LabelSuggestionService < Captain::BaseTaskService
   end
 
   def event_name
+    'label_suggestion'
+  end
+
+  # Override: usa a feature 'label_suggestion' do llm.yml (modelos mais baratos
+  # — gpt-4.1-nano default — porque essa tarefa é classificação simples).
+  def feature_key
     'label_suggestion'
   end
 

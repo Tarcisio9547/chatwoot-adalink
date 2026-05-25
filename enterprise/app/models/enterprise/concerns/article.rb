@@ -61,23 +61,52 @@ module Enterprise::Concerns::Article
   end
 
   def generate_article_search_terms
-    messages = [
-      { role: 'system', content: article_to_search_terms_prompt },
-      { role: 'user', content: "title: #{title} \n description: #{description} \n content: #{content}" }
-    ]
-    headers = { 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{ENV.fetch('OPENAI_API_KEY', nil)}" }
-    body = { model: 'gpt-4o', messages: messages, response_format: { type: 'json_object' } }.to_json
-    Rails.logger.info "Requesting Chat GPT with body: #{body}"
-    response = HTTParty.post(openai_api_url, headers: headers, body: body)
-    Rails.logger.info "Chat GPT response: #{response.body}"
-    JSON.parse(response.parsed_response['choices'][0]['message']['content'])['search_terms']
+    # ANTES: HTTParty direta pra api.openai.com + 'gpt-4o' hardcoded, fora da
+    # abstração. Não respeitava preferência da account nem provider config.
+    #
+    # AGORA: passa pelo Llm::Config + RubyLLM. Modelo vem da preferência
+    # `account.captain_assistant_model` (mesmo do Captain Assistant), com
+    # fallback no DEFAULT_MODEL. Provider é resolvido via config/llm.yml.
+    model = (account&.captain_assistant_model.presence || Llm::Config::DEFAULT_MODEL).to_s
+    provider = Llm::Config.provider_for(model)
+
+    api_key = search_terms_api_key(provider)
+    raise 'No API key configured for article search terms generation' if api_key.blank?
+
+    raw = Llm::Config.with_api_key(api_key, provider: provider) do |context|
+      chat = context.chat(model: model, provider: provider)
+      chat.with_instructions(article_to_search_terms_prompt)
+      chat.with_params(response_format: { type: 'json_object' })
+      chat.ask(article_search_terms_user_content).content
+    end
+
+    JSON.parse(raw)['search_terms']
+  rescue StandardError => e
+    Rails.logger.error("[Article#generate_article_search_terms] #{e.class}: #{e.message}")
+    []
   end
 
   private
 
-  def openai_api_url
-    endpoint = InstallationConfig.find_by(name: 'CAPTAIN_OPEN_AI_ENDPOINT')&.value || 'https://api.openai.com/'
-    endpoint = endpoint.chomp('/')
-    "#{endpoint}/v1/chat/completions"
+  def article_search_terms_user_content
+    "title: #{title} \n description: #{description} \n content: #{content}"
+  end
+
+  # API key cascata: hook account-level pro provider > InstallationConfig system >
+  # ENV (último recurso pra compat com setups antigos que só tinham OPENAI_API_KEY).
+  def search_terms_api_key(provider)
+    if account
+      hook = account.hooks.find_by(app_id: Llm::Config.hook_app_id_for(provider), status: 'enabled')
+      hook_key = hook&.settings&.dig('api_key')
+      return hook_key if hook_key.present?
+    end
+
+    system_key, = Llm::Config.system_credentials_for(provider)
+    return system_key if system_key.present?
+
+    # Retrocompat: muitos setups antigos só tinham OPENAI_API_KEY no ENV
+    return ENV.fetch('OPENAI_API_KEY', nil) if provider == 'openai'
+
+    nil
   end
 end
