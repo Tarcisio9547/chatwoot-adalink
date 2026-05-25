@@ -187,7 +187,11 @@ class Captain::BaseTaskService
   def build_chat(context, model:, provider:, messages:, schema: nil, tools: [])
     # Passa `provider:` explícito — evita ambiguidade na resolução do model_id
     # quando o mesmo nome existe em mais de um provider.
-    chat = context.chat(model: model, provider: provider)
+    # `assume_model_exists: true` pula o registry interno do ruby_llm — necessário
+    # pra modelos não-OpenAI (ex: deepseek/deepseek-v4-flash via OpenRouter) que
+    # não estão na lista builtin da gem. Se o model id estiver errado, o erro
+    # vem do provider HTTP em vez de uma exceção local — mais útil pra debug.
+    chat = context.chat(model: model, provider: provider, assume_model_exists: true)
     system_msg = messages.find { |m| m[:role] == 'system' }
     chat.with_instructions(system_msg[:content]) if system_msg
     chat.with_schema(schema) if schema

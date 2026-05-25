@@ -25,7 +25,10 @@ class Llm::BaseAiService
   def chat(model: @model, temperature: @temperature)
     # `provider:` explícito evita ambiguidade quando o mesmo model_id existe em
     # mais de um provider (ex: 'deepseek-v4-flash' direto vs OpenRouter wrapper).
-    RubyLLM.chat(model: model, provider: @provider).with_temperature(temperature)
+    # `assume_model_exists: true` pula o registry interno do ruby_llm — necessário
+    # pra modelos não-OpenAI (DeepSeek via OpenRouter) que não estão na lista
+    # builtin da gem. Erro de model inválido passa a vir do provider HTTP.
+    RubyLLM.chat(model: model, provider: @provider, assume_model_exists: true).with_temperature(temperature)
   end
 
   # Override em subclasses pra mapear pra entrada do config/llm.yml.
