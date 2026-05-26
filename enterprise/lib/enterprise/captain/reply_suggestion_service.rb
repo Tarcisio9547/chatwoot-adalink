@@ -1,8 +1,11 @@
 module Enterprise::Captain::ReplySuggestionService
-  def make_api_call(model:, messages:, tools: [])
+  # Signature alinhada com Captain::BaseTaskService#make_api_call pós-refactor
+  # multi-provider: `messages` é o único kwarg obrigatório; `model` opcional
+  # (resolução cai no feature_key + account preference quando não passado).
+  def make_api_call(messages:, model: nil, tools: [])
     return super unless use_search_tool?
 
-    super(model: model, messages: messages, tools: [build_search_tool])
+    super(messages: messages, model: model, tools: [build_search_tool])
   end
 
   private
