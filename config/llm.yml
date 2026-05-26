@@ -67,6 +67,13 @@ models:
     provider: openrouter
     display_name: 'DeepSeek V4 Pro (OpenRouter)'
     credit_multiplier: 2
+  # Gemini Flash Lite via OpenRouter — alternativa low-latency ao DeepSeek.
+  # Preço: $0.10/M input + $0.40/M output. Mesmo input do DeepSeek,
+  # output 2x mas latência muito menor (Gemini é referência em velocidade).
+  google/gemini-2.5-flash-lite:
+    provider: openrouter
+    display_name: 'Gemini 2.5 Flash Lite (OpenRouter)'
+    credit_multiplier: 1
   whisper-1:
     provider: openai
     display_name: 'Whisper'
@@ -89,6 +96,7 @@ features:
         claude-haiku-4.5,
         gemini-3-flash,
         gemini-3-pro,
+        google/gemini-2.5-flash-lite,
         deepseek/deepseek-v4-flash,
         deepseek/deepseek-v4-pro,
       ]
@@ -104,6 +112,7 @@ features:
         claude-sonnet-4.5,
         gemini-3-flash,
         gemini-3-pro,
+        google/gemini-2.5-flash-lite,
         deepseek/deepseek-v4-flash,
         deepseek/deepseek-v4-pro,
       ]
@@ -119,6 +128,7 @@ features:
         claude-sonnet-4.5,
         gemini-3-flash,
         gemini-3-pro,
+        google/gemini-2.5-flash-lite,
         deepseek/deepseek-v4-flash,
         deepseek/deepseek-v4-pro,
       ]
@@ -131,6 +141,7 @@ features:
         gpt-5-mini,
         gemini-3-flash,
         claude-haiku-4.5,
+        google/gemini-2.5-flash-lite,
         deepseek/deepseek-v4-flash,
       ]
     default: gpt-4.1-nano
