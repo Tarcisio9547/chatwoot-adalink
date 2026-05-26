@@ -29,21 +29,24 @@ module CaptainRackTimeoutOverride
 
   def call(env)
     if CAPTAIN_PATH.match?(env['PATH_INFO'].to_s)
-      Rack::Timeout::Middleware.new(@app, service_timeout: EXTENDED_TIMEOUT).call(env)
+      Rack::Timeout.new(@app, service_timeout: EXTENDED_TIMEOUT).call(env)
     else
       super
     end
   end
 end
 
+# Em rack-timeout 0.6.x a middleware é a própria `Rack::Timeout` (classe top-level
+# do módulo Rack), NÃO `Rack::Timeout::Middleware` — esse último não existe.
+# Por isso checamos `is_a?(Class)` pra ter certeza que é instanciável.
 Rails.application.config.after_initialize do
-  if defined?(Rack::Timeout::Middleware)
-    Rack::Timeout::Middleware.prepend(CaptainRackTimeoutOverride)
+  if defined?(Rack::Timeout) && Rack::Timeout.is_a?(Class)
+    Rack::Timeout.prepend(CaptainRackTimeoutOverride)
     Rails.logger.info(
       "[CaptainRackTimeout] Override ativo — #{CaptainRackTimeoutOverride::EXTENDED_TIMEOUT}s para rotas /api/v*/accounts/*/captain/*"
     )
   else
-    Rails.logger.warn('[CaptainRackTimeout] Rack::Timeout::Middleware não definido — override ignorado')
+    Rails.logger.warn('[CaptainRackTimeout] Rack::Timeout não definido como classe — override ignorado')
   end
 rescue StandardError => e
   Rails.logger.warn("[CaptainRackTimeout] Falha ao aplicar override: #{e.class}: #{e.message}")
