@@ -35,7 +35,9 @@ class Api::V1::Accounts::AgentsController < Api::V1::Accounts::BaseController
     # Permitido apenas: administrador da conta (fluxo de provisionamento) OU o
     # próprio agente pedindo o seu próprio token.
     unless Current.account_user&.administrator? || @agent&.id == current_user&.id
-      return render json: { error: 'You are not authorized to do this action' }, status: :unauthorized
+      # 403 (não 401): o caller ESTÁ autenticado, só não tem permissão pra mintar
+      # token de outro agente. 403 também desambigua do 401 de auth-fail.
+      return render json: { error: 'You are not authorized to do this action' }, status: :forbidden
     end
 
     access_token = AccessToken.find_or_create_by(owner: @agent)
