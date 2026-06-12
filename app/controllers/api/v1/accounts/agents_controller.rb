@@ -28,6 +28,16 @@ class Api::V1::Accounts::AgentsController < Api::V1::Accounts::BaseController
   end
 
   def sso_token
+    # SEGURANÇA (CR-5): o before_action :check_authorization é pulado nesta ação
+    # (não existe policy de SSO). Sem este guard, QUALQUER usuário autenticado da
+    # conta podia mintar um SSO token (AccessToken permanente) de QUALQUER agente,
+    # inclusive admin → login como ele → account takeover / escalonamento.
+    # Permitido apenas: administrador da conta (fluxo de provisionamento) OU o
+    # próprio agente pedindo o seu próprio token.
+    unless Current.account_user&.administrator? || @agent&.id == current_user&.id
+      return render json: { error: 'You are not authorized to do this action' }, status: :unauthorized
+    end
+
     access_token = AccessToken.find_or_create_by(owner: @agent)
     render json: { sso_token: access_token.token }
   end
