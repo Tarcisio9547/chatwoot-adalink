@@ -269,7 +269,7 @@ const conversationFilters = computed(() => {
     assigneeType: activeAssigneeTab.value,
     status:
       activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.ALL
-        ? [wootConstants.STATUS_TYPE.OPEN, wootConstants.STATUS_TYPE.PENDING]
+        ? 'open_and_pending'
         : activeStatus.value,
     sortBy: activeSortBy.value,
     page: conversationListPagination.value,

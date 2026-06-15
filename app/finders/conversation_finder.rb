@@ -161,6 +161,11 @@ class ConversationFinder
   def filter_by_status
     return if params[:status] == 'all'
 
+    if params[:status] == 'open_and_pending'
+      @conversations = @conversations.where(status: %w[open pending])
+      return
+    end
+
     @conversations = @conversations.where(status: params[:status] || DEFAULT_STATUS)
   end
 
