@@ -267,7 +267,10 @@ const conversationFilters = computed(() => {
   return {
     inboxId: props.conversationInbox ? props.conversationInbox : undefined,
     assigneeType: activeAssigneeTab.value,
-    status: activeStatus.value,
+    status:
+      activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.ALL
+        ? wootConstants.STATUS_TYPE.ALL
+        : activeStatus.value,
     sortBy: activeSortBy.value,
     page: conversationListPagination.value,
     labels: props.label ? [props.label] : undefined,
