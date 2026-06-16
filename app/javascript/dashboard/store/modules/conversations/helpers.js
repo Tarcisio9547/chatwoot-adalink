@@ -7,8 +7,17 @@ export const findPendingMessageIndex = (chat, message) => {
   );
 };
 
-export const filterByStatus = (chatStatus, filterStatus) =>
-  filterStatus === 'all' ? true : chatStatus === filterStatus;
+export const filterByStatus = (chatStatus, filterStatus) => {
+  if (filterStatus === 'all') return true;
+  // Tab "Todos" usa o status sintético 'open_and_pending' (ver ChatList.vue):
+  // backend traduz para WHERE status IN ('open','pending'). O filtro client-side
+  // da lista precisa casar o mesmo conjunto, senão a lista renderiza vazia mesmo
+  // com a API retornando as conversas (número certo, lista vazia).
+  if (filterStatus === 'open_and_pending') {
+    return chatStatus === 'open' || chatStatus === 'pending';
+  }
+  return chatStatus === filterStatus;
+};
 
 export const filterByInbox = (shouldFilter, inboxId, chatInboxId) => {
   const isOnInbox = Number(inboxId) === chatInboxId;
