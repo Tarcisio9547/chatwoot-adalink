@@ -15,6 +15,17 @@ trigger_scheduled_items_job:
   class: 'TriggerScheduledItemsJob'
   queue: scheduled_jobs
 
+# executed daily at 2300 UTC (baixo tráfego)
+# Auto-resolve de conversas inativas (arquivamento). Por conta, controlado por
+# account.settings.auto_resolve_after (em minutos; 15 dias = 21600). Só toca
+# contas com with_auto_resolve. Conversa resolvida some da fila ativa e REABRE
+# sozinha se o cliente responder. Habilitado 2026-06-16 pra evitar inchaço da
+# lista (causa de lentidão na serialização).
+conversations_resolution_scheduler_job:
+  cron: '0 23 * * *'
+  class: 'Account::ConversationsResolutionSchedulerJob'
+  queue: scheduled_jobs
+
 # executed At every minute..
 trigger_imap_email_inboxes_job:
   cron: '*/1 * * * *'
