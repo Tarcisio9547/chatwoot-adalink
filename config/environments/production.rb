@@ -52,8 +52,27 @@ Rails.application.configure do
   # Prepend all log lines with the following tags.
   config.log_tags = [:request_id]
 
-  # Use a different cache store in production.
-  # config.cache_store = :mem_cache_store
+  # Use Redis como cache store em produção.
+  #
+  # PERF FIX (2026-06-16): sem isto, Rails.cache cai no default FileStore
+  # (/app/tmp/cache), gravando cada chave de cache em disco. Na serialização
+  # da lista de conversas (unread_count, conversation cache, dependent attrs),
+  # isso vira centenas de I/O de disco por request — em contas grandes (GVM
+  # ~1074 conversas) com vários agentes, o volume do Railway (disco de rede)
+  # satura e os requests estouram 1-2s → Rack timeout → 500 intermitente +
+  # lentidão absurda. O Redis já roda ao lado, ocioso e rápido (~0.6ms/op).
+  #
+  # error_handler: se o Redis ficar indisponível, faz fallback silencioso em
+  # vez de derrubar a request (cache miss > erro 500).
+  # require explícito: environment configs carregam antes do autoload de lib/,
+  # então Redis::Config não está disponível por autoload aqui.
+  require Rails.root.join('lib/redis/config')
+  config.cache_store = :redis_cache_store, Redis::Config.app.merge(
+    namespace: 'chatwoot_cache',
+    error_handler: lambda { |method:, returning:, exception:|
+      Rails.logger.error("[cache] Redis #{method} falhou: #{exception.class} #{exception.message}")
+    }
+  )
 
   # Use a real queuing backend for Active Job (and separate queues per environment)
   config.active_job.queue_adapter = :sidekiq
