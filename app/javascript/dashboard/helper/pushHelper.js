@@ -1,7 +1,6 @@
 /* eslint-disable no-console */
 import NotificationSubscriptions from '../api/notificationSubscription';
 import auth from '../api/auth';
-import { useAlert } from 'dashboard/composables';
 
 export const verifyServiceWorkerExistence = (callback = () => {}) => {
   if (!('serviceWorker' in navigator)) {
@@ -71,7 +70,11 @@ export const registerSubscription = (onSuccess = () => {}) => {
     .catch(error => {
       // eslint-disable-next-line no-console
       console.error('Push subscription registration failed:', error);
-      useAlert('This browser does not support desktop notification');
+      // NÃO mostrar toast: dentro do iframe do CRM o push subscription falha
+      // sempre (cross-origin / applicationServerKey já existe), e o toast
+      // "This browser does not support desktop notification" aparecia pro
+      // usuário ao abrir o modal de atendimento — ruído sem ação possível.
+      // Mantém o console.error pra debug.
     });
 };
 
@@ -79,7 +82,8 @@ export const requestPushPermissions = ({ onSuccess }) => {
   if (!('Notification' in window)) {
     // eslint-disable-next-line no-console
     console.warn('Notification is not supported');
-    useAlert('This browser does not support desktop notification');
+    // Sem toast: ruído sem ação possível pro usuário (ver catch em
+    // registerSubscription). Só loga.
   } else if (Notification.permission === 'granted') {
     registerSubscription(onSuccess);
   } else if (Notification.permission !== 'denied') {
