@@ -63,6 +63,36 @@ module Whatsapp::IncomingMessageServiceHelpers
     @in_reply_to_external_id = message['context']&.[]('id')
   end
 
+  # Adalink: clique para o WhatsApp — anúncio de origem (referral) da Meta.
+  # Só o provider whatsapp_cloud manda esse objeto; para os demais providers
+  # (ex: 360dialog/WhatsApp pessoal) o campo simplesmente não existe no payload.
+  # https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples#referral-messages
+  def referral_params(message)
+    message['referral']
+  end
+
+  # Adalink: grava o referral (anúncio de origem) inteiro nos
+  # additional_attributes da mensagem e, se a conversa acabou de nascer
+  # dessa mensagem, também nos additional_attributes dela.
+  def message_additional_attrs(message)
+    referral = referral_params(message)
+    return {} if referral.blank?
+
+    attach_referral_to_conversation(referral)
+    { referral: referral }
+  end
+
+  # Adalink: quando a conversa nasce de uma mensagem com referral, guarda o
+  # objeto inteiro nos additional_attributes da conversa para ele aparecer
+  # no payload do webhook message_created. Mensagens seguintes na mesma
+  # conversa não sobrescrevem o referral original.
+  def attach_referral_to_conversation(referral)
+    return unless @conversation_created_now
+
+    @conversation.additional_attributes = @conversation.additional_attributes.merge('referral' => referral)
+    @conversation.save!
+  end
+
   def find_message_by_source_id(source_id)
     return unless source_id
 

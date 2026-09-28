@@ -136,9 +136,13 @@ class Whatsapp::IncomingMessageBaseService
                       @contact_inbox.conversations
                                     .where.not(status: :resolved).last
                     end
-    return if @conversation
+    if @conversation
+      @conversation_created_now = false
+      return
+    end
 
     @conversation = ::Conversation.create!(conversation_params)
+    @conversation_created_now = true
   end
 
   def attach_files
@@ -187,7 +191,8 @@ class Whatsapp::IncomingMessageBaseService
       status: outgoing_echo ? :delivered : :sent,
       sender: outgoing_echo ? nil : @contact,
       source_id: (source_id || message[:id]).to_s,
-      content_attributes: content_attrs
+      content_attributes: content_attrs,
+      additional_attributes: message_additional_attrs(message)
     )
   end
 

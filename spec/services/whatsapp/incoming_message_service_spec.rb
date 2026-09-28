@@ -86,6 +86,17 @@ describe Whatsapp::IncomingMessageService do
         described_class.new(inbox: whatsapp_channel.inbox, params: params).perform
         expect(whatsapp_channel.inbox.messages.count).to eq(1)
       end
+
+      # Adalink: non-cloud providers (ex: WhatsApp pessoal) never send referral —
+      # behaviour must stay identical, no stray key added
+      it 'does not add a referral key to message or conversation additional_attributes' do
+        described_class.new(inbox: whatsapp_channel.inbox, params: params).perform
+
+        message = whatsapp_channel.inbox.messages.last
+        conversation = whatsapp_channel.inbox.conversations.last
+        expect(message.additional_attributes.key?('referral')).to be false
+        expect(conversation.additional_attributes.key?('referral')).to be false
+      end
     end
 
     context 'when unsupported message types' do
