@@ -165,6 +165,54 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         end
       end
     end
+
+    # Adalink: clique para o WhatsApp — anúncio de origem (referral)
+    context 'when message has a referral' do
+      let(:referral) { { source_id: '120210000000000', source_type: 'ad', ctwa_clid: 'AfeXYZ123' } }
+
+      def text_params(referral:, message_id: 'wamid.REF1', body: 'Vi seu anúncio')
+        message = { from: '5511988887777', id: message_id, timestamp: '1770500000', type: 'text', text: { body: body } }
+        message[:referral] = referral unless referral.nil?
+        {
+          phone_number: whatsapp_channel.phone_number,
+          object: 'whatsapp_business_account',
+          entry: [{ changes: [{ value: { contacts: [{ profile: { name: 'Ana' }, wa_id: '5511988887777' }], messages: [message] } }] }]
+        }.with_indifferent_access
+      end
+
+      it 'stores the referral on the message and on the conversation it creates' do
+        described_class.new(inbox: whatsapp_channel.inbox, params: text_params(referral: referral)).perform
+
+        message = whatsapp_channel.inbox.messages.last
+        expect(message.additional_attributes['referral']).to eq(referral.stringify_keys)
+        expect(message.conversation.additional_attributes['referral']).to eq(referral.stringify_keys)
+      end
+
+      it 'keeps the original referral on the conversation when a later message brings another one' do
+        described_class.new(inbox: whatsapp_channel.inbox, params: text_params(referral: referral)).perform
+        other = referral.merge(source_id: '999')
+        described_class.new(inbox: whatsapp_channel.inbox, params: text_params(referral: other, message_id: 'wamid.REF2')).perform
+
+        conversation = whatsapp_channel.inbox.conversations.last
+        expect(whatsapp_channel.inbox.conversations.count).to eq(1)
+        expect(conversation.additional_attributes['referral']['source_id']).to eq('120210000000000')
+        expect(conversation.messages.last.additional_attributes['referral']['source_id']).to eq('999')
+      end
+
+      it 'leaves additional_attributes empty when there is no referral or it is not an object' do
+        described_class.new(inbox: whatsapp_channel.inbox, params: text_params(referral: nil)).perform
+        described_class.new(inbox: whatsapp_channel.inbox, params: text_params(referral: 'x', message_id: 'wamid.REF3')).perform
+
+        expect(whatsapp_channel.inbox.messages.map(&:additional_attributes)).to all(eq({}))
+        expect(whatsapp_channel.inbox.conversations.last.additional_attributes).to eq({})
+      end
+
+      it 'removes NUL bytes so the message is still saved' do
+        described_class.new(inbox: whatsapp_channel.inbox, params: text_params(referral: { "hea\u0000dline" => "Com\u0000pre" })).perform
+
+        expect(whatsapp_channel.inbox.messages.last.additional_attributes['referral']).to eq('headline' => 'Compre')
+      end
+    end
   end
 
   # Métodos auxiliares para reduzir o tamanho do exemplo
