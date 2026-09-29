@@ -115,14 +115,12 @@ RSpec.describe Webhooks::WhatsappEventsJob do
   # bate com NENHUM Channel::Whatsapp cadastrado é descartado como canal
   # ausente antes de chegar em qualquer Whatsapp::IncomingMessage*ervice —
   # inclusive um referral no payload some junto, sem erro. Este teste
-  # confirma só essa resolução de canal (a existência de um Channel::Api
-  # não relacionado no banco não muda o resultado, é só ruído de dados).
-  # NÃO cobre uma caixa Channel::Api (API de conta, ver
+  # confirma só essa resolução de canal. NÃO cobre uma caixa Channel::Api
+  # (API de conta, ver
   # spec/controllers/api/v1/accounts/conversations/messages_controller_spec.rb),
   # que nunca passa por este job.
   context 'when the payload phone_number/metadata does not match any Channel::Whatsapp' do
     it 'does not call any Whatsapp::IncomingMessage service, nor create a message or conversation' do
-      create(:channel_api)
       unmatched_params = {
         phone_number: '+5511900000000',
         object: 'whatsapp_business_account',

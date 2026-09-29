@@ -6,32 +6,52 @@ module Whatsapp::IncomingMessageReferralHelpers
   # só o wrapper do Rails para isso, subclasse de StatementInvalid — um
   # rescue de StatementInvalid já cobre os dois). Como a trava de
   # duplicidade (Redis, 1 dia) já foi adquirida antes da transação, sem
-  # essa rede a mensagem sumiria para sempre se a gravação falhasse (a 1ª
-  # tentativa falharia e toda reentrega seguinte seria descartada em
-  # silêncio pela trava) — por isso refazemos uma vez sem o referral. A
-  # checagem de e.cause.is_a?(PG::DataException) é deliberada: timeout,
-  # deadlock ou conexão caída NÃO são erro de dado — refazer sem o
-  # referral apagaria a origem do anúncio para um erro sem relação com
-  # ele. Esses casos (e StatementInvalid sem referral) sobem intactos.
-  # A 2ª chamada de save_conversation_and_messages! (linha abaixo) roda
-  # dentro deste mesmo rescue: se ela falhar de novo, a exceção propaga
-  # direto para fora do método, sem re-executar este rescue. Por isso
-  # @discard_referral nunca está true quando chegamos aqui — não há guard
-  # contra reentrância porque não existe reentrância possível.
+  # essa rede a mensagem sumiria para sempre se a gravação falhasse — por
+  # isso refazemos uma vez sem o referral. A checagem de
+  # e.cause.is_a?(PG::DataException) é deliberada: timeout, deadlock ou
+  # conexão caída NÃO são erro de dado e sobem intactos, sem retry — refazer
+  # sem o referral apagaria a origem do anúncio para um erro sem relação
+  # com ele. @discard_referral nunca é true quando este rescue roda: a 2ª
+  # tentativa que falhar de novo propaga direto para fora do método, sem
+  # reexecutar este mesmo rescue.
   def persist_conversation_and_messages
     save_conversation_and_messages!
   rescue ActiveRecord::StatementInvalid => e
     referral = referral_params(messages_data.first)
     raise if !e.cause.is_a?(PG::DataException) || referral.blank?
 
-    Rails.logger.error "Whatsapp: failed (#{e.cause.class}) persisting message " \
-                       "wamid=#{messages_data.first[:id].inspect} with referral " \
-                       "source_id=#{referral['source_id'].inspect}, retrying without it"
+    Rails.logger.error "Whatsapp: Postgres data error (#{e.cause.class}) persisting message " \
+                       "wamid=#{messages_data.first[:id].inspect}, retrying once without the referral " \
+                       "(source_id=#{referral['source_id'].inspect})"
     @discard_referral = true
     save_conversation_and_messages!
   ensure
     @discard_referral = false
   end
+
+  # Adalink: grava o referral (anúncio de origem) inteiro nos
+  # additional_attributes da mensagem que o carrega. @discard_referral é
+  # ligado por persist_conversation_and_messages, acima, quando a 1ª
+  # tentativa de gravação falhou com um erro de dado do Postgres: nesse
+  # caso a 2ª tentativa grava a mensagem sem o referral, em vez de tentar
+  # de novo com o mesmo valor problemático.
+  def referral_additional_attrs(message)
+    return {} if @discard_referral
+
+    referral = referral_params(message)
+    referral.present? ? { referral: referral } : {}
+  end
+
+  # Adalink: a conversa guarda o referral da mensagem que a CRIOU. Cliques
+  # seguintes (outro referral numa conversa já existente) ficam só na
+  # mensagem correspondente — não sobrescrevem o referral original da
+  # conversa. Por isso conversation_params só olha messages_data.first
+  # (a mensagem raiz do payload, a única que pode criar a conversa).
+  def new_conversation_additional_attrs
+    referral_additional_attrs(messages_data.first)
+  end
+
+  private
 
   def save_conversation_and_messages!
     ActiveRecord::Base.transaction do
@@ -79,27 +99,5 @@ module Whatsapp::IncomingMessageReferralHelpers
     else
       value
     end
-  end
-
-  # Adalink: grava o referral (anúncio de origem) inteiro nos
-  # additional_attributes da mensagem que o carrega. @discard_referral é
-  # ligado por persist_conversation_and_messages, neste mesmo módulo,
-  # quando a 1ª tentativa de gravação falhou com um erro de dado do
-  # Postgres: nesse caso a 2ª tentativa grava a mensagem sem o referral,
-  # em vez de tentar de novo com o mesmo valor problemático.
-  def referral_additional_attrs(message)
-    return {} if @discard_referral
-
-    referral = referral_params(message)
-    referral.present? ? { referral: referral } : {}
-  end
-
-  # Adalink: a conversa guarda o referral da mensagem que a CRIOU. Cliques
-  # seguintes (outro referral numa conversa já existente) ficam só na
-  # mensagem correspondente — não sobrescrevem o referral original da
-  # conversa. Por isso conversation_params só olha messages_data.first
-  # (a mensagem raiz do payload, a única que pode criar a conversa).
-  def new_conversation_additional_attrs
-    referral_additional_attrs(messages_data.first)
   end
 end
