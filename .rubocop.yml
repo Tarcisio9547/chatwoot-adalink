@@ -91,6 +91,7 @@ Metrics/ModuleLength:
   Exclude:
     - lib/seeders/message_seeder.rb
     - spec/support/slack_stubs.rb
+    - app/services/whatsapp/incoming_message_service_helpers.rb
 
 Rails/HelperInstanceVariable:
   Exclude:

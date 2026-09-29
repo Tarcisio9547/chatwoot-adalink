@@ -113,11 +113,9 @@ RSpec.describe 'Conversation Messages API', type: :request do
         # este controller), numa inbox Channel::Api, com message_type:
         # 'incoming' e source_id — nunca a API pública de inbox
         # (/public/api/v1/inboxes/...) nem Whatsapp::IncomingMessageBaseService.
-        # Messages::MessageBuilder#message_params monta uma lista fixa de
-        # campos (account_id, inbox_id, message_type, content, sender,
-        # content_type, content_attributes, items, in_reply_to, echo_id,
-        # source_id) e não lê params[:referral] em lugar nenhum — um
-        # referral intruso no corpo nunca vira additional_attributes.
+        # additional_attributes só é setado por campaign_id/template_params
+        # (via merge em Messages::MessageBuilder#message_params) — um
+        # referral intruso no corpo nunca chega a additional_attributes.
         it 'ignores a referral field in the payload (WhatsApp Cloud API referral does not apply to Channel::Api / WhatsApp pessoal)' do
           params = {
             content: 'Mensagem recebida via WhatsApp pessoal',
@@ -141,6 +139,26 @@ RSpec.describe 'Conversation Messages API', type: :request do
           payload = created_message.webhook_data
           expect(payload[:additional_attributes]).to eq({})
           expect(payload[:conversation][:additional_attributes]).to eq({})
+        end
+
+        # Não regressão também para mensagem outgoing (resposta do agente,
+        # o caso mais comum nesta API) nesta mesma caixa Channel::Api.
+        it 'ignores a referral field in the payload for an outgoing message too' do
+          params = {
+            content: 'Resposta enviada pelo corretor',
+            referral: { ctwa_clid: 'ShouldNeverReachChannelApi' }
+          }
+
+          post api_v1_account_conversation_messages_url(account_id: account.id, conversation_id: conversation.display_id),
+               params: params,
+               headers: agent.create_new_auth_token,
+               as: :json
+
+          expect(response).to have_http_status(:success)
+
+          created_message = conversation.messages.last
+          expect(created_message.message_type).to eq('outgoing')
+          expect(created_message.additional_attributes).to eq({})
         end
       end
     end

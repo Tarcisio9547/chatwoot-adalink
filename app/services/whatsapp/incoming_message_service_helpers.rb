@@ -64,30 +64,25 @@ module Whatsapp::IncomingMessageServiceHelpers
     @in_reply_to_external_id = message['context']&.[]('id')
   end
 
-  # Adalink: rede de segurança geral do referral (clique para o WhatsApp).
-  # O referral vem direto da Meta sem allowlist de campos/tamanhos/tipos, e
-  # já vimos casos concretos derrubarem o INSERT no Postgres (string > 1500
-  # chars, byte NUL). Um valor que ainda não vimos — ex.: um inteiro com
-  # mais de 131.072 dígitos, que estoura o limite do tipo numeric do
-  # Postgres (PG::NumericValueOutOfRange / ActiveRecord::RangeError) — teria
-  # o mesmo efeito: como a trava de duplicidade (Redis, 1 dia) já foi
-  # adquirida antes desta transação, a mensagem some para sempre (a 1ª
-  # tentativa falha e toda reentrega seguinte é descartada em silêncio pela
-  # trava). Por isso, em vez de tentar prever e tratar cada formato
-  # inesperado individualmente, capturamos aqui QUALQUER erro de gravação
-  # que aconteça enquanto há um referral em jogo e tentamos de novo, uma
-  # única vez, sem o referral — a mensagem é sempre salva.
-  #
-  # Importante: só entramos nesse caminho de retry quando havia referral na
-  # mensagem raiz. Um erro de banco sem relação com o referral (contato
-  # inválido, coluna obrigatória faltando etc.) sobe normalmente, como
-  # sempre subiu — não é mascarado.
+  # Adalink: rede de segurança do referral (clique para o WhatsApp) contra
+  # erro de DADO do Postgres — SQLSTATE classe 22 (PG::DataException), que
+  # cobre byte NUL (PG::UntranslatableCharacter) e número fora do intervalo
+  # do tipo numeric (PG::NumericValueOutOfRange; ActiveRecord::RangeError é
+  # só o wrapper do Rails para isso, subclasse de StatementInvalid — um
+  # rescue de StatementInvalid já cobre os dois). Como a trava de
+  # duplicidade (Redis, 1 dia) já foi adquirida antes da transação, a
+  # mensagem some para sempre se a gravação falhar; por isso refazemos uma
+  # vez sem o referral. A checagem de e.cause.is_a?(PG::DataException) é
+  # deliberada: timeout, deadlock ou conexão caída NÃO são erro de dado —
+  # refazer sem o referral apagaria a origem do anúncio para um erro sem
+  # relação com ele. Esses casos (e StatementInvalid sem referral) sobem.
   def persist_conversation_and_messages
     save_conversation_and_messages!
-  rescue ActiveRecord::StatementInvalid, ActiveRecord::RangeError => e
-    raise if @discard_referral || referral_params(messages_data.first).blank?
+  rescue ActiveRecord::StatementInvalid => e
+    referral = referral_params(messages_data.first)
+    raise if @discard_referral || !e.cause.is_a?(PG::DataException) || referral.blank?
 
-    Rails.logger.error "Whatsapp: failed to persist message/conversation with referral, retrying without it: #{e.class}"
+    Rails.logger.error "Whatsapp: failed (#{e.cause.class}), retrying without referral source_id=#{referral['source_id'].inspect}"
     @discard_referral = true
     save_conversation_and_messages!
   ensure
@@ -149,8 +144,9 @@ module Whatsapp::IncomingMessageServiceHelpers
   # additional_attributes da mensagem que o carrega. @discard_referral é
   # ligado pela rede de segurança de persist_conversation_and_messages
   # (incoming_message_base_service.rb) quando a 1ª tentativa de gravação
-  # falhou por causa do referral: nesse caso a 2ª tentativa grava a
-  # mensagem sem ele, em vez de tentar de novo com o mesmo valor problemático.
+  # falhou com um erro de dado do Postgres: nesse caso a 2ª tentativa grava
+  # a mensagem sem o referral, em vez de tentar de novo com o mesmo valor
+  # problemático.
   def referral_additional_attrs(message)
     return {} if @discard_referral
 

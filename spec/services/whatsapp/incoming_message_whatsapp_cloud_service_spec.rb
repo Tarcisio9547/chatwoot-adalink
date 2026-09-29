@@ -461,16 +461,16 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
           expect(stored_referral.keys.size).to eq(many_keys_referral.keys.size)
         end
 
-        # Rede de segurança geral: NENHUM erro de banco causado pelo referral
-        # (nem os que já sabemos nomear, como NUL ou string longa demais) pode
-        # derrubar a mensagem. Um inteiro com mais de 131.072 dígitos passa
+        # A rede de segurança só refaz a gravação sem o referral quando o
+        # erro é de DADO do Postgres (PG::DataException, SQLSTATE classe 22)
+        # — o caso aqui é um inteiro com mais de 131.072 dígitos, que passa
         # pela validação Ruby (não é string, não bate em nenhuma regra
         # conhecida) e só é recusado no INSERT real pelo Postgres
-        # (PG::NumericValueOutOfRange / ActiveRecord::RangeError). Como a
-        # trava de duplicidade já foi adquirida antes da transação, sem essa
-        # rede a mensagem some para sempre: a 1ª tentativa falha e a
+        # (PG::NumericValueOutOfRange, subclasse de PG::DataException). Como
+        # a trava de duplicidade já foi adquirida antes da transação, sem
+        # essa rede a mensagem some para sempre: a 1ª tentativa falha e a
         # reentrega é descartada em silêncio pela trava.
-        it 'saves the message without the referral when persisting it raises ActiveRecord::RangeError' do
+        it 'saves the message without the referral when persisting it raises a PG::DataException' do
           huge_integer_referral = referral_payload.merge(source_id: ('1' * 131_073).to_i)
           huge_integer_params = build_referral_message_params(referral: huge_integer_referral)
 
@@ -485,16 +485,42 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
           expect(conversation.additional_attributes).to eq({})
         end
 
-        # A rede de segurança só existe para blindar o referral. Um erro de
-        # banco sem relação nenhuma com o referral (ex.: contato inválido,
-        # coluna obrigatória faltando) precisa continuar subindo normalmente
-        # — a rede não pode virar um "engolidor" geral de StatementInvalid.
-        it 'still raises when a database error unrelated to the referral happens, even with a referral present' do
-          allow(Conversation).to receive(:create!)
-            .and_raise(ActiveRecord::StatementInvalid, 'simulated unrelated database failure')
+        # Um erro TRANSITÓRIO de banco (timeout, deadlock, conexão caída) não
+        # é erro de dado: PG::QueryCanceled não é PG::DataException. Refazer
+        # a gravação sem o referral nesse caso apagaria a origem do anúncio
+        # em silêncio por um problema que nada tem a ver com o referral — a
+        # exceção precisa subir intacta, e nada é gravado (nem com, nem sem
+        # o referral).
+        it 'raises and saves nothing when a transient database error happens, even with a referral present' do
+          call_count = 0
+          allow(Conversation).to receive(:create!) do
+            call_count += 1
+            raise ActiveRecord::QueryCanceled, 'simulated statement timeout'
+          end
 
           expect { described_class.new(inbox: whatsapp_channel.inbox, params: referral_params).perform }
+            .to raise_error(ActiveRecord::QueryCanceled, /simulated statement timeout/)
+
+          expect(call_count).to eq(1)
+          expect(whatsapp_channel.inbox.conversations.count).to eq(0)
+          expect(whatsapp_channel.inbox.messages.count).to eq(0)
+        end
+
+        # Sem referral na mensagem, a rede de segurança nunca entra em ação:
+        # qualquer StatementInvalid (erro de dado ou não) sobe direto e
+        # Conversation.create! só é chamado uma vez.
+        it 'raises once, without retrying, when a database error happens and there is no referral' do
+          call_count = 0
+          allow(Conversation).to receive(:create!) do
+            call_count += 1
+            raise ActiveRecord::StatementInvalid, 'simulated unrelated database failure'
+          end
+          no_referral_params = build_referral_message_params(include_referral: false)
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: no_referral_params).perform }
             .to raise_error(ActiveRecord::StatementInvalid, /simulated unrelated database failure/)
+
+          expect(call_count).to eq(1)
         end
       end
 
