@@ -5,6 +5,7 @@ import { useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
 import ButtonNext from 'next/button/Button.vue';
 import Icon from 'next/icon/Icon.vue';
+// eslint-disable-next-line no-unused-vars
 import Logo from 'next/icon/Logo.vue';
 
 import {
@@ -52,6 +53,7 @@ const emitNewAccount = () => {
 
 <template>
   <DropdownContainer>
+    <!-- eslint-disable-next-line vue/no-unused-vars -->
     <template #trigger="{ toggle, isOpen }">
       <!-- Account switcher hidden - managed via CRM -->
       <span v-if="false" />

@@ -36,6 +36,7 @@ export function usePolicy() {
     return hasPermissions(requiredPermissions, userPermissions);
   };
 
+  // eslint-disable-next-line no-unused-vars
   const checkInstallationType = config => {
     if (Array.isArray(config) && config.length > 0) {
       const installationCheck = {
@@ -61,6 +62,7 @@ export function usePolicy() {
     return true;
   });
 
+  // eslint-disable-next-line no-unused-vars
   const shouldShow = (featureFlag, permissions, installationTypes) => {
     const perms = unref(permissions);
 

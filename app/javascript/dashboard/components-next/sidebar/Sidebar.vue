@@ -15,8 +15,11 @@ import { BUS_EVENTS } from 'shared/constants/busEvents';
 
 import Button from 'dashboard/components-next/button/Button.vue';
 import SidebarGroup from './SidebarGroup.vue';
+// eslint-disable-next-line no-unused-vars
 import SidebarProfileMenu from './SidebarProfileMenu.vue';
+// eslint-disable-next-line no-unused-vars
 import SidebarChangelogCard from './SidebarChangelogCard.vue';
+// eslint-disable-next-line no-unused-vars
 import SidebarChangelogButton from './SidebarChangelogButton.vue';
 import ChannelLeaf from './ChannelLeaf.vue';
 import ChannelIcon from 'next/icon/ChannelIcon.vue';
@@ -38,11 +41,13 @@ const emit = defineEmits([
   'closeMobileSidebar',
 ]);
 
+// eslint-disable-next-line no-unused-vars
 const { accountScopedRoute, isOnChatwootCloud } = useAccount();
 const store = useStore();
 const searchShortcut = useKbd([`$mod`, 'k']);
 const { t } = useI18n();
 
+// eslint-disable-next-line no-unused-vars
 const isACustomBrandedInstance = useMapGetter(
   'globalConfig/isACustomBrandedInstance'
 );

@@ -13,6 +13,7 @@ import { CSAT_DISPLAY_TYPES } from 'shared/constants/messages';
 export default {
   name: 'Response',
   components: {
+    // eslint-disable-next-line vue/no-unused-components
     Branding,
     Rating,
     Spinner,

@@ -100,6 +100,7 @@ export default {
   methods: {
     async initializeAccount() {
       try {
+        // eslint-disable-next-line no-unused-vars
         const { name, locale, id, domain, support_email, features } =
           this.getAccount(this.accountId);
 

@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+// eslint-disable-next-line no-unused-vars
 import Auth from 'dashboard/api/auth';
 import { useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
@@ -25,6 +26,7 @@ defineOptions({
   inheritAttrs: false,
 });
 
+// eslint-disable-next-line no-unused-vars
 const { t } = useI18n();
 
 const currentUser = useMapGetter('getCurrentUser');

@@ -19,6 +19,7 @@ const {
   LOGO: logo,
   LOGO_DARK: logoDark,
   PRIVACY_URL: privacyURL,
+  // eslint-disable-next-line no-unused-vars
   IS_ENTERPRISE: isEnterprise,
   TERMS_URL: termsURL,
   WIDGET_BRAND_URL: widgetBrandURL,

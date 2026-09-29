@@ -125,15 +125,18 @@ const closeContactPanel = () => {
 // Type 'trama-criar-negocio' bate com listener no CRM (Atendimento.tsx).
 const criarNegocio = () => {
   if (!contact.value) return;
-  window.parent.postMessage({
-    type: 'trama-criar-negocio',
-    contato: {
-      nome: contact.value.name || '',
-      telefone: contact.value.phone_number || '',
-      email: contact.value.email || '',
-      chatwoot_contact_id: contact.value.id,
+  window.parent.postMessage(
+    {
+      type: 'trama-criar-negocio',
+      contato: {
+        nome: contact.value.name || '',
+        telefone: contact.value.phone_number || '',
+        email: contact.value.email || '',
+        chatwoot_contact_id: contact.value.id,
+      },
     },
-  }, '*');
+    '*'
+  );
 };
 
 onMounted(() => {
@@ -159,7 +162,20 @@ onMounted(() => {
         class="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium bg-[rgb(124,58,237)] text-white hover:bg-[rgb(109,40,217)] transition-all"
         @click="criarNegocio"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M12 5v14M5 12h14" />
+          <!-- eslint-disable-next-line vue/no-bare-strings-in-template -->
+        </svg>
         Criar Negócio
       </button>
     </div>

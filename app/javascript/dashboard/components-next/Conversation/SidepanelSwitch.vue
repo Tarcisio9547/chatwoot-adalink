@@ -14,6 +14,7 @@ const isFeatureEnabledonAccount = useMapGetter(
   'accounts/isFeatureEnabledonAccount'
 );
 
+// eslint-disable-next-line no-unused-vars
 const showCopilotTab = computed(() =>
   isFeatureEnabledonAccount.value(currentAccountId.value, FEATURE_FLAGS.CAPTAIN)
 );
@@ -22,6 +23,7 @@ const { uiSettings } = useUISettings();
 const isContactSidebarOpen = computed(
   () => uiSettings.value.is_contact_sidebar_open
 );
+// eslint-disable-next-line no-unused-vars
 const isCopilotPanelOpen = computed(
   () => uiSettings.value.is_copilot_panel_open
 );
@@ -40,6 +42,7 @@ const handleConversationSidebarToggle = () => {
   });
 };
 
+// eslint-disable-next-line no-unused-vars
 const handleCopilotSidebarToggle = () => {
   updateUISettings({
     is_contact_sidebar_open: false,
@@ -63,9 +66,11 @@ useKeyboardEvents(keyboardEvents);
       v-tooltip.top="'Dados do Contato'"
       sm
       class="!rounded-full !w-10 !h-10 transition-all duration-[250ms] ease-out active:!scale-95 active:duration-75 shadow-lg"
-      :class="isContactSidebarOpen
-        ? '!bg-[rgb(124,58,237)] !text-white shadow-[rgb(124,58,237)]/30'
-        : '!bg-[rgb(124,58,237)]/15 !text-[rgb(124,58,237)] !border !border-[rgb(124,58,237)]/30 hover:!bg-[rgb(124,58,237)] hover:!text-white'"
+      :class="
+        isContactSidebarOpen
+          ? '!bg-[rgb(124,58,237)] !text-white shadow-[rgb(124,58,237)]/30'
+          : '!bg-[rgb(124,58,237)]/15 !text-[rgb(124,58,237)] !border !border-[rgb(124,58,237)]/30 hover:!bg-[rgb(124,58,237)] hover:!text-white'
+      "
       icon="i-ph-user-bold"
       @click="handleConversationSidebarToggle"
     />

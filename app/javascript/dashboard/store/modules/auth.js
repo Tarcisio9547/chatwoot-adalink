@@ -103,11 +103,14 @@ export const getters = {
 export const actions = {
   async validityCheck(context) {
     try {
+      // eslint-disable-next-line no-underscore-dangle
       if (window.__cw_iframe_token) {
         // Iframe token auth: fetch profile via API token (no cookies needed)
         const res = await fetch('/api/v1/profile', {
+          // eslint-disable-next-line no-underscore-dangle
           headers: { api_access_token: window.__cw_iframe_token },
         });
+        // eslint-disable-next-line no-throw-literal
         if (!res.ok) throw { response: { status: res.status } };
         const currentUser = await res.json();
         setUser(currentUser);
@@ -119,6 +122,7 @@ export const actions = {
         context.commit(types.SET_CURRENT_USER, currentUser);
       }
     } catch (error) {
+      // eslint-disable-next-line no-underscore-dangle
       if (error?.response?.status === 401 && !window.__cw_iframe_token) {
         clearCookiesOnLogout();
       }

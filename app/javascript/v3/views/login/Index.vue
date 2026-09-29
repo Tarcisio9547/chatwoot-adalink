@@ -109,7 +109,8 @@ export default {
     }
     // Auto-login via token param (CRM iframe integration)
     const urlParams = new URLSearchParams(window.location.search);
-    const apiToken = urlParams.get('token') || urlParams.get('user_access_token');
+    const apiToken =
+      urlParams.get('token') || urlParams.get('user_access_token');
     if (apiToken && !this.ssoAuthToken) {
       this.clearExistingSession();
       this.submitTokenLogin(apiToken);
@@ -133,10 +134,15 @@ export default {
       // so SSO login creates a fresh session with the correct user
       try {
         const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
+        for (let i = 0; i < localStorage.length; i += 1) {
           const key = localStorage.key(i);
-          if (key && (key.startsWith('cw') || key === 'access_token' ||
-              key === 'user:id' || key === 'auth_token')) {
+          if (
+            key &&
+            (key.startsWith('cw') ||
+              key === 'access_token' ||
+              key === 'user:id' ||
+              key === 'auth_token')
+          ) {
             keysToRemove.push(key);
           }
         }
@@ -261,8 +267,10 @@ export default {
           headers: { api_access_token: token },
         });
         if (res.ok) {
+          // eslint-disable-next-line no-unused-vars
           const data = await res.json();
           // Store token globally for the dashboard app to use
+          // eslint-disable-next-line no-underscore-dangle
           window.__cw_iframe_token = token;
           localStorage.setItem('cw_iframe_token', token);
           // Redirect to dashboard with token preserved

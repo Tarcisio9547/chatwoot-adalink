@@ -15,6 +15,7 @@ export const validateAuthenticateRoutePermission = (to, next) => {
 
   if (!isLoggedIn) {
     // If iframe token exists, don't redirect — wait for validityCheck to complete
+    // eslint-disable-next-line no-underscore-dangle
     if (window.__cw_iframe_token) {
       return next();
     }

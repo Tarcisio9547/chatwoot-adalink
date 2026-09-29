@@ -44,10 +44,12 @@ const deleteMessage = computed(() => {
   return ` ${activeResponse.value.name} ? `;
 });
 
+// eslint-disable-next-line no-unused-vars
 const isFeatureEnabledOnAccount = useMapGetter(
   'accounts/isFeatureEnabledonAccount'
 );
 
+// eslint-disable-next-line no-unused-vars
 const currentAccountId = useMapGetter('getCurrentAccountId');
 
 // Adalink: all features unlocked
