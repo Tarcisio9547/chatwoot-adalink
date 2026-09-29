@@ -336,8 +336,10 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
       end
 
       # Referral malformado (não-Hash) nunca pode derrubar a gravação da
-      # mensagem. Uma string >1500 chars fazia @conversation.save! estourar
-      # JsonbAttributesLengthValidator e a mensagem se perder.
+      # mensagem. referral_params só aceita Hash — uma string, mesmo curta,
+      # é descartada antes de chegar em Conversation.create!/message.build,
+      # então uma string >1500 chars nunca chega a estourar o
+      # JsonbAttributesLengthValidator de Conversation#additional_attributes.
       context 'when referral is malformed' do
         it 'ignores an overly long string referral and still saves the message' do
           long_string_params = build_referral_message_params(referral: 'x' * 2000)
@@ -376,12 +378,13 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         end
 
         # O Postgres recusa INSERT em texto/jsonb com o byte NUL (\u0000):
-        # PG::UntranslatableCharacter. Sem tratamento, isso derrubava a
-        # transação de gravação. A 1ª tentativa falha e fica registrada como
-        # erro; como a trava de duplicidade (Redis, 1 dia) já tinha sido
-        # adquirida antes da transação começar, qualquer reentrega SEGUINTE
-        # do mesmo evento (pela Meta ou por um retry do Sidekiq) é
-        # descartada em silêncio pela trava, perdendo a mensagem
+        # PG::UntranslatableCharacter. Limpamos o NUL de valores (incluindo
+        # aninhados) antes de gravar, porque um referral com esse byte
+        # derrubaria a transação de gravação — e, como a trava de
+        # duplicidade (Redis, 1 dia) já foi adquirida antes da transação
+        # começar, qualquer reentrega SEGUINTE do mesmo evento (pela Meta ou
+        # por um retry do Sidekiq) seria descartada em silêncio pela trava,
+        # perdendo a mensagem
         # definitivamente.
         it 'strips NUL bytes from referral VALUES (including nested ones) and still saves the message' do
           referral_with_nul = referral_payload.merge(
@@ -457,12 +460,50 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
           expect(stored_referral['extra_field_50']).to eq('valor 50')
           expect(stored_referral.keys.size).to eq(many_keys_referral.keys.size)
         end
+
+        # Rede de segurança geral: NENHUM erro de banco causado pelo referral
+        # (nem os que já sabemos nomear, como NUL ou string longa demais) pode
+        # derrubar a mensagem. Um inteiro com mais de 131.072 dígitos passa
+        # pela validação Ruby (não é string, não bate em nenhuma regra
+        # conhecida) e só é recusado no INSERT real pelo Postgres
+        # (PG::NumericValueOutOfRange / ActiveRecord::RangeError). Como a
+        # trava de duplicidade já foi adquirida antes da transação, sem essa
+        # rede a mensagem some para sempre: a 1ª tentativa falha e a
+        # reentrega é descartada em silêncio pela trava.
+        it 'saves the message without the referral when persisting it raises ActiveRecord::RangeError' do
+          huge_integer_referral = referral_payload.merge(source_id: ('1' * 131_073).to_i)
+          huge_integer_params = build_referral_message_params(referral: huge_integer_referral)
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: huge_integer_params).perform }
+            .not_to raise_error
+
+          expect(whatsapp_channel.inbox.conversations.count).to eq(1)
+          message = whatsapp_channel.inbox.messages.last
+          expect(message.content).to eq('Olá! Vi seu anúncio.')
+          expect(message.additional_attributes).to eq({})
+          conversation = whatsapp_channel.inbox.conversations.last
+          expect(conversation.additional_attributes).to eq({})
+        end
+
+        # A rede de segurança só existe para blindar o referral. Um erro de
+        # banco sem relação nenhuma com o referral (ex.: contato inválido,
+        # coluna obrigatória faltando) precisa continuar subindo normalmente
+        # — a rede não pode virar um "engolidor" geral de StatementInvalid.
+        it 'still raises when a database error unrelated to the referral happens, even with a referral present' do
+          allow(Conversation).to receive(:create!)
+            .and_raise(ActiveRecord::StatementInvalid, 'simulated unrelated database failure')
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: referral_params).perform }
+            .to raise_error(ActiveRecord::StatementInvalid, /simulated unrelated database failure/)
+        end
       end
 
       # A mensagem-mãe do tipo 'contacts' (compartilhamento de contato) não
       # tem 'referral' — o referral vem sempre do objeto messages_data.first
       # (a mensagem raiz do payload). create_message é chamado uma vez por
-      # contato compartilhado, então sem ler da raiz o referral se perdia.
+      # contato compartilhado, então create_message sempre lê o referral da
+      # raiz do payload em vez do parâmetro `message` recebido (que, para um
+      # contato, é o próprio objeto de contato, sem 'referral').
       context 'when message type is contacts' do
         let(:contacts_referral_params) do
           {

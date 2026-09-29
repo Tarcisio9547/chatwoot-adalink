@@ -38,10 +38,7 @@ class Whatsapp::IncomingMessageBaseService
     set_contact
     return unless @contact
 
-    ActiveRecord::Base.transaction do
-      set_conversation
-      create_messages
-    end
+    persist_conversation_and_messages
   end
 
   def process_statuses

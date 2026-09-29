@@ -64,6 +64,43 @@ module Whatsapp::IncomingMessageServiceHelpers
     @in_reply_to_external_id = message['context']&.[]('id')
   end
 
+  # Adalink: rede de segurança geral do referral (clique para o WhatsApp).
+  # O referral vem direto da Meta sem allowlist de campos/tamanhos/tipos, e
+  # já vimos casos concretos derrubarem o INSERT no Postgres (string > 1500
+  # chars, byte NUL). Um valor que ainda não vimos — ex.: um inteiro com
+  # mais de 131.072 dígitos, que estoura o limite do tipo numeric do
+  # Postgres (PG::NumericValueOutOfRange / ActiveRecord::RangeError) — teria
+  # o mesmo efeito: como a trava de duplicidade (Redis, 1 dia) já foi
+  # adquirida antes desta transação, a mensagem some para sempre (a 1ª
+  # tentativa falha e toda reentrega seguinte é descartada em silêncio pela
+  # trava). Por isso, em vez de tentar prever e tratar cada formato
+  # inesperado individualmente, capturamos aqui QUALQUER erro de gravação
+  # que aconteça enquanto há um referral em jogo e tentamos de novo, uma
+  # única vez, sem o referral — a mensagem é sempre salva.
+  #
+  # Importante: só entramos nesse caminho de retry quando havia referral na
+  # mensagem raiz. Um erro de banco sem relação com o referral (contato
+  # inválido, coluna obrigatória faltando etc.) sobe normalmente, como
+  # sempre subiu — não é mascarado.
+  def persist_conversation_and_messages
+    save_conversation_and_messages!
+  rescue ActiveRecord::StatementInvalid, ActiveRecord::RangeError => e
+    raise if @discard_referral || referral_params(messages_data.first).blank?
+
+    Rails.logger.error "Whatsapp: failed to persist message/conversation with referral, retrying without it: #{e.class}"
+    @discard_referral = true
+    save_conversation_and_messages!
+  ensure
+    @discard_referral = false
+  end
+
+  def save_conversation_and_messages!
+    ActiveRecord::Base.transaction do
+      set_conversation
+      create_messages
+    end
+  end
+
   # Adalink: clique para o WhatsApp — anúncio de origem (referral) da Meta.
   # Presente em qualquer caixa Channel::Whatsapp (provider whatsapp_cloud ou
   # 360dialog — ambos passam por este mesmo serviço base); o WhatsApp pessoal
@@ -109,8 +146,14 @@ module Whatsapp::IncomingMessageServiceHelpers
   end
 
   # Adalink: grava o referral (anúncio de origem) inteiro nos
-  # additional_attributes da mensagem que o carrega.
+  # additional_attributes da mensagem que o carrega. @discard_referral é
+  # ligado pela rede de segurança de persist_conversation_and_messages
+  # (incoming_message_base_service.rb) quando a 1ª tentativa de gravação
+  # falhou por causa do referral: nesse caso a 2ª tentativa grava a
+  # mensagem sem ele, em vez de tentar de novo com o mesmo valor problemático.
   def referral_additional_attrs(message)
+    return {} if @discard_referral
+
     referral = referral_params(message)
     referral.present? ? { referral: referral } : {}
   end

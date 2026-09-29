@@ -53,15 +53,22 @@ RSpec.describe 'Public Inbox Contact Conversation Messages API', type: :request 
       expect(conversation.messages.last.attachments.first.file_type).to eq('image')
     end
 
-    # Adalink: clique para o WhatsApp — este é o caminho REST real que o
-    # WhatsApp pessoal (Evolution) usa para entregar mensagens ao Chatwoot
-    # (Channel::Api, não Channel::Whatsapp — nunca passa por
-    # Whatsapp::IncomingMessageBaseService/referral_params). message_params
-    # no controller só permite :content e :echo_id (permitted_params), então
-    # um campo referral no payload é descartado pelo próprio params.permit
-    # antes mesmo de chegar em Message.new — additional_attributes fica
-    # vazio, sem nenhum tratamento especial de referral.
-    it 'ignores a referral field in the payload (that field belongs to WhatsApp Cloud API, not to Channel::Api)' do
+    # Adalink: clique para o WhatsApp — esta é a API pública de inbox
+    # (Public::Api::V1::Inboxes::MessagesController), usada por widgets/
+    # integrações externas com uma inbox Channel::Api. NÃO é o caminho que o
+    # WhatsApp pessoal (Evolution) usa: a Edge Function wa-pessoal-webhook
+    # entrega mensagens pela API DE CONTA
+    # (POST /api/v1/accounts/{account_id}/conversations/{conversation_id}/messages,
+    # Api::V1::Accounts::Conversations::MessagesController — coberto em
+    # spec/controllers/api/v1/accounts/conversations/messages_controller_spec.rb).
+    # Ainda assim vale como não-regressão desta API pública: message_params
+    # aqui só permite :content e :echo_id (permitted_params), então um campo
+    # referral no payload é descartado pelo próprio params.permit antes
+    # mesmo de chegar em Message.new — additional_attributes fica vazio, sem
+    # nenhum tratamento especial de referral (Channel::Whatsapp e seu
+    # Whatsapp::IncomingMessageBaseService/referral_params nunca entram
+    # neste fluxo).
+    it 'ignores a referral field in the payload on this public inbox API (unrelated to WhatsApp Cloud API or to the real WhatsApp pessoal path)' do
       post "/public/api/v1/inboxes/#{api_channel.identifier}/contacts/#{contact_inbox.source_id}/conversations/#{conversation.display_id}/messages",
            params: { content: 'hello', referral: { ctwa_clid: 'ShouldBeIgnoredByChannelApi' } }
 

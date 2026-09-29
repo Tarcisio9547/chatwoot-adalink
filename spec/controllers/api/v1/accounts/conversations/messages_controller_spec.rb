@@ -105,6 +105,43 @@ RSpec.describe 'Conversation Messages API', type: :request do
               .with(conversation, { account_id: conversation.account_id, inbox_id: conversation.inbox_id, message_type: :activity,
                                     content: 'System reopened the conversation due to a new incoming message.' }))
         end
+
+        # Adalink: este é o caminho REAL que o WhatsApp pessoal (Evolution,
+        # via Edge Function wa-pessoal-webhook -> chatwootFetch) usa para
+        # entregar mensagens ao Chatwoot: POST na API DE CONTA
+        # (/api/v1/accounts/{account_id}/conversations/{conversation_id}/messages,
+        # este controller), numa inbox Channel::Api, com message_type:
+        # 'incoming' e source_id — nunca a API pública de inbox
+        # (/public/api/v1/inboxes/...) nem Whatsapp::IncomingMessageBaseService.
+        # Messages::MessageBuilder#message_params monta uma lista fixa de
+        # campos (account_id, inbox_id, message_type, content, sender,
+        # content_type, content_attributes, items, in_reply_to, echo_id,
+        # source_id) e não lê params[:referral] em lugar nenhum — um
+        # referral intruso no corpo nunca vira additional_attributes.
+        it 'ignores a referral field in the payload (WhatsApp Cloud API referral does not apply to Channel::Api / WhatsApp pessoal)' do
+          params = {
+            content: 'Mensagem recebida via WhatsApp pessoal',
+            message_type: 'incoming',
+            source_id: 'EVOLUTION_MSG_ID_001',
+            referral: { ctwa_clid: 'ShouldNeverReachChannelApi', source_type: 'ad' }
+          }
+
+          post api_v1_account_conversation_messages_url(account_id: account.id, conversation_id: conversation.display_id),
+               params: params,
+               headers: agent.create_new_auth_token,
+               as: :json
+
+          expect(response).to have_http_status(:success)
+
+          created_message = conversation.messages.last
+          expect(created_message.source_id).to eq('EVOLUTION_MSG_ID_001')
+          expect(created_message.additional_attributes).to eq({})
+          expect(conversation.reload.additional_attributes).to eq({})
+
+          payload = created_message.webhook_data
+          expect(payload[:additional_attributes]).to eq({})
+          expect(payload[:conversation][:additional_attributes]).to eq({})
+        end
       end
     end
 

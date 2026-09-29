@@ -116,9 +116,11 @@ RSpec.describe Webhooks::WhatsappEventsJob do
   # phone_number) é descartado como canal ausente antes de chegar em
   # qualquer Whatsapp::IncomingMessage*. Isso NÃO substitui um teste do
   # caminho real do WhatsApp pessoal (Evolution): esse fluxo não passa por
-  # este job nem por este payload — ele entrega mensagens via
-  # Public::Api::V1::Inboxes::MessagesController#create (rota REST), que
-  # é testado em spec/controllers/public/api/v1/inbox/messages_controller_spec.rb.
+  # este job nem por este payload — a Edge Function wa-pessoal-webhook
+  # entrega mensagens pela API DE CONTA
+  # (POST /api/v1/accounts/{account_id}/conversations/{conversation_id}/messages,
+  # Api::V1::Accounts::Conversations::MessagesController#create), testada em
+  # spec/controllers/api/v1/accounts/conversations/messages_controller_spec.rb.
   context 'when the payload phone_number/metadata does not match any Channel::Whatsapp (e.g. an unrelated Channel::Api inbox exists)' do
     it 'does not call any Whatsapp::IncomingMessage service, nor create a message or conversation' do
       create(:channel_api)
