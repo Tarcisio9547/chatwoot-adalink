@@ -1,4 +1,4 @@
-name: Run Chatwoot CE spec
+name: Run Chatwoot spec
 permissions:
   contents: read
 on:
@@ -100,11 +100,8 @@ jobs:
       - name: Install pnpm dependencies
         run: pnpm i
 
-      - name: Strip enterprise code
-        run: |
-          rm -rf enterprise
-          rm -rf spec/enterprise
-
+      # O fork roda sempre como Enterprise (ChatwootApp.enterprise? = true),
+      # então os specs rodam com o código enterprise presente.
       - name: Create database
         run: bundle exec rake db:create
 
