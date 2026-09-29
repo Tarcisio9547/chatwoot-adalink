@@ -78,19 +78,29 @@ module Whatsapp::IncomingMessageServiceHelpers
     strip_nul_bytes(referral)
   end
 
-  # Adalink: o Postgres recusa INSERT em coluna text/jsonb cujo valor contenha
-  # o byte NUL (\u0000) — PG::UntranslatableCharacter. Sem isso, um referral
-  # com NUL em qualquer campo (mesmo aninhado, ex: welcome_message.text)
-  # estoura na gravação da mensagem: a transação volta e, com a trava de
-  # duplicidade já setada, o Sidekiq nunca reprocessa — a mensagem some em
-  # silêncio. Limpamos o NUL em vez de descartar o referral inteiro, para não
+  # Adalink: o Postgres recusa INSERT em coluna text/jsonb cujo valor (ou
+  # CHAVE — jsonb não distingue) contenha o byte NUL (\u0000):
+  # PG::UntranslatableCharacter. Isso derruba a transação de gravação da
+  # mensagem/conversa. A 1ª tentativa fica registrada como erro (job falho,
+  # visível nos logs); a trava de duplicidade (Redis, 1 dia) já foi
+  # adquirida antes da transação começar, então qualquer reentrega
+  # SEGUINTE do mesmo evento (pela Meta ou por um retry do Sidekiq) é
+  # descartada em silêncio pela trava, sem nova tentativa de gravação — a
+  # mensagem nunca chega a ser salva. Limpamos o NUL de chaves e valores,
+  # em todos os níveis, em vez de descartar o referral inteiro, para não
   # jogar fora dados válidos (ctwa_clid, source_id etc.) por causa de 1 campo.
+  #
+  # Colisão de chaves após a limpeza (ex.: "a\u0000" e "a" viram a mesma
+  # chave "a") é resolvida de forma determinística: como Ruby preserva a
+  # ordem de inserção do Hash, each_with_object processa as chaves na
+  # ordem em que aparecem no payload original, e a última a ser escrita
+  # vence — mesma regra que um Hash literal com chaves duplicadas.
   def strip_nul_bytes(value)
     case value
     when String
       value.delete("\u0000")
     when Hash
-      value.transform_values { |v| strip_nul_bytes(v) }
+      value.each_with_object({}) { |(k, v), h| h[k.to_s.delete("\u0000")] = strip_nul_bytes(v) }
     when Array
       value.map { |v| strip_nul_bytes(v) }
     else

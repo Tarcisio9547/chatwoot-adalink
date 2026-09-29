@@ -264,12 +264,14 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
       end
 
       # A conversa nasce JÁ com o referral (via conversation_params), sem um
-      # segundo save! só para isso depois de criada. Um UPDATE extra tocando
-      # additional_attributes dispararia after_update_commit
-      # (handle_resolved_status_change, notify_status_change, create_activity,
-      # CONVERSATION_UPDATED) para uma conversa que acabou de nascer — side
-      # effect indevido. (Message já gera 1 UPDATE legítimo e pré-existente em
-      # conversations, para last_activity_at/updated_at via
+      # segundo save! só para isso depois de criada. create! seguido de um
+      # save! na mesma transação não muda quais callbacks disparam (ambos
+      # ficam dentro do mesmo after_create_commit) — o motivo é outro: uma
+      # escrita redundante no banco, e um UPDATE que alteraria o que
+      # previous_changes mostra para quem observa a conversa nesse momento
+      # (ex.: um callback futuro de auditoria/atividade). Gravar uma vez só
+      # evita esse ruído. (Message já gera 1 UPDATE legítimo e pré-existente
+      # em conversations, para last_activity_at/updated_at via
       # set_conversation_activity — não é esse que estamos vigiando aqui.)
       it 'creates the conversation with a single persistence call already carrying the referral' do
         additional_attributes_updates = 0
@@ -374,12 +376,14 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         end
 
         # O Postgres recusa INSERT em texto/jsonb com o byte NUL (\u0000):
-        # PG::UntranslatableCharacter. Sem tratamento, isso derrubava
-        # @message.save! inteiro — e como a trava de duplicidade (Redis, 1
-        # dia) já tinha sido setada antes da transação falhar, o retry do
-        # Sidekiq via visibility timeout também batia na trava e descartava
-        # o evento em silêncio, perdendo a mensagem definitivamente.
-        it 'strips NUL bytes from referral fields (including nested ones) and still saves the message' do
+        # PG::UntranslatableCharacter. Sem tratamento, isso derrubava a
+        # transação de gravação. A 1ª tentativa falha e fica registrada como
+        # erro; como a trava de duplicidade (Redis, 1 dia) já tinha sido
+        # adquirida antes da transação começar, qualquer reentrega SEGUINTE
+        # do mesmo evento (pela Meta ou por um retry do Sidekiq) é
+        # descartada em silêncio pela trava, perdendo a mensagem
+        # definitivamente.
+        it 'strips NUL bytes from referral VALUES (including nested ones) and still saves the message' do
           referral_with_nul = referral_payload.merge(
             ctwa_clid: "Afe\u0000XYZ123abc",
             headline: "Compre\u0000 agora",
@@ -398,6 +402,38 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
 
           conversation = whatsapp_channel.inbox.conversations.last
           expect(conversation.additional_attributes['referral']['ctwa_clid']).to eq('AfeXYZ123abc')
+        end
+
+        # NUL na CHAVE também precisa ser limpo, não só no valor: uma chave
+        # como "ctwa\u0000clid" chegaria intacta no jsonb e derrubaria o
+        # INSERT do mesmo jeito que um valor com NUL.
+        it 'strips NUL bytes from a top-level referral KEY and still saves the message' do
+          referral_with_nul_key = referral_payload.dup
+          referral_with_nul_key["ctwa\u0000clid"] = 'ValueForNulKey'
+          nul_key_params = build_referral_message_params(referral: referral_with_nul_key)
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: nul_key_params).perform }
+            .not_to raise_error
+
+          message = whatsapp_channel.inbox.messages.last
+          stored_referral = message.additional_attributes['referral']
+          expect(stored_referral['ctwaclid']).to eq('ValueForNulKey')
+          expect(stored_referral.keys.any? { |k| k.include?("\u0000") }).to be false
+        end
+
+        it 'strips NUL bytes from a nested referral KEY (inside welcome_message) and still saves the message' do
+          referral_with_nested_nul_key = referral_payload.merge(
+            welcome_message: { "te\u0000xt" => 'Olá! Vi seu anúncio.' }
+          )
+          nested_nul_key_params = build_referral_message_params(referral: referral_with_nested_nul_key)
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: nested_nul_key_params).perform }
+            .not_to raise_error
+
+          message = whatsapp_channel.inbox.messages.last
+          stored_welcome_message = message.additional_attributes['referral']['welcome_message']
+          expect(stored_welcome_message['text']).to eq('Olá! Vi seu anúncio.')
+          expect(stored_welcome_message.keys.any? { |k| k.include?("\u0000") }).to be false
         end
 
         # Texto longo DENTRO do Hash (não o referral inteiro sendo uma
@@ -478,6 +514,84 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
       end
     end
 
+    # Adalink: referral também funciona para tipos de mensagem diferentes de
+    # texto: attach_files/attach_location rodam depois de create_message,
+    # então não interferem na leitura do referral (que vem sempre de
+    # messages_data.first).
+    context 'when message with an attachment or location has a referral' do
+      let(:image_referral_params) do
+        {
+          phone_number: whatsapp_channel.phone_number,
+          object: 'whatsapp_business_account',
+          entry: [{
+            changes: [{
+              value: {
+                contacts: [{ profile: { name: 'Ana Referral' }, wa_id: '2423423243' }],
+                messages: [{
+                  from: '2423423243',
+                  id: 'wamid.IMAGE_REFERRAL_MESSAGE',
+                  image: {
+                    id: 'b1c68f38-8734-4ad3-b4a1-ef0c10d683',
+                    mime_type: 'image/jpeg',
+                    sha256: '29ed500fa64eb55fc19dc4124acb300e5dcca0f822a301ae99944db',
+                    caption: 'Check out my product!'
+                  },
+                  timestamp: '1664799904', type: 'image',
+                  referral: { ctwa_clid: 'ImageReferralClid001', source_type: 'ad' }
+                }]
+              }
+            }]
+          }]
+        }.with_indifferent_access
+      end
+
+      let(:location_referral_params) do
+        {
+          phone_number: whatsapp_channel.phone_number,
+          object: 'whatsapp_business_account',
+          entry: [{
+            changes: [{
+              value: {
+                contacts: [{ profile: { name: 'Ana Referral' }, wa_id: '2423423244' }],
+                messages: [{
+                  from: '2423423244',
+                  id: 'wamid.LOCATION_REFERRAL_MESSAGE',
+                  location: { latitude: -23.5505, longitude: -46.6333, name: 'Loja', address: 'Av. Paulista, 1000' },
+                  timestamp: '1664799905', type: 'location',
+                  referral: { ctwa_clid: 'LocationReferralClid001', source_type: 'ad' }
+                }]
+              }
+            }]
+          }]
+        }.with_indifferent_access
+      end
+
+      it 'stores the referral on an image message and its attachment is still created' do
+        stub_media_url_request
+        stub_sample_png_request
+
+        described_class.new(inbox: whatsapp_channel.inbox, params: image_referral_params).perform
+
+        message = whatsapp_channel.inbox.messages.last
+        expect(message.additional_attributes['referral']['ctwa_clid']).to eq('ImageReferralClid001')
+        expect(message.attachments.present?).to be true
+
+        conversation = whatsapp_channel.inbox.conversations.last
+        expect(conversation.additional_attributes['referral']['ctwa_clid']).to eq('ImageReferralClid001')
+      end
+
+      it 'stores the referral on a location message and its attachment is still created' do
+        described_class.new(inbox: whatsapp_channel.inbox, params: location_referral_params).perform
+
+        message = whatsapp_channel.inbox.messages.last
+        expect(message.additional_attributes['referral']['ctwa_clid']).to eq('LocationReferralClid001')
+        expect(message.attachments.first.coordinates_lat).to eq(-23.5505)
+
+        conversation = whatsapp_channel.inbox.conversations.last
+        expect(conversation.additional_attributes['referral']['ctwa_clid']).to eq('LocationReferralClid001')
+      end
+    end
+
     # Adalink: mensagem sem referral não pode ganhar a chave à toa (regressão)
     context 'when message has no referral' do
       it 'leaves additional_attributes empty on message and conversation' do
@@ -488,6 +602,44 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         message = whatsapp_channel.inbox.messages.last
         conversation = whatsapp_channel.inbox.conversations.last
         expect(message.additional_attributes).to eq({})
+        expect(conversation.additional_attributes).to eq({})
+      end
+    end
+
+    # Adalink: mensagens de eco (WhatsApp Business app, ver
+    # Webhooks::WhatsappEventsJob#handle_message_echo) usam o campo
+    # message_echoes em vez de messages, e nunca trazem referral. Confirma
+    # que additional_attributes fica vazio nesse fluxo também.
+    context 'when message is an outgoing echo (message_echoes) without referral' do
+      let(:echo_params) do
+        {
+          phone_number: whatsapp_channel.phone_number,
+          object: 'whatsapp_business_account',
+          entry: [{
+            changes: [{
+              field: 'smb_message_echoes',
+              value: {
+                message_echoes: [{
+                  from: whatsapp_channel.phone_number.delete('+'),
+                  to: '2423423245',
+                  id: 'wamid.ECHO_MESSAGE',
+                  text: { body: 'Resposta enviada pelo WhatsApp Business app' },
+                  timestamp: '1664799906', type: 'text'
+                }]
+              }
+            }]
+          }]
+        }.with_indifferent_access
+      end
+
+      it 'leaves additional_attributes empty on the echoed message and on the newly created conversation' do
+        described_class.new(inbox: whatsapp_channel.inbox, params: echo_params, outgoing_echo: true).perform
+
+        message = whatsapp_channel.inbox.messages.last
+        expect(message.additional_attributes).to eq({})
+        expect(message.message_type).to eq('outgoing')
+
+        conversation = whatsapp_channel.inbox.conversations.last
         expect(conversation.additional_attributes).to eq({})
       end
     end

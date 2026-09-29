@@ -99,6 +99,30 @@ describe Whatsapp::IncomingMessageService do
         expect(message.additional_attributes).to eq({})
         expect(conversation.additional_attributes).to eq({})
       end
+
+      # Adalink: 360dialog também recebe referral (é a mesma lógica do
+      # IncomingMessageBaseService, só o provider muda), e o formato do
+      # payload aqui não é 'entry/changes/value' (isso é só do Cloud API) —
+      # 360dialog manda contacts/messages direto na raiz.
+      it 'stores the referral object on the message and on the newly created conversation' do
+        referral_params = {
+          'contacts' => [{ 'profile' => { 'name' => 'Sojan Jose' }, 'wa_id' => wa_id }],
+          'messages' => [{
+            'from' => wa_id, 'id' => 'wamid.DIALOG360_REFERRAL_MESSAGE',
+            'text' => { 'body' => 'Olá! Vi seu anúncio.' },
+            'timestamp' => '1633034394', 'type' => 'text',
+            'referral' => { 'ctwa_clid' => 'Dialog360Clid001', 'source_type' => 'ad', 'headline' => 'Promo 360dialog' }
+          }]
+        }.with_indifferent_access
+
+        described_class.new(inbox: whatsapp_channel.inbox, params: referral_params).perform
+
+        message = whatsapp_channel.inbox.messages.last
+        expect(message.additional_attributes['referral']['ctwa_clid']).to eq('Dialog360Clid001')
+
+        conversation = whatsapp_channel.inbox.conversations.last
+        expect(conversation.additional_attributes['referral']['ctwa_clid']).to eq('Dialog360Clid001')
+      end
     end
 
     context 'when unsupported message types' do

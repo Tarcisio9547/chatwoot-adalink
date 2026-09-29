@@ -52,6 +52,26 @@ RSpec.describe 'Public Inbox Contact Conversation Messages API', type: :request 
       expect(conversation.messages.last.attachments.first.file.present?).to be(true)
       expect(conversation.messages.last.attachments.first.file_type).to eq('image')
     end
+
+    # Adalink: clique para o WhatsApp — este é o caminho REST real que o
+    # WhatsApp pessoal (Evolution) usa para entregar mensagens ao Chatwoot
+    # (Channel::Api, não Channel::Whatsapp — nunca passa por
+    # Whatsapp::IncomingMessageBaseService/referral_params). message_params
+    # no controller só permite :content e :echo_id (permitted_params), então
+    # um campo referral no payload é descartado pelo próprio params.permit
+    # antes mesmo de chegar em Message.new — additional_attributes fica
+    # vazio, sem nenhum tratamento especial de referral.
+    it 'ignores a referral field in the payload (that field belongs to WhatsApp Cloud API, not to Channel::Api)' do
+      post "/public/api/v1/inboxes/#{api_channel.identifier}/contacts/#{contact_inbox.source_id}/conversations/#{conversation.display_id}/messages",
+           params: { content: 'hello', referral: { ctwa_clid: 'ShouldBeIgnoredByChannelApi' } }
+
+      expect(response).to have_http_status(:success)
+      data = response.parsed_body
+      expect(data['content']).to eq('hello')
+
+      created_message = conversation.messages.last
+      expect(created_message.additional_attributes).to eq({})
+    end
   end
 
   describe 'PATCH /public/api/v1/inboxes/{identifier}/contact/{source_id}/conversations/{conversation_id}/messages/{id}' do

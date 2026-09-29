@@ -109,16 +109,20 @@ RSpec.describe Webhooks::WhatsappEventsJob do
     end
   end
 
-  # Adalink: clique para o WhatsApp — não-regressão para o WhatsApp pessoal
-  # (Evolution), que é uma caixa Channel::Api, não Channel::Whatsapp. Esse
-  # job só resolve o canal via Channel::Whatsapp.find_by (phone_number ou
-  # metadata.phone_number_id); um payload que "pertenceria" a uma caixa
-  # Channel::Api nunca encontra canal aqui, então o evento é descartado como
-  # canal ausente/inativo antes de chegar em qualquer Whatsapp::IncomingMessage*.
-  context 'when the event belongs to a Channel::Api inbox (WhatsApp pessoal via Evolution)' do
+  # Adalink: clique para o WhatsApp — este job só resolve o canal via
+  # Channel::Whatsapp.find_by (phone_number ou metadata.phone_number_id).
+  # Um payload no formato do Cloud API cujo phone_number/metadata não bate
+  # com NENHUM Channel::Whatsapp (nem sequer um Channel::Api, que não tem
+  # phone_number) é descartado como canal ausente antes de chegar em
+  # qualquer Whatsapp::IncomingMessage*. Isso NÃO substitui um teste do
+  # caminho real do WhatsApp pessoal (Evolution): esse fluxo não passa por
+  # este job nem por este payload — ele entrega mensagens via
+  # Public::Api::V1::Inboxes::MessagesController#create (rota REST), que
+  # é testado em spec/controllers/public/api/v1/inbox/messages_controller_spec.rb.
+  context 'when the payload phone_number/metadata does not match any Channel::Whatsapp (e.g. an unrelated Channel::Api inbox exists)' do
     it 'does not call any Whatsapp::IncomingMessage service, nor create a message or conversation' do
-      api_channel = create(:channel_api)
-      referral_payload = {
+      create(:channel_api)
+      unmatched_params = {
         phone_number: '+5511900000000',
         object: 'whatsapp_business_account',
         entry: [{
@@ -143,9 +147,8 @@ RSpec.describe Webhooks::WhatsappEventsJob do
 
       expect(Whatsapp::IncomingMessageWhatsappCloudService).not_to receive(:new)
       expect(Whatsapp::IncomingMessageService).not_to receive(:new)
-      expect { job.perform_now(referral_payload) }.not_to change(Message, :count)
-      expect { job.perform_now(referral_payload) }.not_to change(Conversation, :count)
-      expect(api_channel.inbox.messages.count).to eq(0)
+      expect { job.perform_now(unmatched_params) }.not_to change(Message, :count)
+      expect { job.perform_now(unmatched_params) }.not_to change(Conversation, :count)
     end
   end
 
