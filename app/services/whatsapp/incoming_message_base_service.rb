@@ -188,7 +188,10 @@ class Whatsapp::IncomingMessageBaseService
       sender: outgoing_echo ? nil : @contact,
       source_id: (source_id || message[:id]).to_s,
       content_attributes: content_attrs,
-      additional_attributes: referral_additional_attrs(message)
+      # Adalink: referral (clique para o WhatsApp) só existe na mensagem raiz
+      # do payload (messages_data.first) — nunca em um item de contacts. Ler
+      # sempre da raiz evita perder o referral em mensagens do tipo 'contacts'.
+      additional_attributes: referral_additional_attrs(messages_data.first)
     )
   end
 

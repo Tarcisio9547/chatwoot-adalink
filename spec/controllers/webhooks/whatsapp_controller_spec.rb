@@ -58,5 +58,70 @@ RSpec.describe 'Webhooks::WhatsappController', type: :request do
         expect(response).to have_http_status(:success)
       end
     end
+
+    # Adalink: clique para o WhatsApp — caminho real ponta a ponta. O payload
+    # chega como ActionController::Parameters, vira Hash via to_unsafe_hash,
+    # é serializado/deserializado pelo ActiveJob (Webhooks::WhatsappEventsJob),
+    # roda o serviço de ingestão de verdade e dispara o listener de webhook —
+    # nada disso é mockado, para provar que o referral sobrevive a essa
+    # travessia inteira e aparece no payload real do message_created.
+    context 'when the payload has a referral (click-to-whatsapp ad), end to end via the real job' do
+      let(:cloud_channel) do
+        create(:channel_whatsapp, provider: 'whatsapp_cloud', sync_templates: false, validate_provider_config: false)
+      end
+
+      it 'persists the referral and delivers it in the message_created webhook payload' do
+        webhook = create(:webhook, inbox: cloud_channel.inbox, account: cloud_channel.account)
+
+        payload = {
+          object: 'whatsapp_business_account',
+          entry: [{
+            changes: [{
+              value: {
+                metadata: {
+                  phone_number_id: cloud_channel.provider_config['phone_number_id'],
+                  display_phone_number: cloud_channel.phone_number.delete('+')
+                },
+                contacts: [{ profile: { name: 'Cliente Real' }, wa_id: '5511977776666' }],
+                messages: [{
+                  from: '5511977776666',
+                  id: 'wamid.END_TO_END_MESSAGE',
+                  timestamp: '1770500000',
+                  type: 'text',
+                  text: { body: 'Olá! Vi seu anúncio de verdade.' },
+                  referral: { ctwa_clid: 'EndToEndClid001', source_type: 'ad', headline: 'Promo real' }
+                }]
+              }
+            }]
+          }]
+        }
+
+        delivered_payloads = []
+        allow(WebhookJob).to receive(:perform_later) do |*args|
+          delivered_payloads << args
+        end
+
+        # message_created é despachado via AsyncDispatcher -> EventDispatcherJob
+        # (um segundo job, distinto do Webhooks::WhatsappEventsJob), que é
+        # quem de fato aciona o WebhookListener. Sem incluir esse job aqui,
+        # o listener nunca roda e WebhookJob.perform_later não é chamado.
+        perform_enqueued_jobs(only: [Webhooks::WhatsappEventsJob, EventDispatcherJob]) do
+          post "/webhooks/whatsapp/#{cloud_channel.phone_number}", params: payload, as: :json
+        end
+
+        expect(response).to have_http_status(:success)
+
+        message = cloud_channel.inbox.messages.last
+        expect(message.additional_attributes['referral']['ctwa_clid']).to eq('EndToEndClid001')
+        expect(message.conversation.additional_attributes['referral']['ctwa_clid']).to eq('EndToEndClid001')
+
+        message_created_call = delivered_payloads.find { |args| args[2] == :account_webhook && args[1][:event] == 'message_created' }
+        expect(message_created_call).to be_present
+        delivered_url, delivered_payload, = message_created_call
+        expect(delivered_url).to eq(webhook.url)
+        expect(delivered_payload[:additional_attributes]['referral']['ctwa_clid']).to eq('EndToEndClid001')
+        expect(delivered_payload[:conversation][:additional_attributes]['referral']['ctwa_clid']).to eq('EndToEndClid001')
+      end
+    end
   end
 end

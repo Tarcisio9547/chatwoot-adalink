@@ -73,7 +73,29 @@ module Whatsapp::IncomingMessageServiceHelpers
   # https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples#referral-messages
   def referral_params(message)
     referral = message['referral']
-    referral.is_a?(Hash) ? referral : nil
+    return nil unless referral.is_a?(Hash)
+
+    strip_nul_bytes(referral)
+  end
+
+  # Adalink: o Postgres recusa INSERT em coluna text/jsonb cujo valor contenha
+  # o byte NUL (\u0000) — PG::UntranslatableCharacter. Sem isso, um referral
+  # com NUL em qualquer campo (mesmo aninhado, ex: welcome_message.text)
+  # estoura na gravação da mensagem: a transação volta e, com a trava de
+  # duplicidade já setada, o Sidekiq nunca reprocessa — a mensagem some em
+  # silêncio. Limpamos o NUL em vez de descartar o referral inteiro, para não
+  # jogar fora dados válidos (ctwa_clid, source_id etc.) por causa de 1 campo.
+  def strip_nul_bytes(value)
+    case value
+    when String
+      value.delete("\u0000")
+    when Hash
+      value.transform_values { |v| strip_nul_bytes(v) }
+    when Array
+      value.map { |v| strip_nul_bytes(v) }
+    else
+      value
+    end
   end
 
   # Adalink: grava o referral (anúncio de origem) inteiro nos

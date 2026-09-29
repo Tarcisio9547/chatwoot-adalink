@@ -109,6 +109,46 @@ RSpec.describe Webhooks::WhatsappEventsJob do
     end
   end
 
+  # Adalink: clique para o WhatsApp — não-regressão para o WhatsApp pessoal
+  # (Evolution), que é uma caixa Channel::Api, não Channel::Whatsapp. Esse
+  # job só resolve o canal via Channel::Whatsapp.find_by (phone_number ou
+  # metadata.phone_number_id); um payload que "pertenceria" a uma caixa
+  # Channel::Api nunca encontra canal aqui, então o evento é descartado como
+  # canal ausente/inativo antes de chegar em qualquer Whatsapp::IncomingMessage*.
+  context 'when the event belongs to a Channel::Api inbox (WhatsApp pessoal via Evolution)' do
+    it 'does not call any Whatsapp::IncomingMessage service, nor create a message or conversation' do
+      api_channel = create(:channel_api)
+      referral_payload = {
+        phone_number: '+5511900000000',
+        object: 'whatsapp_business_account',
+        entry: [{
+          changes: [{
+            value: {
+              contacts: [{ profile: { name: 'Cliente Evolution' }, wa_id: '5511900000000' }],
+              messages: [{
+                from: '5511900000000',
+                id: 'wamid.API_CHANNEL_MESSAGE',
+                timestamp: '1770500000',
+                type: 'text',
+                text: { body: 'Mensagem que nunca deveria passar por aqui' },
+                referral: { ctwa_clid: 'ShouldNeverBeProcessed' }
+              }]
+            }
+          }]
+        }]
+      }.with_indifferent_access
+
+      allow(Whatsapp::IncomingMessageWhatsappCloudService).to receive(:new)
+      allow(Whatsapp::IncomingMessageService).to receive(:new)
+
+      expect(Whatsapp::IncomingMessageWhatsappCloudService).not_to receive(:new)
+      expect(Whatsapp::IncomingMessageService).not_to receive(:new)
+      expect { job.perform_now(referral_payload) }.not_to change(Message, :count)
+      expect { job.perform_now(referral_payload) }.not_to change(Conversation, :count)
+      expect(api_channel.inbox.messages.count).to eq(0)
+    end
+  end
+
   context 'when whatsapp business params' do
     it 'enqueue Whatsapp::IncomingMessageWhatsappCloudService based on the number in payload' do
       other_channel = create(:channel_whatsapp, phone_number: '+1987654', provider: 'whatsapp_cloud', sync_templates: false,

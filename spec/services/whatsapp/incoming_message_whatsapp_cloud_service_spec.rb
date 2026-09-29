@@ -263,13 +263,13 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         expect(payload[:conversation][:additional_attributes]['referral']['ctwa_clid']).to eq('AfeXYZ123abc')
       end
 
-      # Adalink: item 3 da revisão — a conversa deve nascer JÁ com o referral
-      # (via conversation_params), sem um segundo save! só para isso depois
-      # de criada. Um UPDATE extra tocando additional_attributes dispararia
-      # after_update_commit (handle_resolved_status_change, notify_status_change,
-      # create_activity, CONVERSATION_UPDATED) para uma conversa que acabou de
-      # nascer — side effect indevido. (Message já gera 1 UPDATE legítimo e
-      # pré-existente em conversations, para last_activity_at/updated_at via
+      # A conversa nasce JÁ com o referral (via conversation_params), sem um
+      # segundo save! só para isso depois de criada. Um UPDATE extra tocando
+      # additional_attributes dispararia after_update_commit
+      # (handle_resolved_status_change, notify_status_change, create_activity,
+      # CONVERSATION_UPDATED) para uma conversa que acabou de nascer — side
+      # effect indevido. (Message já gera 1 UPDATE legítimo e pré-existente em
+      # conversations, para last_activity_at/updated_at via
       # set_conversation_activity — não é esse que estamos vigiando aqui.)
       it 'creates the conversation with a single persistence call already carrying the referral' do
         additional_attributes_updates = 0
@@ -312,9 +312,9 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         expect(conversation.reload.additional_attributes['referral']['ctwa_clid']).to eq('AfeXYZ123abc')
       end
 
-      # Adalink: item 3 da revisão — um segundo clique (outro anúncio) numa
-      # conversa JÁ existente grava o novo referral só na mensagem; o
-      # referral da conversa (o do anúncio que a criou) não é sobrescrito.
+      # Um segundo clique (outro anúncio) numa conversa JÁ existente grava o
+      # novo referral só na mensagem; o referral da conversa (o do anúncio
+      # que a criou) não é sobrescrito.
       it 'stores a different referral only on the message for a second click on an existing conversation' do
         described_class.new(inbox: whatsapp_channel.inbox, params: referral_params).perform
         conversation = whatsapp_channel.inbox.conversations.last
@@ -333,10 +333,9 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         expect(conversation.reload.additional_attributes['referral']).to eq(original_conversation_referral)
       end
 
-      # Adalink: item 2 da revisão — referral malformado (não-Hash) nunca pode
-      # derrubar a gravação da mensagem. Antes, uma string >1500 chars fazia
-      # @conversation.save! estourar JsonbAttributesLengthValidator e a
-      # mensagem se perder.
+      # Referral malformado (não-Hash) nunca pode derrubar a gravação da
+      # mensagem. Uma string >1500 chars fazia @conversation.save! estourar
+      # JsonbAttributesLengthValidator e a mensagem se perder.
       context 'when referral is malformed' do
         it 'ignores an overly long string referral and still saves the message' do
           long_string_params = build_referral_message_params(referral: 'x' * 2000)
@@ -372,6 +371,109 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
           message = whatsapp_channel.inbox.messages.last
           expect(message.content).to eq('Olá! Vi seu anúncio.')
           expect(message.additional_attributes).to eq({})
+        end
+
+        # O Postgres recusa INSERT em texto/jsonb com o byte NUL (\u0000):
+        # PG::UntranslatableCharacter. Sem tratamento, isso derrubava
+        # @message.save! inteiro — e como a trava de duplicidade (Redis, 1
+        # dia) já tinha sido setada antes da transação falhar, o retry do
+        # Sidekiq via visibility timeout também batia na trava e descartava
+        # o evento em silêncio, perdendo a mensagem definitivamente.
+        it 'strips NUL bytes from referral fields (including nested ones) and still saves the message' do
+          referral_with_nul = referral_payload.merge(
+            ctwa_clid: "Afe\u0000XYZ123abc",
+            headline: "Compre\u0000 agora",
+            welcome_message: { text: "Olá!\u0000 Vi seu anúncio." }
+          )
+          nul_params = build_referral_message_params(referral: referral_with_nul)
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: nul_params).perform }
+            .not_to raise_error
+
+          message = whatsapp_channel.inbox.messages.last
+          stored_referral = message.additional_attributes['referral']
+          expect(stored_referral['ctwa_clid']).to eq('AfeXYZ123abc')
+          expect(stored_referral['headline']).to eq('Compre agora')
+          expect(stored_referral['welcome_message']['text']).to eq('Olá! Vi seu anúncio.')
+
+          conversation = whatsapp_channel.inbox.conversations.last
+          expect(conversation.additional_attributes['referral']['ctwa_clid']).to eq('AfeXYZ123abc')
+        end
+
+        # Texto longo DENTRO do Hash (não o referral inteiro sendo uma
+        # string) precisa ser gravado sem problema — o limite de 1500 chars
+        # do JsonbAttributesLengthValidator vale para valores de nível 1 de
+        # additional_attributes (o campo 'referral' vira um Hash, não uma
+        # string), então um body de 5000 chars ou muitas chaves não deveria
+        # nem tocar essa validação.
+        it 'saves the message with a long text field and many keys nested inside the referral hash' do
+          long_body = 'a' * 5000
+          many_keys_referral = referral_payload.merge(body: long_body)
+          (1..50).each { |n| many_keys_referral["extra_field_#{n}"] = "valor #{n}" }
+          long_referral_params = build_referral_message_params(referral: many_keys_referral)
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: long_referral_params).perform }
+            .not_to raise_error
+
+          message = whatsapp_channel.inbox.messages.last
+          stored_referral = message.additional_attributes['referral']
+          expect(stored_referral['body']).to eq(long_body)
+          expect(stored_referral['extra_field_50']).to eq('valor 50')
+          expect(stored_referral.keys.size).to eq(many_keys_referral.keys.size)
+        end
+      end
+
+      # A mensagem-mãe do tipo 'contacts' (compartilhamento de contato) não
+      # tem 'referral' — o referral vem sempre do objeto messages_data.first
+      # (a mensagem raiz do payload). create_message é chamado uma vez por
+      # contato compartilhado, então sem ler da raiz o referral se perdia.
+      context 'when message type is contacts' do
+        let(:contacts_referral_params) do
+          {
+            phone_number: whatsapp_channel.phone_number,
+            object: 'whatsapp_business_account',
+            entry: [{
+              changes: [{
+                value: {
+                  contacts: [{ profile: { name: 'Ana Referral' }, wa_id: '5511988887777' }],
+                  messages: [{
+                    from: '5511988887777',
+                    id: 'wamid.CONTACTS_TYPE_MESSAGE',
+                    timestamp: '1770500000',
+                    type: 'contacts',
+                    referral: referral_payload,
+                    contacts: [{
+                      name: { first_name: 'Fulano', last_name: 'Silva' },
+                      phones: [{ phone: '+5511911112222' }]
+                    }]
+                  }]
+                }
+              }]
+            }]
+          }.with_indifferent_access
+        end
+
+        it 'stores the referral on the message and on the newly created conversation' do
+          described_class.new(inbox: whatsapp_channel.inbox, params: contacts_referral_params).perform
+
+          message = whatsapp_channel.inbox.messages.last
+          expect(message.additional_attributes['referral']['ctwa_clid']).to eq('AfeXYZ123abc')
+
+          conversation = whatsapp_channel.inbox.conversations.last
+          expect(conversation.additional_attributes['referral']['ctwa_clid']).to eq('AfeXYZ123abc')
+        end
+
+        it 'stores the referral on the message when the conversation already exists' do
+          contact_inbox = create(:contact_inbox, inbox: whatsapp_channel.inbox, source_id: '5511988887777')
+          existing_conversation = create(:conversation, inbox: whatsapp_channel.inbox, contact_inbox: contact_inbox)
+
+          described_class.new(inbox: whatsapp_channel.inbox, params: contacts_referral_params).perform
+
+          expect(whatsapp_channel.inbox.conversations.count).to eq(1)
+          message = whatsapp_channel.inbox.messages.last
+          expect(message.additional_attributes['referral']['ctwa_clid']).to eq('AfeXYZ123abc')
+          # a conversa já existia antes do clique, então ela não é reescrita com o referral
+          expect(existing_conversation.reload.additional_attributes['referral']).to be_nil
         end
       end
     end
