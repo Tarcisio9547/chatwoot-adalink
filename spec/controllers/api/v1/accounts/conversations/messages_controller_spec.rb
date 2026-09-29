@@ -106,17 +106,17 @@ RSpec.describe 'Conversation Messages API', type: :request do
                                     content: 'System reopened the conversation due to a new incoming message.' }))
         end
 
-        # Adalink: este é o caminho REAL que o WhatsApp pessoal (Evolution,
-        # via Edge Function wa-pessoal-webhook -> chatwootFetch) usa para
-        # entregar mensagens ao Chatwoot: POST na API DE CONTA
+        # Adalink: uma integração externa (ex.: WhatsApp pessoal/terceiros)
+        # pode entregar mensagens ao Chatwoot via POST na API DE CONTA
         # (/api/v1/accounts/{account_id}/conversations/{conversation_id}/messages,
         # este controller), numa inbox Channel::Api, com message_type:
-        # 'incoming' e source_id — nunca a API pública de inbox
-        # (/public/api/v1/inboxes/...) nem Whatsapp::IncomingMessageBaseService.
-        # additional_attributes só é setado por campaign_id/template_params
-        # (via merge em Messages::MessageBuilder#message_params) — um
-        # referral intruso no corpo nunca chega a additional_attributes.
-        it 'ignores a referral field in the payload (WhatsApp Cloud API referral does not apply to Channel::Api / WhatsApp pessoal)' do
+        # 'incoming' e source_id — um caminho diferente da API pública de
+        # inbox (/public/api/v1/inboxes/...) e que nunca passa por
+        # Whatsapp::IncomingMessageBaseService. additional_attributes só é
+        # setado por campaign_id/template_params (via merge em
+        # Messages::MessageBuilder#message_params) — um referral intruso
+        # no corpo nunca chega a additional_attributes.
+        it 'ignores a referral field in the payload (WhatsApp Cloud API referral does not apply to Channel::Api integrations)' do
           params = {
             content: 'Mensagem recebida via WhatsApp pessoal',
             message_type: 'incoming',

@@ -110,18 +110,17 @@ RSpec.describe Webhooks::WhatsappEventsJob do
   end
 
   # Adalink: clique para o WhatsApp — este job só resolve o canal via
-  # Channel::Whatsapp.find_by (phone_number ou metadata.phone_number_id).
-  # Um payload no formato do Cloud API cujo phone_number/metadata não bate
-  # com NENHUM Channel::Whatsapp (nem sequer um Channel::Api, que não tem
-  # phone_number) é descartado como canal ausente antes de chegar em
-  # qualquer Whatsapp::IncomingMessage*. Isso NÃO substitui um teste do
-  # caminho real do WhatsApp pessoal (Evolution): esse fluxo não passa por
-  # este job nem por este payload — a Edge Function wa-pessoal-webhook
-  # entrega mensagens pela API DE CONTA
-  # (POST /api/v1/accounts/{account_id}/conversations/{conversation_id}/messages,
-  # Api::V1::Accounts::Conversations::MessagesController#create), testada em
-  # spec/controllers/api/v1/accounts/conversations/messages_controller_spec.rb.
-  context 'when the payload phone_number/metadata does not match any Channel::Whatsapp (e.g. an unrelated Channel::Api inbox exists)' do
+  # Channel::Whatsapp.find_by (phone_number ou metadata.phone_number_id),
+  # então um payload no formato do Cloud API cujo phone_number/metadata não
+  # bate com NENHUM Channel::Whatsapp cadastrado é descartado como canal
+  # ausente antes de chegar em qualquer Whatsapp::IncomingMessage*ervice —
+  # inclusive um referral no payload some junto, sem erro. Este teste
+  # confirma só essa resolução de canal (a existência de um Channel::Api
+  # não relacionado no banco não muda o resultado, é só ruído de dados).
+  # NÃO cobre uma caixa Channel::Api (API de conta, ver
+  # spec/controllers/api/v1/accounts/conversations/messages_controller_spec.rb),
+  # que nunca passa por este job.
+  context 'when the payload phone_number/metadata does not match any Channel::Whatsapp' do
     it 'does not call any Whatsapp::IncomingMessage service, nor create a message or conversation' do
       create(:channel_api)
       unmatched_params = {

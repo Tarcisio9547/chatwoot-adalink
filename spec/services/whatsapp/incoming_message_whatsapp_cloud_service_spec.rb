@@ -486,16 +486,30 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         end
 
         # Um erro TRANSITÓRIO de banco (timeout, deadlock, conexão caída) não
-        # é erro de dado: PG::QueryCanceled não é PG::DataException. Refazer
-        # a gravação sem o referral nesse caso apagaria a origem do anúncio
-        # em silêncio por um problema que nada tem a ver com o referral — a
-        # exceção precisa subir intacta, e nada é gravado (nem com, nem sem
-        # o referral).
+        # é erro de dado: PG::QueryCanceled < PG::Error, mas não
+        # < PG::DataException. Refazer a gravação sem o referral nesse caso
+        # apagaria a origem do anúncio em silêncio por um problema que nada
+        # tem a ver com o referral — a exceção precisa subir intacta, e nada
+        # é gravado (nem com, nem sem o referral).
+        #
+        # O stub levanta ActiveRecord::QueryCanceled de DENTRO de um rescue
+        # PG::QueryCanceled real (não um raise solto) para que e.cause fique
+        # preenchido com uma PG::QueryCanceled de verdade — do jeito que o
+        # Postgres/ActiveRecord fazem organicamente. Com um raise solto,
+        # e.cause ficaria nil, e o teste passaria mesmo com um mutante que
+        # trocasse a checagem PG::DataException por PG::Error (mais
+        # permissiva, "refaz para qualquer erro do Postgres, transitório
+        # incluso") — nil.is_a?(PG::Error) e nil.is_a?(PG::DataException)
+        # são igualmente false, então esse mutante não seria pego.
         it 'raises and saves nothing when a transient database error happens, even with a referral present' do
           call_count = 0
           allow(Conversation).to receive(:create!) do
             call_count += 1
-            raise ActiveRecord::QueryCanceled, 'simulated statement timeout'
+            begin
+              raise PG::QueryCanceled, 'simulated statement timeout'
+            rescue PG::QueryCanceled
+              raise ActiveRecord::QueryCanceled, 'simulated statement timeout'
+            end
           end
 
           expect { described_class.new(inbox: whatsapp_channel.inbox, params: referral_params).perform }
@@ -519,6 +533,31 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
 
           expect { described_class.new(inbox: whatsapp_channel.inbox, params: no_referral_params).perform }
             .to raise_error(ActiveRecord::StatementInvalid, /simulated unrelated database failure/)
+
+          expect(call_count).to eq(1)
+        end
+
+        # Guard específico de referral.blank?: mesmo com um erro de DADO real
+        # do Postgres (e.cause.is_a?(PG::DataException) true, diferente do
+        # teste acima que já sai pela checagem de e.cause), sem referral na
+        # mensagem a rede de segurança não tem o que descartar — sobe direto,
+        # sem nova tentativa. Isso mata o mutante que remove
+        # referral.blank? do guard (que faria o código tentar de novo à
+        # toa, sem referral para descartar, em vez de deixar subir).
+        it 'raises once, without retrying, when a PG::DataException happens and there is no referral' do
+          call_count = 0
+          allow(Conversation).to receive(:create!) do
+            call_count += 1
+            begin
+              raise PG::UntranslatableCharacter, 'simulated NUL byte error'
+            rescue PG::UntranslatableCharacter
+              raise ActiveRecord::StatementInvalid, 'simulated NUL byte error'
+            end
+          end
+          no_referral_params = build_referral_message_params(include_referral: false)
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: no_referral_params).perform }
+            .to raise_error(ActiveRecord::StatementInvalid, /simulated NUL byte error/)
 
           expect(call_count).to eq(1)
         end

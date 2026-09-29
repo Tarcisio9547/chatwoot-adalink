@@ -3,6 +3,7 @@
 # https://developers.facebook.com/docs/whatsapp/api/media/
 class Whatsapp::IncomingMessageBaseService
   include ::Whatsapp::IncomingMessageServiceHelpers
+  include ::Whatsapp::IncomingMessageReferralHelpers
 
   pattr_initialize [:inbox!, :params!, :outgoing_echo]
 
