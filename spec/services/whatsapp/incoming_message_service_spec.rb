@@ -87,15 +87,17 @@ describe Whatsapp::IncomingMessageService do
         expect(whatsapp_channel.inbox.messages.count).to eq(1)
       end
 
-      # Adalink: non-cloud providers (ex: WhatsApp pessoal) never send referral —
-      # behaviour must stay identical, no stray key added
-      it 'does not add a referral key to message or conversation additional_attributes' do
+      # Adalink: este serviço também atende caixas Channel::Whatsapp no provider
+      # 360dialog (o WhatsApp pessoal via Evolution é uma caixa Channel::Api e
+      # nunca passa por este código — ver Webhooks::WhatsappEventsJob). Quando o
+      # payload não traz referral, additional_attributes continua vazio.
+      it 'leaves additional_attributes empty on message and conversation when payload has no referral' do
         described_class.new(inbox: whatsapp_channel.inbox, params: params).perform
 
         message = whatsapp_channel.inbox.messages.last
         conversation = whatsapp_channel.inbox.conversations.last
-        expect(message.additional_attributes.key?('referral')).to be false
-        expect(conversation.additional_attributes.key?('referral')).to be false
+        expect(message.additional_attributes).to eq({})
+        expect(conversation.additional_attributes).to eq({})
       end
     end
 

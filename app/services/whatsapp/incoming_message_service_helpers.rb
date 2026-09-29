@@ -8,7 +8,8 @@ module Whatsapp::IncomingMessageServiceHelpers
       account_id: @inbox.account_id,
       inbox_id: @inbox.id,
       contact_id: @contact.id,
-      contact_inbox_id: @contact_inbox.id
+      contact_inbox_id: @contact_inbox.id,
+      additional_attributes: new_conversation_additional_attrs
     }
   end
 
@@ -64,33 +65,31 @@ module Whatsapp::IncomingMessageServiceHelpers
   end
 
   # Adalink: clique para o WhatsApp — anúncio de origem (referral) da Meta.
-  # Só o provider whatsapp_cloud manda esse objeto; para os demais providers
-  # (ex: 360dialog/WhatsApp pessoal) o campo simplesmente não existe no payload.
+  # Presente em qualquer caixa Channel::Whatsapp (provider whatsapp_cloud ou
+  # 360dialog — ambos passam por este mesmo serviço base); o WhatsApp pessoal
+  # (Evolution) é uma caixa Channel::Api e nunca chega a este código.
+  # Só aceitamos Hash: um valor malformado (string, array, nil) nunca pode
+  # derrubar a gravação da mensagem — nesse caso o referral é descartado.
   # https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples#referral-messages
   def referral_params(message)
-    message['referral']
+    referral = message['referral']
+    referral.is_a?(Hash) ? referral : nil
   end
 
   # Adalink: grava o referral (anúncio de origem) inteiro nos
-  # additional_attributes da mensagem e, se a conversa acabou de nascer
-  # dessa mensagem, também nos additional_attributes dela.
-  def message_additional_attrs(message)
+  # additional_attributes da mensagem que o carrega.
+  def referral_additional_attrs(message)
     referral = referral_params(message)
-    return {} if referral.blank?
-
-    attach_referral_to_conversation(referral)
-    { referral: referral }
+    referral.present? ? { referral: referral } : {}
   end
 
-  # Adalink: quando a conversa nasce de uma mensagem com referral, guarda o
-  # objeto inteiro nos additional_attributes da conversa para ele aparecer
-  # no payload do webhook message_created. Mensagens seguintes na mesma
-  # conversa não sobrescrevem o referral original.
-  def attach_referral_to_conversation(referral)
-    return unless @conversation_created_now
-
-    @conversation.additional_attributes = @conversation.additional_attributes.merge('referral' => referral)
-    @conversation.save!
+  # Adalink: a conversa guarda o referral da mensagem que a CRIOU. Cliques
+  # seguintes (outro referral numa conversa já existente) ficam só na
+  # mensagem correspondente — não sobrescrevem o referral original da
+  # conversa. Por isso conversation_params só olha messages_data.first
+  # (a mensagem raiz do payload, a única que pode criar a conversa).
+  def new_conversation_additional_attrs
+    referral_additional_attrs(messages_data.first)
   end
 
   def find_message_by_source_id(source_id)

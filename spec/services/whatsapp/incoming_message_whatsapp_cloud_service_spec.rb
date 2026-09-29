@@ -176,37 +176,54 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
           source_type: 'ad',
           headline: 'Compre agora',
           body: 'Confira nossos imóveis',
-          media_type: 'image',
+          media_type: 'video',
           image_url: 'https://scontent.xx.fbcdn.net/ad-image.jpg',
+          video_url: 'https://scontent.xx.fbcdn.net/ad-video.mp4',
           thumbnail_url: 'https://scontent.xx.fbcdn.net/ad-thumb.jpg',
           ctwa_clid: 'AfeXYZ123abc',
-          welcome_message: { text: 'Olá! Vi seu anúncio.' }
+          welcome_message: { text: 'Olá! Vi seu anúncio.' },
+          # Adalink: campo hipotético que a Meta ainda não documentou — deve ir
+          # inteiro junto, sem allowlist de chaves.
+          future_unknown_field: 'valor futuro qualquer'
         }
       end
+      let(:referral_params) { build_referral_message_params(referral: referral_payload) }
 
-      let(:referral_params) do
+      def build_referral_message(wa_id:, message_id:, body:, referral:, include_referral:)
+        message = {
+          from: wa_id,
+          id: message_id,
+          timestamp: '1770500000',
+          type: 'text',
+          text: { body: body }
+        }
+        message[:referral] = referral if include_referral
+        message
+      end
+
+      # include_referral: false simula o payload real da Meta, que nunca manda
+      # a chave "referral" quando não há anúncio (nunca manda referral: null).
+      def build_referral_message_params(referral: nil, include_referral: true,
+                                        message_id: 'wamid.REFERRAL_MESSAGE_ID',
+                                        wa_id: '5511988887777', body: 'Olá! Vi seu anúncio.')
+        message = build_referral_message(wa_id: wa_id, message_id: message_id, body: body,
+                                         referral: referral, include_referral: include_referral)
+
         {
           phone_number: whatsapp_channel.phone_number,
           object: 'whatsapp_business_account',
           entry: [{
             changes: [{
               value: {
-                contacts: [{ profile: { name: 'Ana Referral' }, wa_id: '5511988887777' }],
-                messages: [{
-                  from: '5511988887777',
-                  id: 'wamid.REFERRAL_MESSAGE_ID',
-                  timestamp: '1770500000',
-                  type: 'text',
-                  text: { body: 'Olá! Vi seu anúncio.' },
-                  referral: referral_payload
-                }]
+                contacts: [{ profile: { name: 'Ana Referral' }, wa_id: wa_id }],
+                messages: [message]
               }
             }]
           }]
         }.with_indifferent_access
       end
 
-      it 'stores the whole referral object in the message additional_attributes' do
+      it 'stores the whole referral object in the message additional_attributes, including unknown fields' do
         described_class.new(inbox: whatsapp_channel.inbox, params: referral_params).perform
 
         message = whatsapp_channel.inbox.messages.last
@@ -218,11 +235,13 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
           'source_type' => 'ad',
           'headline' => 'Compre agora',
           'body' => 'Confira nossos imóveis',
-          'media_type' => 'image',
+          'media_type' => 'video',
           'image_url' => 'https://scontent.xx.fbcdn.net/ad-image.jpg',
+          'video_url' => 'https://scontent.xx.fbcdn.net/ad-video.mp4',
           'thumbnail_url' => 'https://scontent.xx.fbcdn.net/ad-thumb.jpg',
           'ctwa_clid' => 'AfeXYZ123abc',
-          'welcome_message' => { 'text' => 'Olá! Vi seu anúncio.' }
+          'welcome_message' => { 'text' => 'Olá! Vi seu anúncio.' },
+          'future_unknown_field' => 'valor futuro qualquer'
         )
       end
 
@@ -244,52 +263,130 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         expect(payload[:conversation][:additional_attributes]['referral']['ctwa_clid']).to eq('AfeXYZ123abc')
       end
 
-      it 'does not duplicate the referral on the conversation for a follow-up message without referral' do
+      # Adalink: item 3 da revisão — a conversa deve nascer JÁ com o referral
+      # (via conversation_params), sem um segundo save! só para isso depois
+      # de criada. Um UPDATE extra tocando additional_attributes dispararia
+      # after_update_commit (handle_resolved_status_change, notify_status_change,
+      # create_activity, CONVERSATION_UPDATED) para uma conversa que acabou de
+      # nascer — side effect indevido. (Message já gera 1 UPDATE legítimo e
+      # pré-existente em conversations, para last_activity_at/updated_at via
+      # set_conversation_activity — não é esse que estamos vigiando aqui.)
+      it 'creates the conversation with a single persistence call already carrying the referral' do
+        additional_attributes_updates = 0
+        subscriber = ActiveSupport::Notifications.subscribe('sql.active_record') do |*args|
+          event = ActiveSupport::Notifications::Event.new(*args)
+          sql = event.payload[:sql].to_s
+          next unless sql.match?(/\AUPDATE\s+"?conversations"?\s/i)
+
+          additional_attributes_updates += 1 if sql.include?('additional_attributes')
+        end
+
+        begin
+          described_class.new(inbox: whatsapp_channel.inbox, params: referral_params).perform
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        expect(additional_attributes_updates).to eq(0)
+
+        conversation = whatsapp_channel.inbox.conversations.last
+        expect(conversation.additional_attributes['referral']['ctwa_clid']).to eq('AfeXYZ123abc')
+      end
+
+      it 'keeps the referral on the conversation unchanged when a follow-up message has no referral' do
         described_class.new(inbox: whatsapp_channel.inbox, params: referral_params).perform
         conversation = whatsapp_channel.inbox.conversations.last
         expect(conversation.additional_attributes['referral']).to be_present
 
-        follow_up_params = {
-          phone_number: whatsapp_channel.phone_number,
-          object: 'whatsapp_business_account',
-          entry: [{
-            changes: [{
-              value: {
-                contacts: [{ profile: { name: 'Ana Referral' }, wa_id: '5511988887777' }],
-                messages: [{
-                  from: '5511988887777',
-                  id: 'wamid.FOLLOWUP_MESSAGE_ID',
-                  timestamp: '1770500100',
-                  type: 'text',
-                  text: { body: 'Qual o valor?' }
-                }]
-              }
-            }]
-          }]
-        }.with_indifferent_access
+        follow_up_params = build_referral_message_params(
+          include_referral: false, message_id: 'wamid.FOLLOWUP_MESSAGE_ID', body: 'Qual o valor?'
+        )
 
         described_class.new(inbox: whatsapp_channel.inbox, params: follow_up_params).perform
 
         expect(whatsapp_channel.inbox.conversations.count).to eq(1)
         follow_up_message = whatsapp_channel.inbox.messages.last
         expect(follow_up_message.content).to eq('Qual o valor?')
-        expect(follow_up_message.additional_attributes['referral']).to be_blank
+        expect(follow_up_message.additional_attributes).to eq({})
         # a conversa mantém o referral do anúncio que a originou
         expect(conversation.reload.additional_attributes['referral']['ctwa_clid']).to eq('AfeXYZ123abc')
+      end
+
+      # Adalink: item 3 da revisão — um segundo clique (outro anúncio) numa
+      # conversa JÁ existente grava o novo referral só na mensagem; o
+      # referral da conversa (o do anúncio que a criou) não é sobrescrito.
+      it 'stores a different referral only on the message for a second click on an existing conversation' do
+        described_class.new(inbox: whatsapp_channel.inbox, params: referral_params).perform
+        conversation = whatsapp_channel.inbox.conversations.last
+        original_conversation_referral = conversation.additional_attributes['referral']
+
+        second_click_referral = referral_payload.merge(ctwa_clid: 'SecondClickClid999', headline: 'Outro anúncio')
+        second_click_params = build_referral_message_params(
+          referral: second_click_referral, message_id: 'wamid.SECOND_CLICK_MESSAGE_ID', body: 'Vi outro anúncio agora'
+        )
+
+        described_class.new(inbox: whatsapp_channel.inbox, params: second_click_params).perform
+
+        expect(whatsapp_channel.inbox.conversations.count).to eq(1)
+        second_click_message = whatsapp_channel.inbox.messages.last
+        expect(second_click_message.additional_attributes['referral']['ctwa_clid']).to eq('SecondClickClid999')
+        expect(conversation.reload.additional_attributes['referral']).to eq(original_conversation_referral)
+      end
+
+      # Adalink: item 2 da revisão — referral malformado (não-Hash) nunca pode
+      # derrubar a gravação da mensagem. Antes, uma string >1500 chars fazia
+      # @conversation.save! estourar JsonbAttributesLengthValidator e a
+      # mensagem se perder.
+      context 'when referral is malformed' do
+        it 'ignores an overly long string referral and still saves the message' do
+          long_string_params = build_referral_message_params(referral: 'x' * 2000)
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: long_string_params).perform }
+            .not_to raise_error
+
+          expect(whatsapp_channel.inbox.conversations.count).to eq(1)
+          message = whatsapp_channel.inbox.messages.last
+          expect(message.content).to eq('Olá! Vi seu anúncio.')
+          expect(message.additional_attributes).to eq({})
+          conversation = whatsapp_channel.inbox.conversations.last
+          expect(conversation.additional_attributes).to eq({})
+        end
+
+        it 'ignores an array referral and still saves the message' do
+          array_params = build_referral_message_params(referral: %w[not a hash])
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: array_params).perform }
+            .not_to raise_error
+
+          message = whatsapp_channel.inbox.messages.last
+          expect(message.content).to eq('Olá! Vi seu anúncio.')
+          expect(message.additional_attributes).to eq({})
+        end
+
+        it 'ignores a nil referral and still saves the message' do
+          nil_params = build_referral_message_params(referral: nil)
+
+          expect { described_class.new(inbox: whatsapp_channel.inbox, params: nil_params).perform }
+            .not_to raise_error
+
+          message = whatsapp_channel.inbox.messages.last
+          expect(message.content).to eq('Olá! Vi seu anúncio.')
+          expect(message.additional_attributes).to eq({})
+        end
       end
     end
 
     # Adalink: mensagem sem referral não pode ganhar a chave à toa (regressão)
     context 'when message has no referral' do
-      it 'does not add a referral key to message or conversation additional_attributes' do
+      it 'leaves additional_attributes empty on message and conversation' do
         stub_media_url_request
         stub_sample_png_request
         described_class.new(inbox: whatsapp_channel.inbox, params: params).perform
 
         message = whatsapp_channel.inbox.messages.last
         conversation = whatsapp_channel.inbox.conversations.last
-        expect(message.additional_attributes.key?('referral')).to be false
-        expect(conversation.additional_attributes.key?('referral')).to be false
+        expect(message.additional_attributes).to eq({})
+        expect(conversation.additional_attributes).to eq({})
       end
     end
   end
