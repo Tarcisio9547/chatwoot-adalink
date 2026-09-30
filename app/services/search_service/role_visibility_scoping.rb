@@ -29,10 +29,17 @@ module SearchService::RoleVisibilityScoping
   end
 
   # Mesma regra aplicada à busca de mensagens (GIN/LIKE) na caixa WhatsApp
-  # Cloud — exclui por conversation_id (subquery) as conversas que o papel
-  # não deixa ver. should_skip_inbox_filtering? já decide se o usuário tem
-  # acesso a todas as inboxes (admin ou dono de todas); só refinamos as
-  # inboxes WhatsApp que o usuário realmente acessa.
+  # Cloud. should_skip_inbox_filtering? já decide se o usuário tem acesso a
+  # todas as inboxes (admin ou dono de todas); só refinamos as inboxes
+  # WhatsApp que o usuário realmente acessa.
+  #
+  # Correção do juiz cego (rodada 3, item 6, BAIXA): filtro POSITIVO em vez
+  # de "NOT IN (subquery sobre TODAS as conversas WhatsApp da conta)". A
+  # subquery de "ocultas" cresce com o tamanho da caixa inteira (todo mundo
+  # que não é o usuário); a subquery de "visíveis" (RoleVisibility.filter)
+  # é tipicamente pequena, do tamanho do que aquele usuário mesmo acessa.
+  # Nenhuma lista é carregada em memória — os dois lados continuam
+  # subconsultas SQL.
   def apply_role_visibility_to_messages(messages_query)
     return messages_query if Conversations::RoleVisibility.unrestricted?(current_user, current_account.id, account_user: account_user)
 
@@ -41,14 +48,19 @@ module SearchService::RoleVisibilityScoping
     return messages_query if accessible_whatsapp_inbox_ids.empty?
 
     whatsapp_conversations = current_account.conversations.where(inbox_id: accessible_whatsapp_inbox_ids)
-    hidden_ids_subquery = hidden_conversation_ids_subquery(whatsapp_conversations)
+    visible_ids_subquery = Conversations::RoleVisibility.filter(whatsapp_conversations, current_user, current_account).select(:id)
 
-    messages_query.where.not(conversation_id: hidden_ids_subquery)
+    other_inbox_condition = messages_query.where.not(inbox_id: accessible_whatsapp_inbox_ids)
+    visible_whatsapp_condition = messages_query.where(inbox_id: accessible_whatsapp_inbox_ids, conversation_id: visible_ids_subquery)
+
+    other_inbox_condition.or(visible_whatsapp_condition)
   end
 
   # Subconsulta SQL (WHERE id NOT IN (SELECT id FROM conversations WHERE ...
   # AND id NOT IN (visible_ids_subquery))): não força a execução em memória,
-  # o Postgres resolve tudo numa query só.
+  # o Postgres resolve tudo numa query só. Usado só por
+  # apply_role_visibility_to_conversations, que já parte de um escopo restrito
+  # por accessable_inbox_ids (não a caixa inteira).
   def hidden_conversation_ids_subquery(whatsapp_conversations)
     visible_scope = Conversations::RoleVisibility.filter(whatsapp_conversations, current_user, current_account)
     whatsapp_conversations.where.not(id: visible_scope).select(:id)

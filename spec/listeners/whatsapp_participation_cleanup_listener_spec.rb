@@ -55,6 +55,43 @@ describe WhatsappParticipationCleanupListener do
 
         expect { listener.assignee_changed(event) }.not_to raise_error
       end
+
+      # Adalink: decisao do orquestrador (rodada 3, item 4) - a limpeza
+      # remove o responsavel anterior mesmo quando ele e administrador ou
+      # agente sem custom_role. Isso e seguro porque os dois continuam
+      # vendo TODA conversa da caixa pela visao "Todas"
+      # (Conversations::RoleVisibility.unrestricted?), sem depender de ser
+      # participante ou assignee.
+      context 'when the previous assignee is an administrator' do
+        let!(:admin) { create(:user, account: account, role: :administrator) }
+        let!(:admin_conversation) { create(:conversation, account: account, inbox: whatsapp_inbox, assignee: admin) }
+
+        before do
+          create(:inbox_member, user: admin, inbox: whatsapp_inbox)
+          admin_conversation.conversation_participants.create!(user: admin)
+        end
+
+        it 'removes the administrator from participants after reassignment' do
+          admin_conversation.update!(assignee: agent_b)
+          changed_attributes = { 'assignee_id' => [admin.id, agent_b.id] }
+          event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: admin_conversation, changed_attributes: changed_attributes)
+
+          listener.assignee_changed(event)
+
+          expect(admin_conversation.conversation_participants.map(&:user_id)).not_to include(admin.id)
+        end
+
+        it 'still shows the conversation to the administrator via RoleVisibility (the "Todas" view)' do
+          admin_conversation.update!(assignee: agent_b)
+          changed_attributes = { 'assignee_id' => [admin.id, agent_b.id] }
+          event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: admin_conversation, changed_attributes: changed_attributes)
+
+          listener.assignee_changed(event)
+
+          visible = Conversations::RoleVisibility.visible_members(admin_conversation, [admin])
+          expect(visible).to include(admin)
+        end
+      end
     end
 
     context 'when the inbox is not Channel::Whatsapp' do

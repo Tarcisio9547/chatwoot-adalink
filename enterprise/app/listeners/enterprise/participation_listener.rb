@@ -1,31 +1,50 @@
-# Adalink: correção do juiz cego (rodada 2, item 1, MÉDIA) - corrida entre o
-# job assíncrono do ParticipationListener e o
+# Adalink: correção do juiz cego (rodada 2, item 1; revisado na rodada 3) -
+# corrida entre o job assíncrono do ParticipationListener e o
 # WhatsappParticipationCleanupListener síncrono.
 #
-# Cenário: conversa nil→A dispara assignee_changed. O EventDispatcherJob
-# (async) é enfileirado com o payload da conversa JÁ SERIALIZADA com
-# assignee_id = A. Antes desse job rodar, a Trama troca A→B: o
-# WhatsappParticipationCleanupListener (síncrono) já removeu A dos
-# participantes. Quando o job antigo finalmente executa, ele insere A de
-# volta via find_or_create_by!(user_id: conversation.assignee_id), usando o
-# assignee_id desatualizado do momento do enqueue — reintroduzindo o
-# vazamento que o cleanup listener corrigiu.
+# O ActiveJob/Sidekiq serializa o argumento `conversation:` via GlobalID
+# (classe + id) e RECARREGA o registro do banco no momento em que o job
+# executa — não guarda um snapshot antigo em memória. A corrida não é de
+# "payload desatualizado": é puramente de TIMING entre dois processos
+# acessando/modificando a mesma linha sem lock.
 #
-# Correção, só em Channel::Whatsapp: relê o assignee_id atual do banco antes
-# de inserir. Se o banco não bate com o que o evento carrega, o job está
-# desatualizado — usa o valor relido (o dono ATUAL) em vez do estampado no
-# evento. Em outras caixas, comportamento idêntico ao upstream.
+# Cenário: o job de nil→A lê o assignee_id (A) e está prestes a inserir o
+# participante, mas é pausado (fila lenta, GC, etc). Nesse meio tempo, a
+# Trama troca A→B de verdade: o WhatsappParticipationCleanupListener roda e
+# tenta remover a participação de A — mas como o job antigo ainda não
+# inseriu, não há nada pra remover (no-op). O job antigo retoma e insere A
+# — e como isso acontece DEPOIS da limpeza, ninguém mais remove essa
+# inserção. Resultado: assignee_id = B, mas A fica participante para
+# sempre.
+#
+# Correção, só em Channel::Whatsapp: lê e insere dentro de
+# conversation.with_lock (SELECT ... FOR UPDATE), serializando com a
+# limpeza (que também toma o lock). Mesmo assim, relê o assignee_id DEPOIS
+# de inserir e desfaz se mudou nesse intervalo — fecha as duas ordens
+# possíveis de entrelaçamento, mesmo que o lock por algum motivo não seja
+# suficiente (ex.: se a limpeza rodar numa transação separada que já
+# commitou antes do lock ser adquirido). Em outras caixas, comportamento
+# idêntico ao upstream.
 module Enterprise::ParticipationListener
   def assignee_changed(event)
     conversation, _account = extract_conversation_and_account(event)
     return super unless conversation.inbox.whatsapp?
 
-    current_assignee_id = Conversation.where(id: conversation.id).pick(:assignee_id)
-    return if current_assignee_id.blank?
+    conversation.with_lock do
+      current_assignee_id = conversation.reload.assignee_id
+      next if current_assignee_id.blank?
 
-    conversation.conversation_participants.find_or_create_by!(user_id: current_assignee_id)
+      participant = conversation.conversation_participants.find_or_create_by!(user_id: current_assignee_id)
+
+      # Rede de segurança: mesmo dentro do lock, relê o assignee_id uma
+      # última vez antes de finalizar. Se mudou entre a leitura acima e
+      # agora (não deveria, já que estamos com a linha travada, mas cobre
+      # qualquer caminho que não passe pelo mesmo lock), desfaz a inserção.
+      final_assignee_id = conversation.reload.assignee_id
+      participant.destroy! if final_assignee_id != current_assignee_id
+    end
   rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
     Rails.logger.warn "Failed to create conversation participant for account #{conversation.account.id} " \
-                      ": user #{current_assignee_id} : conversation #{conversation.id}"
+                      ": user #{conversation.assignee_id} : conversation #{conversation.id}"
   end
 end

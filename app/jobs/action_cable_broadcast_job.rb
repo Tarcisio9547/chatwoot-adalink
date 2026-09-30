@@ -42,3 +42,5 @@ class ActionCableBroadcastJob < ApplicationJob
     end
   end
 end
+
+ActionCableBroadcastJob.prepend_mod_with('ActionCableBroadcastJob')

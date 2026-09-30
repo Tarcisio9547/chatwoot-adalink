@@ -81,6 +81,47 @@ describe ActionCableListener do
     end
   end
 
+  describe '#first_reply_created' do
+    let(:event_name) { :'first.reply.created' }
+    let!(:whatsapp_message) do
+      create(:message, message_type: 'outgoing', account: account, inbox: whatsapp_inbox, conversation: whatsapp_conversation)
+    end
+    let!(:event) { Events::Base.new(event_name, Time.zone.now, message: whatsapp_message) }
+
+    it 'does not send the event to a member with the Setor role' do
+      expect(ActionCableBroadcastJob).to receive(:perform_later) do |tokens, *_args|
+        expect(tokens).not_to include(setor_member.pubsub_token)
+      end
+      listener.first_reply_created(event)
+    end
+
+    it 'sends the event to the assignee' do
+      expect(ActionCableBroadcastJob).to receive(:perform_later) do |tokens, *_args|
+        expect(tokens).to include(agent.pubsub_token)
+      end
+      listener.first_reply_created(event)
+    end
+  end
+
+  describe '#conversation_read' do
+    let(:event_name) { :'conversation.read' }
+    let!(:event) { Events::Base.new(event_name, Time.zone.now, conversation: whatsapp_conversation) }
+
+    it 'does not send the event to a member with the Setor role' do
+      expect(ActionCableBroadcastJob).to receive(:perform_later) do |tokens, *_args|
+        expect(tokens).not_to include(setor_member.pubsub_token)
+      end
+      listener.conversation_read(event)
+    end
+
+    it 'sends the event to the assignee' do
+      expect(ActionCableBroadcastJob).to receive(:perform_later) do |tokens, *_args|
+        expect(tokens).to include(agent.pubsub_token)
+      end
+      listener.conversation_read(event)
+    end
+  end
+
   describe '#message_updated' do
     let(:event_name) { :'message.updated' }
     let!(:whatsapp_message) do
@@ -162,6 +203,27 @@ describe ActionCableListener do
         expect(tokens).to include(admin.pubsub_token)
       end
       listener.conversation_typing_on(event)
+    end
+  end
+
+  describe '#conversation_typing_off' do
+    let(:event_name) { :'conversation.typing_off' }
+    let!(:event) { Events::Base.new(event_name, Time.zone.now, conversation: whatsapp_conversation, user: agent, is_private: false) }
+
+    it 'does not send the event to a member with the Setor role' do
+      expect(ActionCableBroadcastJob).to receive(:perform_later) do |tokens, *_args|
+        expect(tokens).not_to include(setor_member.pubsub_token)
+      end
+      listener.conversation_typing_off(event)
+    end
+
+    it 'sends the event to the admin' do
+      admin = create(:user, account: account, role: :administrator)
+
+      expect(ActionCableBroadcastJob).to receive(:perform_later) do |tokens, *_args|
+        expect(tokens).to include(admin.pubsub_token)
+      end
+      listener.conversation_typing_off(event)
     end
   end
 
