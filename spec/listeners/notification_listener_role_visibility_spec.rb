@@ -88,4 +88,46 @@ describe NotificationListener do
       end
     end
   end
+
+  describe 'conversation_bot_handoff' do
+    let(:bot_handoff_event_name) { :'conversation.bot_handoff' }
+
+    it 'does not notify a member with the Setor role about a colleague conversation' do
+      event = Events::Base.new(bot_handoff_event_name, Time.zone.now, conversation: whatsapp_conversation)
+
+      listener.conversation_bot_handoff(event)
+
+      expect(setor_member.notifications.count).to eq(0)
+    end
+
+    it 'notifies a member with the "all conversations" role' do
+      event = Events::Base.new(bot_handoff_event_name, Time.zone.now, conversation: whatsapp_conversation)
+
+      listener.conversation_bot_handoff(event)
+
+      expect(all_member.notifications.count).to eq(1)
+    end
+
+    context 'when the inbox is not Channel::Whatsapp' do
+      let!(:other_inbox) { create(:inbox, account: account) }
+      let!(:other_inbox_conversation) { create(:conversation, account: account, inbox: other_inbox, assignee: user) }
+
+      before do
+        create(:inbox_member, user: setor_member, inbox: other_inbox)
+        setting = setor_member.notification_settings.find_by(account: account)
+        setting.selected_email_flags = [:email_conversation_creation]
+        setting.selected_push_flags = []
+        setting.save!
+        other_inbox_conversation.inbox.reload
+      end
+
+      it 'keeps notifying every inbox member, role or not (current behaviour, unchanged)' do
+        event = Events::Base.new(bot_handoff_event_name, Time.zone.now, conversation: other_inbox_conversation)
+
+        listener.conversation_bot_handoff(event)
+
+        expect(setor_member.notifications.count).to eq(1)
+      end
+    end
+  end
 end
