@@ -8,7 +8,9 @@ module Whatsapp::IncomingMessageServiceHelpers
       account_id: @inbox.account_id,
       inbox_id: @inbox.id,
       contact_id: @contact.id,
-      contact_inbox_id: @contact_inbox.id
+      contact_inbox_id: @contact_inbox.id,
+      # Adalink: a conversa guarda o anúncio da mensagem que a criou
+      additional_attributes: referral_additional_attrs(messages_data.first)
     }
   end
 

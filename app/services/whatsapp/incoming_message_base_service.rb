@@ -3,6 +3,7 @@
 # https://developers.facebook.com/docs/whatsapp/api/media/
 class Whatsapp::IncomingMessageBaseService
   include ::Whatsapp::IncomingMessageServiceHelpers
+  include ::Whatsapp::IncomingMessageReferralHelpers
 
   pattr_initialize [:inbox!, :params!, :outgoing_echo]
 
@@ -187,7 +188,9 @@ class Whatsapp::IncomingMessageBaseService
       status: outgoing_echo ? :delivered : :sent,
       sender: outgoing_echo ? nil : @contact,
       source_id: (source_id || message[:id]).to_s,
-      content_attributes: content_attrs
+      content_attributes: content_attrs,
+      # Adalink: o referral vem só na mensagem raiz do payload
+      additional_attributes: referral_additional_attrs(messages_data.first)
     )
   end
 
