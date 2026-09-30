@@ -52,9 +52,7 @@ class Conversations::RoleVisibility
       permissions = account_user.permissions
       return conversations if permissions.include?('conversation_manage')
 
-      if permissions.include?('conversation_unassigned_manage')
-        return conversations.where(assignee_id: [nil, user.id])
-      end
+      return conversations.where(assignee_id: [nil, user.id]) if permissions.include?('conversation_unassigned_manage')
 
       if permissions.include?('conversation_participating_manage')
         participant_ids = ConversationParticipant.where(user_id: user.id).pluck(:conversation_id)
