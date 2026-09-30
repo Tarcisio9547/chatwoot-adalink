@@ -18,6 +18,32 @@ module Enterprise::SearchService
   def build_where_conditions
     conditions = { account_id: current_account.id }
     conditions[:inbox_id] = accessable_inbox_ids unless should_skip_inbox_filtering?
+    apply_role_visibility_to_where_conditions(conditions)
+  end
+
+  # Adalink: busca avançada (Elasticsearch) segue a mesma regra de #2083 —
+  # na caixa WhatsApp Cloud, só devolve mensagens de conversas visíveis ao
+  # papel do usuário. Outras caixas continuam sem restrição adicional.
+  #
+  # Em vez de reescrever inbox_id (o que colidiria com apply_inbox_filter,
+  # que roda depois e pode sobrescrever essa chave), excluímos por
+  # conversation_id as conversas WhatsApp que o papel NÃO deixa ver. Isso
+  # compõe em AND com qualquer filtro de inbox_id aplicado depois, sem
+  # precisar reordenar o pipeline existente.
+  def apply_role_visibility_to_where_conditions(conditions)
+    whatsapp_inbox_ids = current_account.inboxes.where(channel_type: 'Channel::Whatsapp').pluck(:id)
+    whatsapp_inbox_ids &= accessable_inbox_ids unless should_skip_inbox_filtering?
+    return conditions if whatsapp_inbox_ids.empty?
+
+    whatsapp_conversations = current_account.conversations.where(inbox_id: whatsapp_inbox_ids)
+    return conditions if whatsapp_conversations.none?
+
+    all_ids = whatsapp_conversations.pluck(:id)
+    visible_ids = Conversations::RoleVisibility.filter(whatsapp_conversations, current_user, current_account).pluck(:id)
+    hidden_ids = all_ids - visible_ids
+    return conditions if hidden_ids.empty?
+
+    conditions[:conversation_id] = { not: hidden_ids }
     conditions
   end
 
