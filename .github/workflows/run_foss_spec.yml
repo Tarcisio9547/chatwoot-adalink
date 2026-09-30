@@ -58,6 +58,14 @@ jobs:
       matrix:
         ci_node_total: [16]
         ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    # bootsnap (mesmo em 1.26.0) trava indefinidamente o boot do Rails em
+    # Ruby 3.4.4 neste ambiente — reproduzido localmente via Docker
+    # (Bundler.require nunca retorna com bootsnap ativo; com
+    # DISABLE_BOOTSNAP=1 retorna em segundos). O mesmo padrão de metade dos
+    # shards ficando presos, sem erro visível, apareceu em runs reais deste
+    # workflow. bootsnap só acelera boot; não afeta corretude dos testes.
+    env:
+      DISABLE_BOOTSNAP: '1'
 
     services:
       postgres:
