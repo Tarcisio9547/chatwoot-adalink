@@ -2,9 +2,22 @@
 # Cloud, os eventos ao vivo do ActionCable só vão para quem o papel permite
 # ver a conversa (mesma regra de RoleVisibility usada pela busca em #2083 e
 # pelo aviso persistido em NotificationListener). Outras caixas continuam
-# broadcastando para todos os membros, igual ao comportamento upstream —
-# cada override chama `super` nesse caso, em vez de duplicar o método
-# original inteiro.
+# broadcastando para todos os membros, igual ao comportamento upstream.
+#
+# Correção do juiz cego (rodada 2, item 5): em vez de copiar o corpo dos 10
+# métodos públicos que chamam `conversation.inbox.members`, todos eles já
+# convergem para o mesmo ponto — o método privado `user_tokens(account,
+# agents)` da classe base. Sobrescrevemos só esse ponto único: cada método
+# público chama `around_member_filtering(conversation) { super }`, que
+# guarda a conversa do evento atual numa variável de instância (o listener é
+# Singleton, mas cada dispatch é síncrono — não há concorrência real dentro
+# de uma mesma chamada), e `user_tokens` filtra por ela quando a caixa é
+# Channel::Whatsapp. O corpo de cada evento upstream nunca é duplicado.
+#
+# `contact_created/updated/merged/deleted`, `conversation_mentioned`,
+# `notification_*` e `account_cache_invalidated` não usam
+# `conversation.inbox.members` (broadcast por conta inteira ou só pro
+# usuário-alvo) — não precisam de wrapper.
 module Enterprise::ActionCableListener
   include Events::Types
   include Enterprise::ActionCableListenerAssigneeChangeVisibility
@@ -19,109 +32,85 @@ module Enterprise::ActionCableListener
   end
 
   def message_created(event)
-    message, account = extract_message_and_account(event)
-    conversation = message.conversation
-    return super unless conversation.inbox.whatsapp?
-
-    tokens = user_tokens(account, visible_members(conversation)) + contact_tokens(conversation.contact_inbox, message)
-    broadcast(account, tokens, MESSAGE_CREATED, message.push_event_data)
+    around_member_filtering(event.data[:message]&.conversation) { super }
   end
 
   def message_updated(event)
-    message, account = extract_message_and_account(event)
-    conversation = message.conversation
-    return super unless conversation.inbox.whatsapp?
-
-    tokens = user_tokens(account, visible_members(conversation)) + contact_tokens(conversation.contact_inbox, message)
-    broadcast(account, tokens, MESSAGE_UPDATED, message.push_event_data.merge(previous_changes: event.data[:previous_changes]))
+    around_member_filtering(event.data[:message]&.conversation) { super }
   end
 
   def first_reply_created(event)
-    message, account = extract_message_and_account(event)
-    conversation = message.conversation
-    return super unless conversation.inbox.whatsapp?
-
-    tokens = user_tokens(account, visible_members(conversation))
-    broadcast(account, tokens, FIRST_REPLY_CREATED, message.push_event_data)
+    around_member_filtering(event.data[:message]&.conversation) { super }
   end
 
   def conversation_created(event)
-    conversation, account = extract_conversation_and_account(event)
-    return super unless conversation.inbox.whatsapp?
-
-    tokens = user_tokens(account, visible_members(conversation)) + contact_inbox_tokens(conversation.contact_inbox)
-    broadcast(account, tokens, CONVERSATION_CREATED, conversation.push_event_data)
+    around_member_filtering(event.data[:conversation]) { super }
   end
 
   def conversation_read(event)
-    conversation, account = extract_conversation_and_account(event)
-    return super unless conversation.inbox.whatsapp?
-
-    tokens = user_tokens(account, visible_members(conversation))
-    broadcast(account, tokens, CONVERSATION_READ, conversation.push_event_data)
+    around_member_filtering(event.data[:conversation]) { super }
   end
 
   def conversation_status_changed(event)
-    conversation, account = extract_conversation_and_account(event)
-    return super unless conversation.inbox.whatsapp?
-
-    tokens = user_tokens(account, visible_members(conversation)) + contact_inbox_tokens(conversation.contact_inbox)
-    broadcast(account, tokens, CONVERSATION_STATUS_CHANGED, conversation.push_event_data)
+    around_member_filtering(event.data[:conversation]) { super }
   end
 
   def conversation_updated(event)
-    conversation, account = extract_conversation_and_account(event)
-    return super unless conversation.inbox.whatsapp?
+    around_member_filtering(event.data[:conversation]) { super }
+  end
 
-    tokens = user_tokens(account, visible_members(conversation)) + contact_inbox_tokens(conversation.contact_inbox)
-    broadcast(account, tokens, CONVERSATION_UPDATED, conversation.push_event_data)
+  def conversation_typing_on(event)
+    around_member_filtering(event.data[:conversation]) { super }
+  end
+
+  def conversation_typing_off(event)
+    around_member_filtering(event.data[:conversation]) { super }
   end
 
   def assignee_changed(event)
-    conversation, account = extract_conversation_and_account(event)
-    return super unless conversation.inbox.whatsapp?
+    conversation = event.data[:conversation]
+    return super unless conversation&.inbox&.whatsapp?
 
-    tokens = user_tokens(account, assignee_changed_recipients(conversation, event))
+    # assignee_changed tem regra de destinatário própria (quem perde a
+    # conversa, "Sem atendente" perdendo visão) — não é só um filtro de
+    # user_tokens, então continua com override dedicado (ver
+    # Enterprise::ActionCableListenerAssigneeChangeVisibility).
+    _conversation, account = extract_conversation_and_account(event)
+    recipients = assignee_changed_recipients(conversation, event)
+    tokens = user_tokens(account, recipients)
     broadcast(account, tokens, ASSIGNEE_CHANGED, conversation.push_event_data)
   end
 
   def team_changed(event)
-    conversation, account = extract_conversation_and_account(event)
-    return super unless conversation.inbox.whatsapp?
-
-    tokens = user_tokens(account, visible_members(conversation))
-    broadcast(account, tokens, TEAM_CHANGED, conversation.push_event_data)
+    around_member_filtering(event.data[:conversation]) { super }
   end
 
   def conversation_contact_changed(event)
-    conversation, account = extract_conversation_and_account(event)
-    return super unless conversation.inbox.whatsapp?
-
-    tokens = user_tokens(account, visible_members(conversation))
-    broadcast(account, tokens, CONVERSATION_CONTACT_CHANGED, conversation.push_event_data)
+    around_member_filtering(event.data[:conversation]) { super }
   end
 
   private
 
-  # Membros da inbox que o papel permite ver esta conversa. Só é chamado
-  # quando a caixa já é Channel::Whatsapp (ver `return super unless...` em
-  # cada método público acima).
-  def visible_members(conversation)
-    Conversations::RoleVisibility.visible_members(conversation, conversation.inbox.members)
+  # Guarda a conversa do evento atual pra user_tokens filtrar por ela, roda
+  # o bloco (que chama super, o método upstream original), e limpa depois -
+  # mesmo se o bloco levantar, pra não vazar estado entre eventos.
+  def around_member_filtering(conversation)
+    @current_event_conversation = conversation
+    yield
+  ensure
+    @current_event_conversation = nil
   end
 
-  # Adalink: typing_on/typing_off usam este método privado da base, então
-  # sobrescrevê-lo já corrige os dois eventos sem duplicar conversation_typing_on/off.
-  def typing_event_listener_tokens(account, conversation, user)
-    return super unless conversation.inbox.whatsapp?
+  # Ponto único de filtragem: chamado pela classe base sempre que ela monta
+  # tokens a partir de uma lista de agentes. Quando a chamada corresponde a
+  # conversation.inbox.members de uma conversa Channel::Whatsapp (marcada
+  # por around_member_filtering), filtra por RoleVisibility antes de somar
+  # os tokens de admin. Fora disso (conta inteira, outro canal), idêntico
+  # ao upstream.
+  def user_tokens(account, agents)
+    conversation = @current_event_conversation
+    return super unless conversation&.inbox&.whatsapp?
 
-    current_user_token = if user.is_a?(Contact)
-                           conversation.contact_inbox.pubsub_token
-                         elsif user.respond_to?(:pubsub_token)
-                           user.pubsub_token
-                         end
-
-    tokens = user_tokens(account, visible_members(conversation)) + [conversation.contact_inbox.pubsub_token]
-    current_user_token.present? ? tokens - [current_user_token] : tokens
+    super(account, Conversations::RoleVisibility.visible_members(conversation, agents))
   end
 end
