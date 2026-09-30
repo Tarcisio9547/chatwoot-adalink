@@ -9,10 +9,21 @@
 # convergem para o mesmo ponto — o método privado `user_tokens(account,
 # agents)` da classe base. Sobrescrevemos só esse ponto único: cada método
 # público chama `around_member_filtering(conversation) { super }`, que
-# guarda a conversa do evento atual numa variável de instância (o listener é
-# Singleton, mas cada dispatch é síncrono — não há concorrência real dentro
-# de uma mesma chamada), e `user_tokens` filtra por ela quando a caixa é
-# Channel::Whatsapp. O corpo de cada evento upstream nunca é duplicado.
+# guarda a conversa do evento atual e `user_tokens` filtra por ela quando a
+# caixa é Channel::Whatsapp. O corpo de cada evento upstream nunca é
+# duplicado.
+#
+# Correção do juiz cego (auditoria pré-envio, BUG ALTO): o listener é
+# Singleton (ActionCableListener.instance), a MESMA instância é usada por
+# TODAS as threads do Puma/Sidekiq que passam pelo SyncDispatcher — uma
+# variável de instância (@current_event_conversation) vazava a conversa de
+# uma thread para outra rodando em paralelo (uma mensagem de caixa WhatsApp
+# podia ir sem filtro de papel, ou um evento de outra caixa herdar o filtro
+# errado). Corrigido com ActiveSupport::IsolatedExecutionState, que isola o
+# valor por thread (ou por fiber, conforme a config de execução do Rails) —
+# não há estado compartilhado entre chamadas concorrentes. O valor anterior
+# é salvo e restaurado no ensure, para suportar chamadas aninhadas na mesma
+# thread (ex.: um listener disparando outro evento durante o broadcast).
 #
 # `contact_created/updated/merged/deleted`, `conversation_mentioned`,
 # `notification_*` e `account_cache_invalidated` não usam
@@ -21,6 +32,8 @@
 module Enterprise::ActionCableListener
   include Events::Types
   include Enterprise::ActionCableListenerAssigneeChangeVisibility
+
+  CURRENT_EVENT_CONVERSATION_KEY = :adalink_action_cable_listener_current_conversation
 
   def copilot_message_created(event)
     copilot_message = event.data[:copilot_message]
@@ -92,13 +105,19 @@ module Enterprise::ActionCableListener
   private
 
   # Guarda a conversa do evento atual pra user_tokens filtrar por ela, roda
-  # o bloco (que chama super, o método upstream original), e limpa depois -
-  # mesmo se o bloco levantar, pra não vazar estado entre eventos.
+  # o bloco (que chama super, o método upstream original), e restaura o
+  # valor anterior depois - mesmo se o bloco levantar, pra não vazar estado
+  # entre eventos. Usa ActiveSupport::IsolatedExecutionState (isolado por
+  # thread/fiber) em vez de variável de instância: o listener é Singleton
+  # compartilhado entre todas as threads do Puma/Sidekiq, então uma
+  # variável de instância vazaria a conversa de uma thread pra outra
+  # rodando em paralelo no mesmo processo.
   def around_member_filtering(conversation)
-    @current_event_conversation = conversation
+    previous_conversation = ActiveSupport::IsolatedExecutionState[CURRENT_EVENT_CONVERSATION_KEY]
+    ActiveSupport::IsolatedExecutionState[CURRENT_EVENT_CONVERSATION_KEY] = conversation
     yield
   ensure
-    @current_event_conversation = nil
+    ActiveSupport::IsolatedExecutionState[CURRENT_EVENT_CONVERSATION_KEY] = previous_conversation
   end
 
   # Ponto único de filtragem: chamado pela classe base sempre que ela monta
@@ -108,7 +127,7 @@ module Enterprise::ActionCableListener
   # os tokens de admin. Fora disso (conta inteira, outro canal), idêntico
   # ao upstream.
   def user_tokens(account, agents)
-    conversation = @current_event_conversation
+    conversation = ActiveSupport::IsolatedExecutionState[CURRENT_EVENT_CONVERSATION_KEY]
     return super unless conversation&.inbox&.whatsapp?
 
     super(account, Conversations::RoleVisibility.visible_members(conversation, agents))
