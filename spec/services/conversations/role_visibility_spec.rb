@@ -54,6 +54,53 @@ RSpec.describe Conversations::RoleVisibility do
         expect(described_class.visible_to?(colleague, mine)).to be true
       end
     end
+
+    context 'with a custom_role that has no conversation permission at all' do
+      let(:empty_role) { create(:custom_role, account: account, permissions: %w[contact_manage]) }
+
+      before { AccountUser.find_by(user: agent, account: account).update(custom_role: empty_role) }
+
+      it 'does not see its own conversation (matches PermissionFilterService native behaviour, Conversation.none)' do
+        expect(described_class.visible_to?(agent, mine)).to be false
+      end
+
+      it 'does not see a colleague conversation' do
+        expect(described_class.visible_to?(agent, colleague_conversation)).to be false
+      end
+    end
+  end
+
+  describe '.unrestricted?' do
+    it 'is true for an administrator' do
+      expect(described_class.unrestricted?(admin, account.id)).to be true
+    end
+
+    it 'is true for an agent without a custom_role' do
+      expect(described_class.unrestricted?(colleague, account.id)).to be true
+    end
+
+    it 'is false for an agent with a custom_role' do
+      AccountUser.find_by(user: agent, account: account).update(custom_role: setor_role)
+      expect(described_class.unrestricted?(agent, account.id)).to be false
+    end
+  end
+
+  describe '.unassigned_manage_only?' do
+    let(:sem_atendente_role) { create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage]) }
+
+    it 'is true for a member whose only conversation permission is conversation_unassigned_manage' do
+      AccountUser.find_by(user: agent, account: account).update(custom_role: sem_atendente_role)
+      expect(described_class.unassigned_manage_only?(agent, account.id)).to be true
+    end
+
+    it 'is false for a member with conversation_manage' do
+      AccountUser.find_by(user: agent, account: account).update(custom_role: all_role)
+      expect(described_class.unassigned_manage_only?(agent, account.id)).to be false
+    end
+
+    it 'is false for an administrator' do
+      expect(described_class.unassigned_manage_only?(admin, account.id)).to be false
+    end
   end
 
   describe '.filter' do
@@ -79,6 +126,47 @@ RSpec.describe Conversations::RoleVisibility do
 
         expect(result).to include(mine, colleague_conversation, unassigned_conversation)
       end
+    end
+
+    context 'with a custom_role that has no conversation permission at all' do
+      let(:empty_role) { create(:custom_role, account: account, permissions: %w[contact_manage]) }
+
+      before { AccountUser.find_by(user: agent, account: account).update(custom_role: empty_role) }
+
+      it 'returns no conversations (matches PermissionFilterService native behaviour)' do
+        result = described_class.filter(account.conversations, agent, account)
+
+        expect(result).to be_empty
+      end
+    end
+  end
+
+  describe '.visible_members (N+1, item 6)' do
+    let!(:conversation) { create(:conversation, account: account, inbox: inbox, assignee: agent) }
+
+    before { AccountUser.find_by(user: agent, account: account).update(custom_role: setor_role) }
+
+    it 'runs a constant number of queries regardless of how many members are passed' do
+      few_members = inbox.members.to_a
+      query_count_few = count_queries { described_class.visible_members(conversation, few_members) }
+
+      more_members = Array.new(5) do
+        member = create(:user, account: account, role: :agent)
+        create(:inbox_member, user: member, inbox: inbox)
+        member
+      end
+      many_members = few_members + more_members
+
+      query_count_many = count_queries { described_class.visible_members(conversation, many_members) }
+
+      expect(query_count_many).to eq(query_count_few)
+    end
+
+    def count_queries(&)
+      count = 0
+      counter_f = ->(_name, _started, _finished, _unique_id, payload) { count += 1 unless payload[:name].in?(%w[SCHEMA CACHE]) }
+      ActiveSupport::Notifications.subscribed(counter_f, 'sql.active_record', &)
+      count
     end
   end
 end
