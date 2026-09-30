@@ -222,7 +222,7 @@ describe NotificationListener do
   # continuam avisando todos os membros, igual ao comportamento anterior.
   describe 'conversation_created - role-based visibility on Channel::Whatsapp inboxes (#2084)' do
     let(:event_name) { :'conversation.created' }
-    let!(:whatsapp_inbox) { create(:channel_whatsapp, account: account).inbox }
+    let!(:whatsapp_inbox) { create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud').inbox }
     let!(:setor_role) { create(:custom_role, account: account, permissions: %w[conversation_participating_manage]) }
     let!(:all_role) { create(:custom_role, account: account, permissions: %w[conversation_manage]) }
     let!(:setor_member) { create(:user, account: account) }

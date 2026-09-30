@@ -758,7 +758,7 @@ describe SearchService do
   # respeita o papel do usuario. Outras caixas e usuarios sem papel restrito
   # continuam identicos ao comportamento anterior.
   describe 'role-based visibility on Channel::Whatsapp inboxes (#2083)' do
-    let!(:whatsapp_inbox) { create(:channel_whatsapp, account: account).inbox }
+    let!(:whatsapp_inbox) { create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud').inbox }
     let!(:setor_role) { create(:custom_role, account: account, permissions: %w[conversation_participating_manage]) }
     let!(:colleague) { create(:user, account: account, role: :agent) }
     let!(:mine_conversation) { create(:conversation, account: account, inbox: whatsapp_inbox, assignee: user) }

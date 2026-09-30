@@ -7,7 +7,7 @@ require 'rails_helper'
 RSpec.describe Enterprise::SearchService do
   let(:account) { create(:account) }
   let(:user) { create(:user, account: account, role: :agent) }
-  let(:whatsapp_inbox) { create(:channel_whatsapp, account: account).inbox }
+  let(:whatsapp_inbox) { create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud').inbox }
   let(:setor_role) { create(:custom_role, account: account, permissions: %w[conversation_participating_manage]) }
   let(:colleague) { create(:user, account: account, role: :agent) }
   let!(:mine_conversation) { create(:conversation, account: account, inbox: whatsapp_inbox, assignee: user) }

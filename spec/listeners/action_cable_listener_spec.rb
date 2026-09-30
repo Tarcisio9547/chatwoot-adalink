@@ -237,7 +237,7 @@ describe ActionCableListener do
   # permite ver a conversa. Outras caixas continuam broadcastando para todos
   # os membros, igual ao comportamento anterior.
   describe 'role-based visibility on Channel::Whatsapp inboxes (#2084)' do
-    let!(:whatsapp_inbox) { create(:channel_whatsapp, account: account).inbox }
+    let!(:whatsapp_inbox) { create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud').inbox }
     let!(:setor_role) { create(:custom_role, account: account, permissions: %w[conversation_participating_manage]) }
     let!(:all_role) { create(:custom_role, account: account, permissions: %w[conversation_manage]) }
     let!(:setor_member) { create(:user, account: account, role: :agent) }
