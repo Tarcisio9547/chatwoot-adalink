@@ -17,20 +17,6 @@
 # restringindo a Channel::Whatsapp.
 class Conversations::RoleVisibility
   class << self
-    # Um usuário específico pode ver esta conversa?
-    def visible_to?(user, conversation)
-      return true if user.is_a?(AgentBot)
-
-      account_user = account_user_for(user, conversation.account_id)
-      return false if account_user.blank?
-      return true if account_user.administrator?
-      return true if account_user.custom_role_id.blank?
-
-      tier_grants_access?(permission_tier(account_user.permissions), conversation, user.id) do
-        conversation.conversation_participants.exists?(user_id: user.id)
-      end
-    end
-
     # Dado um conjunto de usuários (tipicamente membros da inbox), devolve só
     # quem pode ver a conversa. Não adiciona ninguém de fora da lista — quem
     # chama decide se soma administradores que não são membros (o
@@ -69,17 +55,11 @@ class Conversations::RoleVisibility
       end
     end
 
-    # Usado pelo ActionCableListener (#2084, item 7): membro cujo ÚNICO
+    # Usado pelo ActionCableListener (#2084, item 7): membros cujo ÚNICO
     # acesso à conversa vem de conversation_unassigned_manage - ou seja, só
-    # vê enquanto ela estiver sem atendente. Serve pra saber quem precisa do
-    # evento assignee_changed quando a conversa deixa de estar sem atendente.
-    def unassigned_manage_only?(member, account_id)
-      account_user = account_user_for(member, account_id)
-      unassigned_manage_only_account_user?(account_user)
-    end
-
-    # Mesma checagem que unassigned_manage_only?, mas em lote (1 query pro
-    # conjunto inteiro de membros, não 1 por membro).
+    # vêem enquanto ela estiver sem atendente. Serve pra saber quem precisa
+    # do evento assignee_changed quando a conversa deixa de estar sem
+    # atendente. Em lote (1 query pro conjunto inteiro de membros).
     def unassigned_manage_only_members(members, account_id)
       members = members.to_a.uniq
       return [] if members.empty?
@@ -90,8 +70,11 @@ class Conversations::RoleVisibility
 
     # Agente sem custom_role e administrador não passam por nenhuma query
     # extra (busca sai cedo antes de tocar em ConversationParticipant/ids).
-    def unrestricted?(user, account_id)
-      account_user = account_user_for(user, account_id)
+    # account_user é opcional: quem chama passa o AccountUser que já tem em
+    # memória (ex.: SearchService#account_user) pra evitar um find_by
+    # redundante a cada chamada.
+    def unrestricted?(user, account_id, account_user: :not_given)
+      account_user = account_user_for(user, account_id) if account_user == :not_given
       account_user.blank? || account_user.administrator? || account_user.custom_role_id.blank?
     end
 
@@ -113,24 +96,29 @@ class Conversations::RoleVisibility
     end
 
     def member_visible?(member, conversation, account_user, participant_user_ids)
+      unrestricted = unrestricted_member?(member, account_user)
+      return unrestricted unless unrestricted.nil?
+
+      visible_by_tier?(permission_tier(account_user.permissions), member, conversation, participant_user_ids)
+    end
+
+    # Casos que já decidem visibilidade sem olhar o tier de permissão: true
+    # (bot/admin/sem custom_role) ou false (sem AccountUser na conta). nil
+    # significa "segue pro tier", que member_visible? resolve depois.
+    def unrestricted_member?(member, account_user)
       return true if member.is_a?(AgentBot)
       return false if account_user.blank?
       return true if account_user.administrator?
       return true if account_user.custom_role_id.blank?
 
-      tier_grants_access?(permission_tier(account_user.permissions), conversation, member.id) { participant_user_ids.include?(member.id) }
+      nil
     end
 
-    # Regra comum aos dois modos de checagem (usuário único em visible_to?,
-    # membro em lote em member_visible?): dado o "tier" de permissão já
-    # resolvido, decide se target_id vê a conversa. participant? é um bloco
-    # porque cada chamador resolve isso de um jeito diferente (query pontual
-    # vs. Set pré-carregado em lote).
-    def tier_grants_access?(tier, conversation, target_id)
+    def visible_by_tier?(tier, member, conversation, participant_user_ids)
       case tier
       when :manage_all then true
-      when :unassigned then conversation.assignee_id.nil? || conversation.assignee_id == target_id
-      when :participating then conversation.assignee_id == target_id || yield
+      when :unassigned then conversation.assignee_id.nil? || conversation.assignee_id == member.id
+      when :participating then conversation.assignee_id == member.id || participant_user_ids.include?(member.id)
       else false
       end
     end

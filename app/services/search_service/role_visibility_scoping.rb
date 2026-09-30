@@ -17,7 +17,7 @@ module SearchService::RoleVisibilityScoping
   # filtro de inbox_id — assim compõe em AND com qualquer filtro adicional
   # (ex.: apply_inbox_id_filter) sem risco de sobrescrita.
   def apply_role_visibility_to_conversations(conversations_query)
-    return conversations_query if Conversations::RoleVisibility.unrestricted?(current_user, current_account.id)
+    return conversations_query if Conversations::RoleVisibility.unrestricted?(current_user, current_account.id, account_user: account_user)
 
     whatsapp_inbox_ids = current_account.inboxes.where(channel_type: 'Channel::Whatsapp').pluck(:id) & accessable_inbox_ids
     return conversations_query if whatsapp_inbox_ids.empty?
@@ -34,7 +34,7 @@ module SearchService::RoleVisibilityScoping
   # acesso a todas as inboxes (admin ou dono de todas); só refinamos as
   # inboxes WhatsApp que o usuário realmente acessa.
   def apply_role_visibility_to_messages(messages_query)
-    return messages_query if Conversations::RoleVisibility.unrestricted?(current_user, current_account.id)
+    return messages_query if Conversations::RoleVisibility.unrestricted?(current_user, current_account.id, account_user: account_user)
 
     accessible_whatsapp_inbox_ids = current_account.inboxes.where(channel_type: 'Channel::Whatsapp').pluck(:id)
     accessible_whatsapp_inbox_ids &= accessable_inbox_ids unless should_skip_inbox_filtering?

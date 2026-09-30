@@ -37,18 +37,31 @@ module Enterprise::SearchService
   # apply_inbox_filter, que roda depois e pode sobrescrever essa chave):
   # a condição vai em conditions[:_or], que compõe em AND com o resto.
   def apply_role_visibility_to_where_conditions(conditions)
-    return conditions if Conversations::RoleVisibility.unrestricted?(current_user, current_account.id)
+    return conditions if Conversations::RoleVisibility.unrestricted?(current_user, current_account.id, account_user: account_user)
 
     whatsapp_inbox_ids = current_account.inboxes.where(channel_type: 'Channel::Whatsapp').pluck(:id)
     whatsapp_inbox_ids &= accessable_inbox_ids unless should_skip_inbox_filtering?
     return conditions if whatsapp_inbox_ids.empty?
 
     other_inbox_ids = (conditions[:inbox_id] || current_account.inboxes.pluck(:id)) - whatsapp_inbox_ids
-    whatsapp_conversations = current_account.conversations.where(inbox_id: whatsapp_inbox_ids)
+    whatsapp_conversations = time_scoped_whatsapp_conversations(whatsapp_inbox_ids)
     visible_ids = Conversations::RoleVisibility.filter(whatsapp_conversations, current_user, current_account).pluck(:id)
 
     conditions[:_or] = [{ inbox_id: other_inbox_ids }, { conversation_id: visible_ids }]
     conditions
+  end
+
+  # Adalink: restringe as conversas WhatsApp candidatas ao mesmo período que
+  # a busca de mensagens já aplica (enforce_time_limit/cap_until_time), por
+  # last_activity_at. Sem isso, o papel "Sem atendente" (que enxerga toda
+  # conversa sem atendente, não só as suas) plucava visible_ids do histórico
+  # inteiro da conta — uma lista que só cresce e nunca aparece na busca
+  # mesmo assim, já que created_at das mensagens fica de fora do período.
+  def time_scoped_whatsapp_conversations(whatsapp_inbox_ids)
+    scope = current_account.conversations.where(inbox_id: whatsapp_inbox_ids)
+    scope = scope.where('conversations.last_activity_at >= ?', enforce_time_limit(params[:since]))
+    scope = scope.where('conversations.last_activity_at <= ?', cap_until_time(params[:until])) if params[:until].present?
+    scope
   end
 
   def apply_filters(where_conditions)

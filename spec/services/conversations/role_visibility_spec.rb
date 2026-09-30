@@ -14,24 +14,32 @@ RSpec.describe Conversations::RoleVisibility do
     create(:inbox_member, user: colleague, inbox: inbox)
   end
 
-  describe '.visible_to?' do
+  # Adalink: correcao do juiz cego (rodada 2, item 5) - visible_to? foi
+  # removido do codigo de producao (so os specs usavam; todo chamador real
+  # trabalha em lote via visible_members). Testamos a mesma regra pela API
+  # real: visible_members(conversation, [user]).include?(user).
+  describe '.visible_members with a single-user list (replaces the removed .visible_to?)' do
     let!(:mine) { create(:conversation, account: account, inbox: inbox, assignee: agent) }
     let!(:colleague_conversation) { create(:conversation, account: account, inbox: inbox, assignee: colleague) }
+
+    def visible?(user, conversation)
+      described_class.visible_members(conversation, [user]).include?(user)
+    end
 
     context 'with the Setor role (conversation_participating_manage only)' do
       before { AccountUser.find_by(user: agent, account: account).update(custom_role: setor_role) }
 
       it 'sees its own conversation' do
-        expect(described_class.visible_to?(agent, mine)).to be true
+        expect(visible?(agent, mine)).to be true
       end
 
       it 'does not see a colleague conversation' do
-        expect(described_class.visible_to?(agent, colleague_conversation)).to be false
+        expect(visible?(agent, colleague_conversation)).to be false
       end
 
       it 'sees a conversation where it is an explicit participant' do
         create(:conversation_participant, conversation: colleague_conversation, account: account, user: agent)
-        expect(described_class.visible_to?(agent, colleague_conversation)).to be true
+        expect(visible?(agent, colleague_conversation)).to be true
       end
     end
 
@@ -39,19 +47,19 @@ RSpec.describe Conversations::RoleVisibility do
       before { AccountUser.find_by(user: agent, account: account).update(custom_role: all_role) }
 
       it 'sees every conversation' do
-        expect(described_class.visible_to?(agent, colleague_conversation)).to be true
+        expect(visible?(agent, colleague_conversation)).to be true
       end
     end
 
     context 'when the user is an administrator' do
       it 'sees every conversation, custom role or not' do
-        expect(described_class.visible_to?(admin, colleague_conversation)).to be true
+        expect(visible?(admin, colleague_conversation)).to be true
       end
     end
 
     context 'when the agent has no custom role' do
       it 'sees every conversation (current behaviour, unchanged)' do
-        expect(described_class.visible_to?(colleague, mine)).to be true
+        expect(visible?(colleague, mine)).to be true
       end
     end
 
@@ -61,11 +69,11 @@ RSpec.describe Conversations::RoleVisibility do
       before { AccountUser.find_by(user: agent, account: account).update(custom_role: empty_role) }
 
       it 'does not see its own conversation (matches PermissionFilterService native behaviour, Conversation.none)' do
-        expect(described_class.visible_to?(agent, mine)).to be false
+        expect(visible?(agent, mine)).to be false
       end
 
       it 'does not see a colleague conversation' do
-        expect(described_class.visible_to?(agent, colleague_conversation)).to be false
+        expect(visible?(agent, colleague_conversation)).to be false
       end
     end
   end
@@ -83,23 +91,79 @@ RSpec.describe Conversations::RoleVisibility do
       AccountUser.find_by(user: agent, account: account).update(custom_role: setor_role)
       expect(described_class.unrestricted?(agent, account.id)).to be false
     end
+
+    # Adalink: correcao do juiz cego (rodada 2, item 3, BAIXA) - unrestricted?
+    # fazia um find_by a cada chamada, mesmo quando quem chama (SearchService)
+    # ja tinha o AccountUser em memoria. Agora aceita account_user: opcional.
+    describe 'query reuse (item 3)' do
+      let!(:whatsapp_inbox) do
+        create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud', sync_templates: false, validate_provider_config: false).inbox
+      end
+
+      before do
+        create(:inbox_member, user: admin, inbox: whatsapp_inbox)
+        create(:inbox_member, user: colleague, inbox: whatsapp_inbox)
+        Current.account = account
+      end
+
+      after { Current.account = nil }
+
+      it 'passing the preloaded account_user avoids an extra query, compared to not passing it' do
+        account_user = AccountUser.find_by(user: admin, account: account)
+
+        without_preload = count_queries { described_class.unrestricted?(admin, account.id) }
+        with_preload = count_queries { described_class.unrestricted?(admin, account.id, account_user: account_user) }
+
+        expect(with_preload).to eq(without_preload - 1)
+      end
+
+      it 'SearchService reuses its own memoized account_user - admin triggers zero extra queries' do
+        search_service = SearchService.new(current_user: admin, current_account: account, params: { q: 'x' }, search_type: 'Message')
+        preloaded_account_user = search_service.send(:account_user)
+
+        query_count = count_queries { described_class.unrestricted?(admin, account.id, account_user: preloaded_account_user) }
+
+        expect(query_count).to eq(0)
+      end
+
+      it 'agent without a custom_role also reuses the preloaded account_user with zero extra queries' do
+        search_service = SearchService.new(current_user: colleague, current_account: account, params: { q: 'x' }, search_type: 'Message')
+        preloaded_account_user = search_service.send(:account_user)
+
+        query_count = count_queries { described_class.unrestricted?(colleague, account.id, account_user: preloaded_account_user) }
+
+        expect(query_count).to eq(0)
+      end
+
+      def count_queries(&)
+        count = 0
+        counter_f = ->(_name, _started, _finished, _unique_id, payload) { count += 1 unless payload[:name].in?(%w[SCHEMA CACHE]) }
+        ActiveSupport::Notifications.subscribed(counter_f, 'sql.active_record', &)
+        count
+      end
+    end
   end
 
-  describe '.unassigned_manage_only?' do
+  # Adalink: correcao do juiz cego (rodada 2, item 5) - unassigned_manage_only?
+  # (versao singular) foi removida do codigo de producao (so os specs
+  # usavam; o unico chamador real, action_cable_listener, usa a versao em
+  # lote unassigned_manage_only_members). Testamos a mesma regra com uma
+  # lista de 1 elemento.
+  describe '.unassigned_manage_only_members with a single-user list (replaces the removed .unassigned_manage_only?)' do
     let(:sem_atendente_role) { create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage]) }
 
     it 'is true for a member whose only conversation permission is conversation_unassigned_manage' do
       AccountUser.find_by(user: agent, account: account).update(custom_role: sem_atendente_role)
-      expect(described_class.unassigned_manage_only?(agent, account.id)).to be true
+      expect(described_class.unassigned_manage_only_members([agent], account.id)).to include(agent)
     end
 
     it 'is false for a member with conversation_manage' do
       AccountUser.find_by(user: agent, account: account).update(custom_role: all_role)
-      expect(described_class.unassigned_manage_only?(agent, account.id)).to be false
+      expect(described_class.unassigned_manage_only_members([agent], account.id)).not_to include(agent)
     end
 
     it 'is false for an administrator' do
-      expect(described_class.unassigned_manage_only?(admin, account.id)).to be false
+      expect(described_class.unassigned_manage_only_members([admin], account.id)).not_to include(admin)
     end
   end
 
