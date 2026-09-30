@@ -53,17 +53,24 @@ jobs:
   # Backend tests with parallelization
   backend-tests:
     runs-on: ubuntu-latest
+    # Sem isso, o job usa o default do GitHub Actions (360min = 6h). Achado
+    # 30/09: mesmo com DISABLE_BOOTSNAP=1 (ver comentário abaixo), parte dos
+    # shards ainda trava por dezenas de minutos de forma intermitente — causa
+    # raiz exata (bootsnap+Ruby 3.4? outra coisa?) não fechada ainda. Isso
+    # limita o desperdício de CI enquanto a causa não é encontrada: falha
+    # rápido e visível em vez de ficar preso silenciosamente por horas.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         ci_node_total: [16]
         ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-    # bootsnap (mesmo em 1.26.0) trava indefinidamente o boot do Rails em
-    # Ruby 3.4.4 neste ambiente — reproduzido localmente via Docker
-    # (Bundler.require nunca retorna com bootsnap ativo; com
-    # DISABLE_BOOTSNAP=1 retorna em segundos). O mesmo padrão de metade dos
-    # shards ficando presos, sem erro visível, apareceu em runs reais deste
-    # workflow. bootsnap só acelera boot; não afeta corretude dos testes.
+    # bootsnap (mesmo em 1.26.0) trava o boot do Rails em Ruby 3.4.4 de forma
+    # reproduzível localmente via Docker (Bundler.require nunca retorna com
+    # bootsnap ativo; com DISABLE_BOOTSNAP=1 retorna em segundos). Mantido
+    # mesmo não sendo suficiente sozinho (ver timeout-minutes acima) — reduz
+    # a incidência do hang na maioria dos shards. bootsnap só acelera boot;
+    # não afeta corretude dos testes.
     env:
       DISABLE_BOOTSNAP: '1'
 
