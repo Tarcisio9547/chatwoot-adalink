@@ -245,6 +245,11 @@ describe NotificationListener do
 
       AccountUser.find_by(user: setor_member, account: account).update(custom_role: setor_role)
       AccountUser.find_by(user: all_member, account: account).update(custom_role: all_role)
+
+      # HACK: to reload conversation inbox members (mesmo padrao do
+      # action_cable_listener_spec.rb) - os membros sao adicionados acima,
+      # depois da conversa ja ter carregado a associacao inbox.
+      whatsapp_conversation.inbox.reload
     end
 
     it 'does not notify a member with the Setor role about a colleague conversation' do
@@ -280,6 +285,7 @@ describe NotificationListener do
         setting.selected_email_flags = [:email_conversation_creation]
         setting.selected_push_flags = []
         setting.save!
+        other_inbox_conversation.inbox.reload
       end
 
       it 'keeps notifying every inbox member, role or not (current behaviour, unchanged)' do

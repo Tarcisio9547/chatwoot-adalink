@@ -253,6 +253,11 @@ describe ActionCableListener do
 
       AccountUser.find_by(user: setor_member, account: account).update(custom_role: setor_role)
       AccountUser.find_by(user: all_member, account: account).update(custom_role: all_role)
+
+      # HACK: to reload conversation inbox members (mesmo padrao ja usado
+      # pelos outros testes deste arquivo) - os membros sao adicionados
+      # depois da conversa ja ter carregado a associacao inbox.
+      whatsapp_conversation.inbox.reload
     end
 
     describe '#conversation_created' do
@@ -304,6 +309,7 @@ describe ActionCableListener do
         # setor_member TO agent, and confirm setor_member still gets notified so their UI can
         # drop the conversation from the list.
         conversation = create(:conversation, account: account, inbox: whatsapp_inbox, assignee: setor_member)
+        conversation.inbox.reload
         conversation.update!(assignee: agent)
         changed_attributes = { 'assignee_id' => [setor_member.id, agent.id] }
         event = Events::Base.new(event_name, Time.zone.now, conversation: conversation, changed_attributes: changed_attributes)
@@ -319,7 +325,10 @@ describe ActionCableListener do
     context 'when the inbox is not Channel::Whatsapp' do
       let!(:other_inbox_conversation) { create(:conversation, account: account, inbox: inbox, assignee: agent) }
 
-      before { create(:inbox_member, user: setor_member, inbox: inbox) }
+      before do
+        create(:inbox_member, user: setor_member, inbox: inbox)
+        other_inbox_conversation.inbox.reload
+      end
 
       it 'keeps sending the event to every inbox member, role or not (current behaviour, unchanged)' do
         event = Events::Base.new(:'conversation.created', Time.zone.now, conversation: other_inbox_conversation)

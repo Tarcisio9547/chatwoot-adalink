@@ -22,6 +22,11 @@ RSpec.describe Enterprise::SearchService do
   before do
     create(:inbox_member, user: user, inbox: whatsapp_inbox)
     create(:inbox_member, user: colleague, inbox: whatsapp_inbox)
+    Current.account = account
+  end
+
+  after do
+    Current.account = nil
   end
 
   describe '#build_where_conditions (private)' do
