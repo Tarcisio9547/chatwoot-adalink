@@ -54,3 +54,5 @@ class NotificationListener < BaseListener
     Messages::NewMessageNotificationService.new(message: message).perform
   end
 end
+
+NotificationListener.prepend_mod_with('NotificationListener')
