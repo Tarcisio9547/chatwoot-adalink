@@ -82,23 +82,9 @@ module CaptainUsageLogger
   end
 end
 
-require 'net/http'
-
-# Força a resolução/autoload de Captain::BaseTaskService (e o prepend_mod_with que
-# lib/captain/base_task_service.rb roda no fim do próprio arquivo) FORA do bloco
-# to_prepare. Referenciar a constante autoloaded de dentro de to_prepare dispara
-# esse autoload no ponto mais frágil do boot do Rails (ActiveSupport::Reloader.prepare!,
-# rodando antes de eager_load!), e o 01_inject_enterprise_edition_module.rb do próprio
-# Chatwoot (`const_get_maybe_false`) quebra com NoMethodError nesse timing porque
-# `mod&.const_defined?` só protege contra nil, não contra o `false` que ele mesmo
-# pode retornar. Mesmo bug e mesmo fix que o Chatwoot aplicou em
-# https://github.com/chatwoot/chatwoot/pull/15785. Mantendo a referência aqui,
-# fora do to_prepare, garante que esse autoload aconteça durante o carregamento
-# normal dos initializers, não durante o reloader.
-Captain::BaseTaskService
-
 # `to_prepare` re-executa em cada reload de código (dev mode) e uma vez em prod.
 # Garante que o prepend sobrevive a class reloads.
 Rails.application.config.to_prepare do
+  require 'net/http'
   Captain::BaseTaskService.prepend(CaptainUsageLogger) unless Captain::BaseTaskService.include?(CaptainUsageLogger)
 end

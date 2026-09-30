@@ -31,11 +31,22 @@ module ChatwootApp
     ENV.fetch('HELPCENTER_URL', nil) || ENV.fetch('FRONTEND_URL', nil)
   end
 
+  # `enterprise?` desbloqueia as FEATURES enterprise (licenciamento), mas neste fork
+  # o código das features enterprise foi movido para dentro dos namespaces normais
+  # (ex.: enterprise/lib/captain/response_schema.rb define `Captain::ResponseSchema`,
+  # não `Enterprise::Captain::ResponseSchema`) — não existe nenhum `module Enterprise`
+  # neste repositório. `extensions` alimenta InjectEnterpriseEditionModule
+  # (config/initializers/01_inject_enterprise_edition_module.rb), que resolve
+  # `Enterprise::<algo>` para fazer prepend/extend/include condicional. Incluir
+  # 'enterprise' aqui sem o namespace existir faz `const_get_maybe_false` (bug do
+  # próprio Chatwoot: `mod&.const_defined?` só protege contra nil, não contra o
+  # `false` que ele mesmo retorna) explodir com NoMethodError sempre que alguma
+  # classe com `prepend_mod_with` for autoloaded num contexto que expõe o timing
+  # certo — foi o que travava o CI (ver PR de fix). custom?/'custom' segue igual:
+  # aponta pro namespace Custom real, que aí sim existe quando a pasta custom/ existe.
   def self.extensions
     if custom?
-      %w[enterprise custom]
-    elsif enterprise?
-      %w[enterprise]
+      %w[custom]
     else
       %w[]
     end
