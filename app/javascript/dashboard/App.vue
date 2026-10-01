@@ -87,7 +87,9 @@ export default {
     if (this.reconnectService) {
       this.reconnectService.disconnect();
     }
+    // eslint-disable-next-line no-underscore-dangle
     if (this._crmNavigationHandler) {
+      // eslint-disable-next-line no-underscore-dangle
       window.removeEventListener('message', this._crmNavigationHandler);
     }
   },
@@ -104,24 +106,37 @@ export default {
       // Padronização do prefixo: tudo que troca com o parent CRM usa 'trama-'.
       // Mantém aliases 'adalink-' por compat retroativa enquanto o CRM em prod
       // ainda pode estar enviando os nomes antigos durante a janela de deploy.
+      // eslint-disable-next-line no-underscore-dangle
       this._crmNavigationHandler = event => {
         const { type } = event.data || {};
-        if ((type === 'trama-navigate' || type === 'adalink-navigate') && event.data.route) {
+        if (
+          (type === 'trama-navigate' || type === 'adalink-navigate') &&
+          event.data.route
+        ) {
           this.router.push(event.data.route);
         }
-        if ((type === 'trama-availability-changed' || type === 'adalink-availability-changed') && event.data.availability) {
+        if (
+          (type === 'trama-availability-changed' ||
+            type === 'adalink-availability-changed') &&
+          event.data.availability
+        ) {
           this.store.dispatch('updateAvailability', {
             availability: event.data.availability,
             account_id: this.currentAccountId,
           });
         }
-        if ((type === 'trama-auto-offline-changed' || type === 'adalink-auto-offline-changed') && event.data.autoOffline !== undefined) {
+        if (
+          (type === 'trama-auto-offline-changed' ||
+            type === 'adalink-auto-offline-changed') &&
+          event.data.autoOffline !== undefined
+        ) {
           this.store.dispatch('updateAutoOffline', {
             accountId: this.currentAccountId,
             autoOffline: event.data.autoOffline,
           });
         }
       };
+      // eslint-disable-next-line no-underscore-dangle
       window.addEventListener('message', this._crmNavigationHandler);
     },
     setLocale(locale) {

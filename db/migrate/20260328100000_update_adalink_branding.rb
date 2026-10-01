@@ -10,10 +10,7 @@ class UpdateAdalinkBranding < ActiveRecord::Migration[7.0]
     }
 
     configs.each do |name, value|
-      config = InstallationConfig.find_by(name: name)
-      if config
-        config.update!(value: value)
-      end
+      InstallationConfig.find_by(name: name)&.update!(value: value)
     end
   end
 

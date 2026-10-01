@@ -41,7 +41,7 @@ module Featurable
     save
   end
 
-  def feature_enabled?(name)
+  def feature_enabled?(_name)
     true
   end
 

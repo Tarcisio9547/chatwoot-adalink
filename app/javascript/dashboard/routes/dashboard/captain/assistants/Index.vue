@@ -21,8 +21,12 @@ const dialogType = ref('');
 const uiFlags = useMapGetter('captainAssistants/getUIFlags');
 const isFetching = computed(() => uiFlags.value.fetchingList);
 
-const assistants = computed(() => store.getters['captainAssistants/getRecords']);
-const isEmpty = computed(() => !isFetching.value && assistants.value.length === 0);
+const assistants = computed(
+  () => store.getters['captainAssistants/getRecords']
+);
+const isEmpty = computed(
+  () => !isFetching.value && assistants.value.length === 0
+);
 
 const selectedAssistant = ref(null);
 const createAssistantDialog = ref(null);
@@ -67,6 +71,7 @@ const handleCardAction = ({ action, id }) => {
       params: { accountId, assistantId: id },
     });
   } else if (action === 'delete') {
+    // eslint-disable-next-line no-restricted-globals
     if (confirm('Tem certeza que deseja excluir este assistente?')) {
       store.dispatch('captainAssistants/delete', id).then(() => {
         useAlert('Assistente excluído com sucesso');
@@ -76,6 +81,7 @@ const handleCardAction = ({ action, id }) => {
   }
 };
 
+// eslint-disable-next-line no-unused-vars
 const handleCardClick = id => {
   router.push({
     name: 'captain_assistants_responses_index',
@@ -119,8 +125,8 @@ const handleCardClick = id => {
       <div class="grid gap-3 p-4">
         <AssistantCard
           v-for="assistant in assistants"
-          :key="assistant.id"
           :id="assistant.id"
+          :key="assistant.id"
           :name="assistant.name"
           :description="assistant.description"
           :updated-at="assistant.updated_at"

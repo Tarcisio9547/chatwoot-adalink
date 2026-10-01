@@ -1,6 +1,8 @@
 # Auto-login via API access token for iframe embedding
 # GET /sso/login?token=xxx
-class TokenLoginController < ActionController::Base
+# Herda de ActionController::Base de propósito: o login por token não passa
+# pela autenticação do ApplicationController.
+class TokenLoginController < ActionController::Base # rubocop:disable Rails/ApplicationController
   def create
     access_token = AccessToken.find_by(token: params[:token])
 
@@ -11,10 +13,9 @@ class TokenLoginController < ActionController::Base
       login_path += "&sso_account_id=#{params[:account_id]}" if params[:account_id].present?
       # Force relative redirect — critical for same-origin proxy to work
       response.headers['Location'] = login_path
-      head :found
     else
       response.headers['Location'] = '/app/login'
-      head :found
     end
+    head :found
   end
 end

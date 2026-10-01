@@ -32,20 +32,24 @@ export default {
     // Support iframe token-based auth (no cookies needed)
     const urlToken = new URLSearchParams(window.location.search).get('token');
     if (urlToken) {
+      // eslint-disable-next-line no-underscore-dangle
       window.__cw_iframe_token = urlToken;
       localStorage.setItem('cw_iframe_token', urlToken);
       return true;
     }
     const storedToken = localStorage.getItem('cw_iframe_token');
     if (storedToken) {
+      // eslint-disable-next-line no-underscore-dangle
       window.__cw_iframe_token = storedToken;
       return true;
     }
+    // eslint-disable-next-line no-underscore-dangle
     if (window.__cw_iframe_token) return true;
     return !!Cookies.get('cw_d_session_info');
   },
   getAuthData() {
     // If using iframe token, return token-based auth headers
+    // eslint-disable-next-line no-underscore-dangle
     if (window.__cw_iframe_token) {
       return {
         'access-token': '',
@@ -53,6 +57,7 @@ export default {
         client: '',
         expiry: '',
         uid: '',
+        // eslint-disable-next-line no-underscore-dangle
         api_access_token: window.__cw_iframe_token,
       };
     }

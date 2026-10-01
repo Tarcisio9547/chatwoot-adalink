@@ -42,6 +42,7 @@ export default {
   computed: {
     ...mapGetters({
       isOnChatwootCloud: 'globalConfig/isOnChatwootCloud',
+      // eslint-disable-next-line vue/no-unused-properties
       isFeatureEnabledonAccount: 'accounts/isFeatureEnabledonAccount',
       records: 'sla/getSLA',
       currentUser: 'getCurrentUser',

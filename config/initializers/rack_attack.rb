@@ -96,9 +96,7 @@ class Rack::Attack
   # ### Prevent Brute-Force Login Attacks ###
   # Exclude MFA verification and SSO attempts from regular login throttling
   throttle('login/ip', limit: 5, period: 5.minutes) do |req|
-    if req.path_without_extentions == '/auth/sign_in' && req.post? && req.params['mfa_token'].blank? && req.params['sso_auth_token'].blank?
-      req.ip
-    end
+    req.ip if req.path_without_extentions == '/auth/sign_in' && req.post? && req.params['mfa_token'].blank? && req.params['sso_auth_token'].blank?
   end
 
   throttle('login/email', limit: 10, period: 15.minutes) do |req|
