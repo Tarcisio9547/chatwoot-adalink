@@ -75,6 +75,56 @@ RSpec.describe Enterprise::SearchService do
       end
     end
 
+    context 'when the agent has the "Sem atendente" role and the search has an until bound' do
+      before { AccountUser.find_by(user: user, account: account).update(custom_role: sem_atendente_role) }
+
+      let(:search_service) do
+        SearchService.new(current_user: user, current_account: account,
+                          params: { q: 'zebraxpto', until: 10.days.ago.to_i.to_s }, search_type: 'Message')
+      end
+
+      # A mensagem esta dentro do periodo, mas a conversa teve atividade depois
+      # do limite final. Excluir a conversa por last_activity_at <= until
+      # esconderia um resultado legitimo; so o limite inicial e seguro (uma
+      # mensagem criada depois de `since` implica last_activity_at >= since).
+      it 'keeps a conversation whose last activity is after the until bound' do
+        unassigned_conversation.update!(last_activity_at: 1.day.ago)
+
+        conditions = search_service.send(:build_where_conditions)
+
+        visible_condition = conditions[:_or].find { |c| c.key?(:conversation_id) }
+        expect(visible_condition[:conversation_id]).to include(unassigned_conversation.id)
+      end
+    end
+
+    context 'when the visible conversation list for the "Sem atendente" role is large' do
+      before do
+        AccountUser.find_by(user: user, account: account).update(custom_role: sem_atendente_role)
+        stub_const('Enterprise::SearchService::ROLE_VISIBILITY_CONVERSATION_LIMIT', 2)
+        allow(Rails.logger).to receive(:warn)
+      end
+
+      it 'keeps only the most recent conversations by last_activity_at and logs the cut' do
+        mine_conversation.update!(last_activity_at: 3.days.ago)
+        unassigned_conversation.update!(last_activity_at: 1.day.ago)
+        newest_unassigned = create(:conversation, account: account, inbox: whatsapp_inbox, assignee: nil, last_activity_at: 1.hour.ago)
+
+        conditions = search_service.send(:build_where_conditions)
+
+        visible_condition = conditions[:_or].find { |c| c.key?(:conversation_id) }
+        expect(visible_condition[:conversation_id]).to contain_exactly(newest_unassigned.id, unassigned_conversation.id)
+        expect(Rails.logger).to have_received(:warn).with(/role visibility.*limit/i)
+      end
+
+      it 'does not log when the list fits in the limit' do
+        stub_const('Enterprise::SearchService::ROLE_VISIBILITY_CONVERSATION_LIMIT', 10)
+
+        search_service.send(:build_where_conditions)
+
+        expect(Rails.logger).not_to have_received(:warn).with(/role visibility/i)
+      end
+    end
+
     context 'when the user is an administrator' do
       let(:admin) { create(:user, account: account, role: :administrator) }
       let(:search_service) do
