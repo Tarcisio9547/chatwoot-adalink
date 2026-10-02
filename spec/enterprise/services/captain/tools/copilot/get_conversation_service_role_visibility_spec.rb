@@ -5,6 +5,10 @@ require 'rails_helper'
 # na conta, nao se o usuario podia ver AQUELA conversa especifica. Um
 # agente com papel Setor conseguia pedir pro Copilot a conversa de um
 # colega (com mensagens privadas) numa caixa Channel::Whatsapp.
+# rubocop:disable RSpec/DescribeMethod, RSpec/SpecFilePathFormat -- arquivo
+# separado de get_conversation_service_spec.rb (upstream) pra nao misturar
+# testes do fork com os do Chatwoot e evitar conflito de merge; cobre o
+# comportamento de visibilidade por papel, nao um unico metodo.
 describe Captain::Tools::Copilot::GetConversationService, 'role visibility (item 5)' do
   let(:account) { create(:account) }
   let(:assistant) { create(:captain_assistant, account: account) }
@@ -26,8 +30,7 @@ describe Captain::Tools::Copilot::GetConversationService, 'role visibility (item
     end
 
     it "does not return a colleague's conversation to a Setor-role agent" do
-      colleague_conversation = create(:conversation, account: account, inbox: whatsapp_inbox, assignee: colleague,
-                                                      identifier: SecureRandom.hex(6))
+      colleague_conversation = create(:conversation, account: account, inbox: whatsapp_inbox, assignee: colleague)
       create(:message, conversation: colleague_conversation, message_type: 'outgoing', content: 'segredo do colega', private: true)
 
       result = service.execute(conversation_id: colleague_conversation.display_id)
@@ -71,3 +74,4 @@ describe Captain::Tools::Copilot::GetConversationService, 'role visibility (item
     end
   end
 end
+# rubocop:enable RSpec/DescribeMethod, RSpec/SpecFilePathFormat
