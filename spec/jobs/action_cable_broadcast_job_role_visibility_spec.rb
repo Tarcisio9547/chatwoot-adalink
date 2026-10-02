@@ -120,5 +120,71 @@ describe 'ActionCableBroadcastJob role visibility on delayed delivery (item 2)' 
       expect(payload[:data][:messages].first[:content]).to eq(new_message.content)
     end
   end
+
+  # O override so pode custar consultas extras quando o evento e de conversa
+  # E a caixa e WhatsApp. O resto dos broadcasts (a maioria) tem que custar o
+  # mesmo que o job upstream.
+  describe 'query count' do
+    let!(:other_inbox) { create(:inbox, account: account) }
+    let!(:other_conversation) { create(:conversation, account: account, inbox: other_inbox, assignee: agent_a) }
+    let(:members) { [agent_a.pubsub_token] }
+
+    before do
+      create(:inbox_member, user: agent_a, inbox: other_inbox)
+      allow(ActionCable.server).to receive(:broadcast)
+    end
+
+    def count_queries(sql_filter: nil, &)
+      count = 0
+      counter = lambda do |_name, _started, _finished, _unique_id, payload|
+        next if payload[:name].in?(%w[SCHEMA CACHE])
+        next if sql_filter && payload[:sql] !~ sql_filter
+
+        count += 1
+      end
+      ActiveSupport::Notifications.subscribed(counter, 'sql.active_record', &)
+      count
+    end
+
+    # perform do job upstream, ignorando o override prepend
+    def upstream_perform(event_name, data)
+      ActionCableBroadcastJob.new.method(:perform).super_method.call(members, event_name, data)
+    end
+
+    def override_perform(event_name, data)
+      ActionCableBroadcastJob.new.perform(members, event_name, data)
+    end
+
+    it 'adds no queries to a conversation event of another inbox' do
+      data = other_conversation.push_event_data.merge(account_id: account.id)
+      upstream_perform('conversation.updated', data)
+
+      expect(count_queries { override_perform('conversation.updated', data) })
+        .to eq(count_queries { upstream_perform('conversation.updated', data) })
+    end
+
+    it 'adds no queries to events that are not conversation events' do
+      data = { id: conversation.display_id, account_id: account.id }
+
+      expect(count_queries { override_perform('message.created', data) }).to eq(0)
+    end
+
+    it 'adds a single lightweight query when the payload does not carry the channel' do
+      data = { id: other_conversation.display_id, account_id: account.id }
+      upstream_perform('conversation.updated', data)
+
+      expect(count_queries { override_perform('conversation.updated', data) })
+        .to eq(count_queries { upstream_perform('conversation.updated', data) } + 1)
+    end
+
+    it 'loads the conversation once on a WhatsApp conversation event' do
+      data = conversation.push_event_data.merge(account_id: account.id)
+      override_perform('conversation.updated', data)
+
+      conversation_selects = count_queries(sql_filter: /FROM "conversations"/) { override_perform('conversation.updated', data) }
+
+      expect(conversation_selects).to eq(1)
+    end
+  end
 end
 # rubocop:enable RSpec/DescribeClass

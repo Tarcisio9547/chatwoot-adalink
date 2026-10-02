@@ -1,59 +1,46 @@
-# Adalink: correção do juiz cego (rodada 3, item 2, BAIXA/MÉDIA) - evento
-# atrasado entrega a quem perdeu a conversa dados de DEPOIS da troca.
-#
-# ActionCableBroadcastJob calcula os destinatários (tokens) no DISPARO do
-# evento (ainda síncrono, RoleVisibility já filtra corretamente quem pode
-# ver NAQUELE momento), mas o payload (via prepare_broadcast_data) é
-# recarregado da conversa no momento da EXECUÇÃO do job — que pode atrasar
-# (fila cheia, worker lento). Se a conversa for reatribuída de A para B
-# nesse intervalo, e B mandar uma mensagem nova antes do job de A executar,
-# A recebe (quando o job finalmente roda) o push_event_data ATUAL da
-# conversa — que já inclui a mensagem nova de B, via push_data[:messages].
-#
-# Correção, só em Channel::Whatsapp: na execução do job (não no disparo),
-# reavalia quem dos destinatários (tokens de User, não de contato) ainda
-# pode ver a conversa pela regra de papel. Quem perdeu o acesso:
-#   - no evento assignee.changed, continua recebendo (a tela dele precisa
-#     do evento pra tirar a conversa da lista), mas sem `messages`/última
-#     mensagem no payload;
-#   - em qualquer outro evento (message.created, conversation.updated etc.),
-#     é removido da lista de destinatários — não recebe nada.
-# Outras caixas ficam idênticas ao upstream.
+# Os destinatários (tokens) do broadcast são calculados no disparo do evento,
+# mas o payload é relido da conversa quando o job executa. Se a fila atrasar e
+# a conversa trocar de responsável (A->B) com mensagem nova de B nesse
+# intervalo, A receberia conteúdo posterior à troca. Na caixa WhatsApp a
+# execução refiltra os destinatários pelo papel: quem perdeu acesso só recebe
+# assignee.changed, sem `messages` (o bastante pra tela tirar a conversa da
+# lista); nos demais eventos de conversa ele sai da lista. Outras caixas e
+# eventos que não são de conversa seguem o upstream, sem consulta extra.
 module Enterprise::ActionCableBroadcastJob
   include Events::Types
 
+  WHATSAPP_CHANNEL_TYPE = 'Channel::Whatsapp'.freeze
+
   def perform(members, event_name, data)
-    return super unless whatsapp_conversation_event?(event_name, data)
+    return super if members.blank? || !whatsapp_conversation_event?(event_name, data)
 
-    conversation = conversation_for(data)
-    return super if conversation.blank?
+    conversation = Conversation.find_by(account_id: data[:account_id], display_id: data[:id])
+    return super if conversation.nil?
 
-    members_by_recipient = partition_members_by_visibility(members, conversation)
-    return super if members_by_recipient.nil?
+    partition = partition_members_by_visibility(members, conversation)
+    return super if partition.nil?
 
-    broadcast_filtered(members_by_recipient, event_name, data)
+    broadcast_filtered(partition, conversation, event_name, data)
   end
 
   private
 
   def whatsapp_conversation_event?(event_name, data)
-    ActionCableBroadcastJob::CONVERSATION_UPDATE_EVENTS.include?(event_name) && data[:account_id].present? && data[:id].present?
+    return false unless ActionCableBroadcastJob::CONVERSATION_UPDATE_EVENTS.include?(event_name)
+    return false if data[:account_id].blank? || data[:id].blank?
+
+    (data[:channel] || channel_type_for(data)) == WHATSAPP_CHANNEL_TYPE
   end
 
-  def conversation_for(data)
-    account = Account.find_by(id: data[:account_id])
-    return nil if account.blank?
-
-    account.conversations.find_by(display_id: data[:id])
+  # O payload de conversa já traz :channel (Conversation#push_event_data). Sem
+  # ele (ex.: job enfileirado por uma versão anterior), 1 consulta leve.
+  def channel_type_for(data)
+    Conversation.where(account_id: data[:account_id], display_id: data[:id]).joins(:inbox).pick('inboxes.channel_type')
   end
 
-  # Separa members (tokens) em quem continua vendo a conversa e quem
-  # perdeu - só entre os tokens que correspondem a User (tokens de contato,
-  # não resolvidos, ficam fora das duas listas e são tratados como
-  # "continuam vendo", já que não são dados de agente).
+  # Separa members (tokens) em quem continua vendo a conversa e quem perdeu o
+  # acesso. Token que não é de User (contato do widget) continua vendo.
   def partition_members_by_visibility(members, conversation)
-    return nil unless conversation.inbox&.whatsapp?
-
     users_by_token = User.where(pubsub_token: members).index_by(&:pubsub_token)
     return nil if users_by_token.empty?
 
@@ -63,28 +50,21 @@ module Enterprise::ActionCableBroadcastJob
     { still_visible: still_visible, lost_access: lost_access }
   end
 
-  # Só tokens de User entram aqui. Qualquer token que não seja de um User
-  # (contato do widget) nunca aparece neste resultado, então cai em
-  # "continua vendo" no partition acima.
   def tokens_without_access(users_by_token, conversation)
     visible_ids = Conversations::RoleVisibility.visible_members(conversation, users_by_token.values).to_set(&:id)
     users_by_token.reject { |_token, user| visible_ids.include?(user.id) }.keys
   end
 
-  def broadcast_filtered(members_by_recipient, event_name, data)
-    still_visible = members_by_recipient[:still_visible]
-    lost_access = members_by_recipient[:lost_access]
+  # Reaproveita a conversa já carregada (o upstream a buscaria de novo em
+  # prepare_broadcast_data) e monta o mesmo payload.
+  def broadcast_filtered(partition, conversation, event_name, data)
+    still_visible = partition[:still_visible]
+    lost_access = partition[:lost_access]
+    full_data = conversation.push_event_data.merge(account_id: data[:account_id])
 
-    full_broadcast_data = prepare_broadcast_data(event_name, data)
-    broadcast_to_members(still_visible, event_name, full_broadcast_data) if still_visible.any?
+    broadcast_to_members(still_visible, event_name, full_data) if still_visible.any?
+    return if lost_access.empty? || event_name != ASSIGNEE_CHANGED
 
-    return if lost_access.empty?
-    return unless event_name == ASSIGNEE_CHANGED
-
-    # Quem perdeu o acesso só recebe assignee.changed, e sem messages/última
-    # mensagem - o suficiente pra tela tirar a conversa da lista, sem
-    # vazar conteúdo posterior à troca.
-    stripped_data = full_broadcast_data.is_a?(Hash) ? full_broadcast_data.except(:messages) : full_broadcast_data
-    broadcast_to_members(lost_access, event_name, stripped_data)
+    broadcast_to_members(lost_access, event_name, full_data.except(:messages))
   end
 end
