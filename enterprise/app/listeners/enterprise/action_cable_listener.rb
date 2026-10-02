@@ -1,34 +1,20 @@
-# Adalink: #2084 (escopo ampliado pelos comentários) — na caixa WhatsApp
-# Cloud, os eventos ao vivo do ActionCable só vão para quem o papel permite
-# ver a conversa (mesma regra de RoleVisibility usada pela busca em #2083 e
-# pelo aviso persistido em NotificationListener). Outras caixas continuam
-# broadcastando para todos os membros, igual ao comportamento upstream.
+# Na caixa WhatsApp Cloud, os eventos ao vivo do ActionCable só vão para quem o
+# papel permite ver a conversa (mesma regra de RoleVisibility da busca e do
+# NotificationListener). Outras caixas seguem o upstream: todos os membros.
 #
-# Correção do juiz cego (rodada 2, item 5): em vez de copiar o corpo dos 10
-# métodos públicos que chamam `conversation.inbox.members`, todos eles já
-# convergem para o mesmo ponto — o método privado `user_tokens(account,
-# agents)` da classe base. Sobrescrevemos só esse ponto único: cada método
-# público chama `around_member_filtering(conversation) { super }`, que
-# guarda a conversa do evento atual e `user_tokens` filtra por ela quando a
-# caixa é Channel::Whatsapp. O corpo de cada evento upstream nunca é
-# duplicado.
+# Os métodos públicos que chamam `conversation.inbox.members` convergem para
+# `user_tokens(account, agents)` da classe base. Em vez de copiar o corpo de
+# cada um, cada método chama `around_member_filtering(conversation) { super }`,
+# que marca a conversa do evento, e só `user_tokens` filtra por ela.
 #
-# Correção do juiz cego (auditoria pré-envio, BUG ALTO): o listener é
-# Singleton (ActionCableListener.instance), a MESMA instância é usada por
-# TODAS as threads do Puma/Sidekiq que passam pelo SyncDispatcher — uma
-# variável de instância (@current_event_conversation) vazava a conversa de
-# uma thread para outra rodando em paralelo (uma mensagem de caixa WhatsApp
-# podia ir sem filtro de papel, ou um evento de outra caixa herdar o filtro
-# errado). Corrigido com ActiveSupport::IsolatedExecutionState, que isola o
-# valor por thread (ou por fiber, conforme a config de execução do Rails) —
-# não há estado compartilhado entre chamadas concorrentes. O valor anterior
-# é salvo e restaurado no ensure, para suportar chamadas aninhadas na mesma
-# thread (ex.: um listener disparando outro evento durante o broadcast).
+# O listener é Singleton, compartilhado por todas as threads do Puma/Sidekiq:
+# a marca fica em ActiveSupport::IsolatedExecutionState (por thread/fiber), nunca
+# em variável de instância, que vazaria a conversa entre eventos concorrentes.
+# O valor anterior é restaurado no ensure, pra suportar chamadas aninhadas.
 #
-# `contact_created/updated/merged/deleted`, `conversation_mentioned`,
-# `notification_*` e `account_cache_invalidated` não usam
-# `conversation.inbox.members` (broadcast por conta inteira ou só pro
-# usuário-alvo) — não precisam de wrapper.
+# Eventos que não usam `conversation.inbox.members` (contact_*,
+# conversation_mentioned, notification_*, account_cache_invalidated) não
+# precisam do wrapper.
 module Enterprise::ActionCableListener
   include Events::Types
   include Enterprise::ActionCableListenerAssigneeChangeVisibility

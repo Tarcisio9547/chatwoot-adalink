@@ -263,7 +263,7 @@ describe ActionCableListener do
     end
   end
 
-  describe 'query count (N+1, item 6)' do
+  describe 'query count (N+1)' do
     it 'does not scale with the number of inbox members' do
       3.times { create(:inbox_member, user: create(:user, account: account, role: :agent), inbox: whatsapp_inbox) }
       whatsapp_conversation.inbox.reload

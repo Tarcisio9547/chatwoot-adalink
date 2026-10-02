@@ -57,12 +57,9 @@ RSpec.describe Enterprise::SearchService do
         expect(visible_condition[:conversation_id]).not_to include(colleague_conversation.id)
       end
 
-      # Adalink: correcao do juiz cego (rodada 2, item 4) - o papel "Sem
-      # atendente" enxerga TODA conversa sem atendente, nao so as suas. Sem
-      # restringir por periodo, a lista de visible_ids plucada aqui incluiria
-      # toda conversa sem atendente do historico inteiro da conta - mesma
-      # janela que enforce_time_limit/cap_until_time ja aplicam a busca de
-      # mensagens.
+      # O papel "Sem atendente" enxerga TODA conversa sem atendente, não só as suas.
+      # Sem limitar pelo início do período, a lista de ids enviada ao Elasticsearch
+      # incluiria o histórico inteiro da conta.
       it 'excludes an unassigned conversation outside the search time window' do
         old_unassigned_conversation = create(:conversation, account: account, inbox: whatsapp_inbox, assignee: nil,
                                                             last_activity_at: 200.days.ago)

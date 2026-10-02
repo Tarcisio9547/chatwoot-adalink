@@ -55,7 +55,7 @@ class Conversations::RoleVisibility
       end
     end
 
-    # Usado pelo ActionCableListener (#2084, item 7): membros cujo ÚNICO
+    # Usado pelo ActionCableListener: membros cujo ÚNICO
     # acesso à conversa vem de conversation_unassigned_manage - ou seja, só
     # vêem enquanto ela estiver sem atendente. Serve pra saber quem precisa
     # do evento assignee_changed quando a conversa deixa de estar sem

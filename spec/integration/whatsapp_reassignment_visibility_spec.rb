@@ -1,12 +1,10 @@
 require 'rails_helper'
 
-# Adalink: correcao do juiz cego (rodada 2, item 2) - teste de integracao
-# ponta a ponta pelo dispatcher de verdade (sync + async), nao chamando os
-# listeners diretamente. Cobre reatribuicao A->B numa caixa Channel::Whatsapp:
-# participantes (A sai, participante manual fica, B entra), destinatarios do
-# evento ao vivo (ActionCableBroadcastJob), bloqueio de abertura direta via
-# ConversationPolicy#show? para A, e a busca (SearchService). Tambem A->nil e
-# A->B->A.
+# Integração pelo dispatcher de verdade (sync + async), sem chamar os listeners
+# direto. Cobre a reatribuição A->B numa caixa Channel::Whatsapp: participantes
+# (A sai, o manual fica, B entra), destinatários do evento ao vivo, bloqueio de
+# abertura direta (ConversationPolicy#show?) e busca. Também A->nil, A->B->A e a
+# troca de time que zera o responsável.
 # rubocop:disable RSpec/DescribeClass -- teste de integracao ponta a ponta
 # (dispatcher real + varios models/services), nao tem uma unica classe alvo.
 describe 'WhatsApp reassignment visibility (integration)', :active_job do

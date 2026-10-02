@@ -1,11 +1,9 @@
 require 'rails_helper'
 
-# Adalink: correcao do juiz cego (rodada 2, item 2) - confere que o
-# WhatsappParticipationCleanupListener esta registrado no SyncDispatcher e
-# vem ANTES do ActionCableListener. A ordem importa: o cleanup listener
-# precisa remover o responsavel anterior dos participantes antes do
-# broadcast sincrono do proprio evento assignee_changed calcular quem pode
-# ver a conversa (ver app/dispatchers/sync_dispatcher.rb).
+# WhatsappParticipationCleanupListener tem que estar registrado no SyncDispatcher
+# e vir ANTES do ActionCableListener: ele remove o responsável anterior dos
+# participantes antes do broadcast síncrono do mesmo assignee_changed calcular
+# quem pode ver a conversa (ver app/dispatchers/sync_dispatcher.rb).
 describe SyncDispatcher do
   subject(:dispatcher) { described_class.new }
 

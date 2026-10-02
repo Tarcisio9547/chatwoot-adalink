@@ -14,10 +14,9 @@ RSpec.describe Conversations::RoleVisibility do
     create(:inbox_member, user: colleague, inbox: inbox)
   end
 
-  # Adalink: correcao do juiz cego (rodada 2, item 5) - visible_to? foi
-  # removido do codigo de producao (so os specs usavam; todo chamador real
-  # trabalha em lote via visible_members). Testamos a mesma regra pela API
-  # real: visible_members(conversation, [user]).include?(user).
+  # visible_to? não existe mais no código de produção (todo chamador trabalha em
+  # lote via visible_members). A mesma regra é testada pela API real:
+  # visible_members(conversation, [user]).include?(user).
   describe '.visible_members with a single-user list (replaces the removed .visible_to?)' do
     let!(:mine) { create(:conversation, account: account, inbox: inbox, assignee: agent) }
     let!(:colleague_conversation) { create(:conversation, account: account, inbox: inbox, assignee: colleague) }
@@ -92,10 +91,9 @@ RSpec.describe Conversations::RoleVisibility do
       expect(described_class.unrestricted?(agent, account.id)).to be false
     end
 
-    # Adalink: correcao do juiz cego (rodada 2, item 3, BAIXA) - unrestricted?
-    # fazia um find_by a cada chamada, mesmo quando quem chama (SearchService)
-    # ja tinha o AccountUser em memoria. Agora aceita account_user: opcional.
-    describe 'query reuse (item 3)' do
+    # unrestricted? aceita account_user: opcional pra reaproveitar o AccountUser que o
+    # chamador (SearchService) já tem em memória, sem um find_by a cada chamada.
+    describe 'query reuse' do
       let!(:whatsapp_inbox) do
         create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud', sync_templates: false, validate_provider_config: false).inbox
       end
@@ -144,11 +142,9 @@ RSpec.describe Conversations::RoleVisibility do
     end
   end
 
-  # Adalink: correcao do juiz cego (rodada 2, item 5) - unassigned_manage_only?
-  # (versao singular) foi removida do codigo de producao (so os specs
-  # usavam; o unico chamador real, action_cable_listener, usa a versao em
-  # lote unassigned_manage_only_members). Testamos a mesma regra com uma
-  # lista de 1 elemento.
+  # unassigned_manage_only? (singular) não existe mais; o único chamador usa a
+  # versão em lote unassigned_manage_only_members. Mesma regra, com lista de 1
+  # elemento.
   describe '.unassigned_manage_only_members with a single-user list (replaces the removed .unassigned_manage_only?)' do
     let(:sem_atendente_role) { create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage]) }
 
@@ -205,7 +201,7 @@ RSpec.describe Conversations::RoleVisibility do
     end
   end
 
-  describe '.visible_members (N+1, item 6)' do
+  describe '.visible_members (query count)' do
     let!(:conversation) { create(:conversation, account: account, inbox: inbox, assignee: agent) }
 
     before { AccountUser.find_by(user: agent, account: account).update(custom_role: setor_role) }

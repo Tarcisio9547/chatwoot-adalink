@@ -1,15 +1,13 @@
 require 'rails_helper'
 
-# Adalink: correcao do juiz cego (rodada 3, item 5, BAIXA/upstream) -
-# GetConversationService#active? so checava a permissao GERAL de conversa
-# na conta, nao se o usuario podia ver AQUELA conversa especifica. Um
-# agente com papel Setor conseguia pedir pro Copilot a conversa de um
-# colega (com mensagens privadas) numa caixa Channel::Whatsapp.
-# rubocop:disable RSpec/DescribeMethod, RSpec/SpecFilePathFormat -- arquivo
+# `active?` só checa a permissão geral de conversa na conta. Sem checar a conversa
+# pedida, um agente com papel Setor receberia do Copilot a conversa de um colega
+# (com mensagens privadas) numa caixa Channel::Whatsapp.
+# rubocop:disable RSpec/DescribeMethod -- arquivo
 # separado de get_conversation_service_spec.rb (upstream) pra nao misturar
 # testes do fork com os do Chatwoot e evitar conflito de merge; cobre o
 # comportamento de visibilidade por papel, nao um unico metodo.
-describe Captain::Tools::Copilot::GetConversationService, 'role visibility (item 5)' do
+describe Captain::Tools::Copilot::GetConversationService, 'role visibility' do
   let(:account) { create(:account) }
   let(:assistant) { create(:captain_assistant, account: account) }
   let(:setor_role) { create(:custom_role, account: account, permissions: %w[conversation_participating_manage]) }
@@ -74,4 +72,4 @@ describe Captain::Tools::Copilot::GetConversationService, 'role visibility (item
     end
   end
 end
-# rubocop:enable RSpec/DescribeMethod, RSpec/SpecFilePathFormat
+# rubocop:enable RSpec/DescribeMethod

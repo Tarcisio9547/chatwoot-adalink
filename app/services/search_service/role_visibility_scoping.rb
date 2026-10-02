@@ -33,13 +33,10 @@ module SearchService::RoleVisibilityScoping
   # todas as inboxes (admin ou dono de todas); só refinamos as inboxes
   # WhatsApp que o usuário realmente acessa.
   #
-  # Correção do juiz cego (rodada 3, item 6, BAIXA): filtro POSITIVO em vez
-  # de "NOT IN (subquery sobre TODAS as conversas WhatsApp da conta)". A
-  # subquery de "ocultas" cresce com o tamanho da caixa inteira (todo mundo
-  # que não é o usuário); a subquery de "visíveis" (RoleVisibility.filter)
-  # é tipicamente pequena, do tamanho do que aquele usuário mesmo acessa.
-  # Nenhuma lista é carregada em memória — os dois lados continuam
-  # subconsultas SQL.
+  # Filtro POSITIVO: outras caixas OU conversas visíveis (subconsulta). Excluir
+  # por NOT IN a lista de ocultas cresceria com a caixa inteira (todo mundo que
+  # não é o usuário); a lista de visíveis tem o tamanho do que ele acessa. Os
+  # dois lados são subconsultas SQL, sem lista em memória.
   def apply_role_visibility_to_messages(messages_query)
     return messages_query if Conversations::RoleVisibility.unrestricted?(current_user, current_account.id, account_user: account_user)
 

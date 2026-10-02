@@ -1,10 +1,7 @@
-# Adalink: correção do juiz cego (rodada 3, item 5, BAIXA/upstream) -
-# active? só checa se o usuário tem ALGUMA permissão de conversa na conta
-# (ex.: Setor tem conversation_participating_manage), mas execute buscava
-# QUALQUER conversation_id da conta sem checar se ESSA conversa específica
-# é visível pro usuário — um agente com papel Setor conseguia pedir pro
-# Copilot os detalhes (incluindo mensagens privadas) da conversa de um
-# colega.
+# `active?` só confere se o usuário tem alguma permissão de conversa na conta
+# (o papel Setor tem conversation_participating_manage), então `execute`
+# precisa checar se ESSA conversa é visível pra ele: sem isso, o Copilot
+# devolveria a conversa de um colega, com as mensagens privadas.
 class Captain::Tools::Copilot::GetConversationService < Captain::Tools::BaseTool
   def self.name
     'get_conversation'

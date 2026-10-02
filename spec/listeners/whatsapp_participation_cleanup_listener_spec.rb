@@ -1,11 +1,10 @@
 require 'rails_helper'
 
-# Adalink: correção do juiz cego (#2083/#2084, decisão ALTA opção B) - o
-# Chatwoot upstream (ParticipationListener) adiciona o novo responsável como
-# participante mas nunca remove o anterior. Na caixa WhatsApp Cloud, isso faz
-# o corretor que perdeu o lead continuar recebendo eventos ao vivo e achando
-# a conversa na busca. Este listener remove SÓ o responsável anterior da
-# lista de participantes quando a inbox é Channel::Whatsapp.
+# O ParticipationListener upstream adiciona o novo responsável como participante
+# mas nunca remove o anterior. Na caixa WhatsApp isso deixaria quem perdeu o lead
+# recebendo eventos ao vivo e achando a conversa na busca. Este listener remove SÓ
+# o responsável anterior da lista de participantes quando a inbox é
+# Channel::Whatsapp.
 describe WhatsappParticipationCleanupListener do
   let(:listener) { described_class.instance }
   let!(:account) { create(:account) }
@@ -70,12 +69,10 @@ describe WhatsappParticipationCleanupListener do
         expect(conversation.saved_change_to_assignee_id?).to be true
       end
 
-      # Adalink: decisao do orquestrador (rodada 3, item 4) - a limpeza
-      # remove o responsavel anterior mesmo quando ele e administrador ou
-      # agente sem custom_role. Isso e seguro porque os dois continuam
-      # vendo TODA conversa da caixa pela visao "Todas"
-      # (Conversations::RoleVisibility.unrestricted?), sem depender de ser
-      # participante ou assignee.
+      # A limpeza vale também pra administrador e agente sem custom_role: os dois
+      # seguem vendo toda conversa da caixa pela visão "Todas"
+      # (Conversations::RoleVisibility.unrestricted?), sem depender de ser participante
+      # ou assignee.
       context 'when the previous assignee is an administrator' do
         let!(:admin) { create(:user, account: account, role: :administrator) }
         let!(:admin_conversation) { create(:conversation, account: account, inbox: whatsapp_inbox, assignee: admin) }

@@ -1,19 +1,12 @@
 require 'rails_helper'
 
-# Adalink: correcao do juiz cego (rodada 3, item 2, BAIXA/MEDIA) - job
-# atrasado entrega a quem perdeu a conversa dados de DEPOIS da troca.
-#
-# Cenario do teste: ActionCableBroadcastJob e enfileirado (mas nao
-# executado) com o token de A como destinatario de um conversation.updated,
-# no momento em que A ainda era o responsavel. Antes do job rodar, a
-# conversa e reatribuida pra B e B manda uma mensagem nova. So entao o job
-# executa. Como o job releu a conversa do banco (prepare_broadcast_data),
-# o payload padrao incluiria a mensagem nova de B - o teste confere que A
-# NAO recebe esse conteudo.
+# O job de broadcast é enfileirado com o token de A quando A ainda é o responsável.
+# Antes de executar, a conversa vai pra B e B manda uma mensagem. O payload é
+# relido do banco na execução e traria a mensagem de B; A não pode recebê-la.
 # rubocop:disable RSpec/DescribeClass -- cobre o job de upstream mais o
 # override Enterprise::ActionCableBroadcastJob (prepend_mod_with); o
 # comportamento testado e o conjunto, nao uma classe so.
-describe 'ActionCableBroadcastJob role visibility on delayed delivery (item 2)' do
+describe 'ActionCableBroadcastJob role visibility on delayed delivery' do
   let!(:account) { create(:account) }
   let!(:agent_a) { create(:user, account: account, role: :agent) }
   let!(:agent_b) { create(:user, account: account, role: :agent) }

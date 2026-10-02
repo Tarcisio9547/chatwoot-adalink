@@ -1,11 +1,8 @@
 require 'rails_helper'
 
-# Adalink: correcao do juiz cego (rodada 2, item 1, MEDIA) - corrida entre o
-# job assincrono do ParticipationListener e o WhatsappParticipationCleanupListener
-# sincrono. Em Channel::Whatsapp, o job de nil->A pode rodar DEPOIS da Trama
-# ja ter trocado A->B (e o cleanup listener ja ter removido A). O
-# ParticipationListener precisa reler o assignee_id do banco, nao confiar no
-# valor que o evento carregava no momento do enqueue.
+# Em Channel::Whatsapp o job assíncrono do ParticipationListener pode rodar DEPOIS
+# de a conversa já ter trocado A->B (e a limpeza ter removido A). O listener tem
+# que ler o responsável do banco, não confiar no valor do evento no enqueue.
 describe ParticipationListener do
   let(:listener) { described_class.instance }
   let!(:account) { create(:account) }

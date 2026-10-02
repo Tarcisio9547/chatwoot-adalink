@@ -1,33 +1,15 @@
 require 'rails_helper'
 
-# Adalink: correcao do juiz cego (auditoria pre-envio) - BUG ALTO.
-# Enterprise::ActionCableListener guardava a conversa do evento atual em
-# @current_event_conversation, variavel de INSTANCIA de um listener
-# Singleton compartilhado entre as threads do Puma/Sidekiq (o comentario
-# "nao ha concorrencia real" estava errado: SyncDispatcher usa
-# ActionCableListener.instance, a MESMA instancia em toda thread/request).
+# ActionCableListener é Singleton, compartilhado por todas as threads do Puma e
+# do Sidekiq. A conversa do evento atual não pode ficar em variável de instância:
+# a thread 2 sobrescreveria o valor da thread 1 e o evento de uma conversa
+# WhatsApp iria, sem filtro de papel, pra todos os membros da caixa.
 #
-# Cenario do vazamento: thread 1 processa conversation_updated de uma
-# conversa Channel::Whatsapp e grava @current_event_conversation = conv_wa;
-# ANTES dela terminar de ler essa variavel dentro de user_tokens, a thread 2
-# processa um evento de outra caixa e sobrescreve (ou zera, no ensure) a
-# mesma variavel; a thread 1 entao usa o valor errado (da thread 2, ou nil)
-# pra decidir se filtra por papel - mandando o evento da conversa WhatsApp
-# SEM FILTRO pra todos os membros da caixa.
-#
-# Este spec forca a intercalacao com uma Queue como barreira, inserida
-# diretamente no metodo privado around_member_filtering (nao via mock
-# RSpec, que nao e garantidamente thread-safe): a thread 1 entra com a
-# conversa WA e PAUSA logo depois de marcar o estado (mas antes do bloco -
-# que aciona user_tokens - rodar); a thread 2 roda um evento de outra caixa
-# ATE O FIM nesse meio tempo; so entao a thread 1 continua. Captura os
-# tokens computados por CADA thread via metodos de instancia thread-safe
-# (Thread#[]=/Thread#[]), nao globals compartilhados.
-#
-# Com @current_event_conversation (variavel de instancia), a thread 1 le o
-# estado que a thread 2 deixou - o teste tem que FALHAR antes da correcao.
-# Depois de trocar por ActiveSupport::IsolatedExecutionState (por-thread),
-# a thread 1 continua vendo a conversa dela.
+# O spec força a intercalação com uma Queue como barreira dentro de
+# around_member_filtering: a thread 1 pausa depois de marcar a conversa, a
+# thread 2 processa um evento de outra caixa até o fim, e só então a thread 1
+# continua. Com estado por thread (ActiveSupport::IsolatedExecutionState) ela
+# mantém a conversa dela; com variável de instância leria a da thread 2.
 # rubocop:disable RSpec/DescribeMethod, RSpec/SpecFilePathFormat -- nao testa
 # um metodo especifico, testa a ausencia de vazamento de estado entre
 # threads compartilhando o Singleton (varios metodos privados envolvidos:

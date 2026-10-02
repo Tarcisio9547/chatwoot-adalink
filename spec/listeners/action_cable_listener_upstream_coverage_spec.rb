@@ -1,14 +1,12 @@
 require 'rails_helper'
 require 'method_source'
 
-# Adalink: correcao do juiz cego (rodada 2, item 5) - spec "guarda". Le o
-# codigo-fonte de cada metodo publico do ActionCableListener upstream e
-# confere que todo metodo cujo corpo usa `inbox.members` esta coberto por
-# Enterprise::ActionCableListener (seja um override direto, seja - como
-# depois da refatoracao do item 5 - via around_member_filtering + o ponto
-# unico de filtragem em user_tokens). Um evento novo do Chatwoot que passe a
-# usar inbox.members sem entrar nessa cobertura quebra este teste, em vez de
-# vazar silenciosamente conversas de outros corretores.
+# Spec guarda: lê o código-fonte de cada método público do ActionCableListener
+# upstream e confere que todo método que usa `inbox.members` está coberto por
+# Enterprise::ActionCableListener (override direto, ou around_member_filtering +
+# o ponto único de filtragem em user_tokens). Um evento novo do Chatwoot que use
+# inbox.members sem cobertura quebra este teste, em vez de vazar conversas de
+# outros corretores em silêncio.
 # rubocop:disable RSpec/DescribeClass -- guard le/compara DUAS classes
 # (ActionCableListener upstream x Enterprise::ActionCableListener), nao ha
 # uma unica classe alvo natural para o primeiro argumento do describe.
