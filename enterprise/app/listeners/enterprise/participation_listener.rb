@@ -17,17 +17,15 @@ module Enterprise::ParticipationListener
   private
 
   # Trava e lê uma instância NOVA da conversa, nunca a do evento: reload nela
-  # apagaria os saved_changes que outros callbacks ainda podem ler.
+  # apagaria os saved_changes que outros callbacks ainda podem ler. Com a linha
+  # travada, o responsável não muda entre a leitura e a inserção, e a troca
+  # (UPDATE) espera este bloco terminar.
   def add_current_assignee_as_participant(conversation_id)
     Conversation.transaction do
       locked = Conversation.lock.find_by(id: conversation_id)
       next if locked.nil? || locked.assignee_id.blank?
 
-      participant = locked.conversation_participants.find_or_create_by!(user_id: locked.assignee_id)
-
-      # Rede de segurança: se o responsável mudou entre a leitura e agora, desfaz.
-      final_assignee_id = Conversation.where(id: conversation_id).pick(:assignee_id)
-      participant.destroy! if final_assignee_id != locked.assignee_id
+      locked.conversation_participants.find_or_create_by!(user_id: locked.assignee_id)
     end
   end
 end
