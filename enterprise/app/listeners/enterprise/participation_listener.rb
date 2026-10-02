@@ -1,50 +1,33 @@
-# Adalink: correção do juiz cego (rodada 2, item 1; revisado na rodada 3) -
-# corrida entre o job assíncrono do ParticipationListener e o
-# WhatsappParticipationCleanupListener síncrono.
-#
-# O ActiveJob/Sidekiq serializa o argumento `conversation:` via GlobalID
-# (classe + id) e RECARREGA o registro do banco no momento em que o job
-# executa — não guarda um snapshot antigo em memória. A corrida não é de
-# "payload desatualizado": é puramente de TIMING entre dois processos
-# acessando/modificando a mesma linha sem lock.
-#
-# Cenário: o job de nil→A lê o assignee_id (A) e está prestes a inserir o
-# participante, mas é pausado (fila lenta, GC, etc). Nesse meio tempo, a
-# Trama troca A→B de verdade: o WhatsappParticipationCleanupListener roda e
-# tenta remover a participação de A — mas como o job antigo ainda não
-# inseriu, não há nada pra remover (no-op). O job antigo retoma e insere A
-# — e como isso acontece DEPOIS da limpeza, ninguém mais remove essa
-# inserção. Resultado: assignee_id = B, mas A fica participante para
-# sempre.
-#
-# Correção, só em Channel::Whatsapp: lê e insere dentro de
-# conversation.with_lock (SELECT ... FOR UPDATE), serializando com a
-# limpeza (que também toma o lock). Mesmo assim, relê o assignee_id DEPOIS
-# de inserir e desfaz se mudou nesse intervalo — fecha as duas ordens
-# possíveis de entrelaçamento, mesmo que o lock por algum motivo não seja
-# suficiente (ex.: se a limpeza rodar numa transação separada que já
-# commitou antes do lock ser adquirido). Em outras caixas, comportamento
-# idêntico ao upstream.
+# Na caixa WhatsApp o responsável é lido do banco, dentro de um lock de linha, e
+# não do payload do evento: o job assíncrono pode rodar depois de uma nova troca
+# (A->B) e, sem isso, reinseriria o responsável antigo como participante pra
+# sempre. O lock serializa com WhatsappParticipationCleanupListener, que remove
+# o responsável anterior. Outras caixas seguem o comportamento upstream.
 module Enterprise::ParticipationListener
   def assignee_changed(event)
     conversation, _account = extract_conversation_and_account(event)
     return super unless conversation.inbox.whatsapp?
 
-    conversation.with_lock do
-      current_assignee_id = conversation.reload.assignee_id
-      next if current_assignee_id.blank?
-
-      participant = conversation.conversation_participants.find_or_create_by!(user_id: current_assignee_id)
-
-      # Rede de segurança: mesmo dentro do lock, relê o assignee_id uma
-      # última vez antes de finalizar. Se mudou entre a leitura acima e
-      # agora (não deveria, já que estamos com a linha travada, mas cobre
-      # qualquer caminho que não passe pelo mesmo lock), desfaz a inserção.
-      final_assignee_id = conversation.reload.assignee_id
-      participant.destroy! if final_assignee_id != current_assignee_id
-    end
+    add_current_assignee_as_participant(conversation.id)
   rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
-    Rails.logger.warn "Failed to create conversation participant for account #{conversation.account.id} " \
-                      ": user #{conversation.assignee_id} : conversation #{conversation.id}"
+    Rails.logger.warn "Failed to create conversation participant for account #{conversation.account_id} " \
+                      ": conversation #{conversation.id}"
+  end
+
+  private
+
+  # Trava e lê uma instância NOVA da conversa, nunca a do evento: reload nela
+  # apagaria os saved_changes que outros callbacks ainda podem ler.
+  def add_current_assignee_as_participant(conversation_id)
+    Conversation.transaction do
+      locked = Conversation.lock.find_by(id: conversation_id)
+      next if locked.nil? || locked.assignee_id.blank?
+
+      participant = locked.conversation_participants.find_or_create_by!(user_id: locked.assignee_id)
+
+      # Rede de segurança: se o responsável mudou entre a leitura e agora, desfaz.
+      final_assignee_id = Conversation.where(id: conversation_id).pick(:assignee_id)
+      participant.destroy! if final_assignee_id != locked.assignee_id
+    end
   end
 end

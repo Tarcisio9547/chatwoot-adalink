@@ -55,6 +55,15 @@ describe ParticipationListener do
         expect(conversation.reload.conversation_participants.map(&:user_id)).not_to include(agent_a.id)
       end
 
+      it 'does not alter the conversation object carried by the event' do
+        conversation.update!(assignee: agent_a)
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: conversation)
+
+        listener.assignee_changed(event)
+
+        expect(conversation.saved_change_to_assignee_id?).to be true
+      end
+
       it 'still adds the assignee normally when there is no race (DB matches the event)' do
         conversation.update!(assignee: agent_a)
         event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: conversation)

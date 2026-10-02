@@ -56,6 +56,20 @@ describe WhatsappParticipationCleanupListener do
         expect { listener.assignee_changed(event) }.not_to raise_error
       end
 
+      # Este listener roda dentro do after_commit do model, antes dos callbacks
+      # que ainda leem saved_changes (ex.: AssignmentHandler#notify_assignment_change
+      # avalia saved_change_to_team_id? depois do assignee.changed). Recarregar o
+      # objeto do evento apagaria esses saved_changes.
+      it 'does not alter the conversation object carried by the event' do
+        conversation.update!(assignee: agent_b)
+        changed_attributes = { 'assignee_id' => [agent_a.id, agent_b.id] }
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: conversation, changed_attributes: changed_attributes)
+
+        listener.assignee_changed(event)
+
+        expect(conversation.saved_change_to_assignee_id?).to be true
+      end
+
       # Adalink: decisao do orquestrador (rodada 3, item 4) - a limpeza
       # remove o responsavel anterior mesmo quando ele e administrador ou
       # agente sem custom_role. Isso e seguro porque os dois continuam

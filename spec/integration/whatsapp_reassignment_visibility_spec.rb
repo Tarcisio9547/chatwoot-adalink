@@ -94,6 +94,31 @@ describe 'WhatsApp reassignment visibility (integration)', :active_job do
     end
   end
 
+  # Trocar o time por um do qual o responsavel nao faz parte zera o responsavel
+  # (AssignmentHandler#ensure_assignee_is_from_team). Os dois eventos
+  # (assignee.changed e team.changed) saem do mesmo after_commit, lendo
+  # saved_changes do mesmo objeto: nenhum listener sincrono pode apaga-los.
+  context 'when a team change clears the assignee' do
+    let!(:observer) { create(:user, account: account, role: :agent) }
+    let!(:team) { create(:team, account: account) }
+
+    before { create(:inbox_member, user: observer, inbox: whatsapp_inbox) }
+
+    it 'keeps the saved changes of the conversation after update!' do
+      perform_enqueued_jobs(only: EventDispatcherJob) { conversation.update!(team: team) }
+
+      expect(conversation.assignee_id).to be_nil
+      expect(conversation.saved_change_to_assignee_id?).to be true
+      expect(conversation.saved_change_to_team_id?).to be true
+    end
+
+    it 'still broadcasts team.changed' do
+      perform_enqueued_jobs(only: EventDispatcherJob) { conversation.update!(team: team) }
+
+      expect(ActionCableBroadcastJob).to have_received(:perform_later).with(anything, 'team.changed', anything)
+    end
+  end
+
   context 'when the conversation is unassigned from A' do
     it 'removes A from participants (conversation becomes unassigned)' do
       perform_enqueued_jobs(only: EventDispatcherJob) { conversation.update!(assignee: nil) }
