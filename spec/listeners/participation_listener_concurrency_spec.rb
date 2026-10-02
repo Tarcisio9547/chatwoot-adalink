@@ -43,12 +43,21 @@ describe Enterprise::ParticipationListener, 'race with a concurrent reassignment
     # pra pausar DEPOIS de ler o assignee_id atual (dentro do metodo real,
     # via find_or_create_by! - a chamada real ja faz a leitura implicita do
     # estado da conversa) e ANTES de commitar a insercao.
+    #
+    # Captura `conversation` (let do RSpec) numa variavel local ANTES do
+    # define_method: dentro do bloco passado a define_method, `self` passa a
+    # ser a instancia do listener quando o metodo roda - no escopo do
+    # exemplo (onde `conversation` existe como helper), nao da instancia do
+    # listener. S'o a variavel local (fechada por closure lexical) e visivel
+    # dentro do bloco; chamar `conversation` diretamente tentaria resolver um
+    # metodo na instancia do listener e falharia com NameError.
+    conversation_under_test = conversation
     listener_class = listener.singleton_class
     original_method = listener_class.instance_method(:assignee_changed)
 
     listener_class.define_method(:assignee_changed) do |event|
       conversation_arg, = extract_conversation_and_account(event)
-      if conversation_arg.inbox.whatsapp? && conversation_arg.id == conversation.id
+      if conversation_arg.inbox.whatsapp? && conversation_arg.id == conversation_under_test.id
         old_job_read_assignee << true
         reassignment_done.pop
       end
