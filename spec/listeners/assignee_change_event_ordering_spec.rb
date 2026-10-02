@@ -8,10 +8,16 @@ require 'rails_helper'
 #
 # Esse teste confirma, via integracao real (Conversation#update!, sem mockar
 # os listeners), duas coisas:
-#   1. A ORDEM real dos eventos: assignee.changed sai ANTES de
-#      conversation.updated (decorre da ordem de registro dos callbacks
-#      after_commit/after_update_commit em Conversation - ver comentario em
-#      app/dispatchers/sync_dispatcher.rb).
+#   1. A ORDEM real dos eventos: medida nesta rodada via este mesmo teste,
+#      conversation.updated sai ANTES de assignee.changed - o oposto do que
+#      a ordem de REGISTRO dos callbacks em Conversation sugeriria
+#      (AssignmentHandler e incluido na linha 57, antes do
+#      after_update_commit da linha 121, que dispara CONVERSATION_UPDATED).
+#      Rails executa after_commit/after_rollback NA ORDEM INVERSA de
+#      registro por padrao (ao contrario de after_save/after_create, que
+#      rodam na ordem declarada) - e e isso que importa aqui, nao a ordem
+#      textual no arquivo. Ver comentario atualizado em
+#      app/dispatchers/sync_dispatcher.rb.
 #   2. Se A receber o conversation.updated (porque o evento foi calculado
 #      antes da limpeza remover A da lista de destinatarios), o PAYLOAD
 #      enfileirado para ele nao contem nenhuma mensagem posterior a troca -
@@ -20,6 +26,9 @@ require 'rails_helper'
 #      EXECUCAO do job, nao no disparo. Este teste cobre o disparo
 #      (perform_later) advertindo especificamente o cenario de
 #      conversation.updated citado no item 3.
+# rubocop:disable RSpec/DescribeClass -- teste de integracao do ciclo
+# Conversation#update! -> callbacks -> SyncDispatcher -> ActionCableListener,
+# nao de uma classe so.
 describe 'assignee change event ordering (item 3)' do
   let!(:account) { create(:account) }
   let!(:agent_a) { create(:user, account: account, role: :agent) }
@@ -35,7 +44,7 @@ describe 'assignee change event ordering (item 3)' do
     conversation.inbox.reload
   end
 
-  it 'dispatches assignee.changed before conversation.updated, and conversation.updated (if sent to A) carries no later message' do
+  it 'dispatches conversation.updated before assignee.changed, and conversation.updated (if sent to A) carries no later message' do
     enqueued_events = []
     allow(ActionCableBroadcastJob).to receive(:perform_later) do |tokens, event_name, data|
       enqueued_events << { tokens: tokens, event_name: event_name, data: data }
@@ -49,7 +58,13 @@ describe 'assignee change event ordering (item 3)' do
 
     expect(assignee_changed_index).not_to be_nil
     expect(conversation_updated_index).not_to be_nil
-    expect(assignee_changed_index).to be < conversation_updated_index
+    # Medido nesta rodada: Rails executa after_commit (que inclui
+    # after_update_commit) na ordem INVERSA de registro - conversation.updated
+    # (after_update_commit, registrado por ultimo, linha 121 de
+    # app/models/conversation.rb) sai ANTES de assignee.changed
+    # (AssignmentHandler#notify_assignment_change, incluido na linha 57,
+    # registrado primeiro).
+    expect(conversation_updated_index).to be < assignee_changed_index
 
     conversation_updated_events_to_a = enqueued_events.select do |e|
       e[:event_name] == 'conversation.updated' && e[:tokens].include?(agent_a.pubsub_token)
@@ -59,7 +74,7 @@ describe 'assignee change event ordering (item 3)' do
       messages = e[:data].is_a?(Hash) ? e[:data][:messages] : nil
       next if messages.blank?
 
-      last_message_created_at = messages.map { |m| m[:created_at] || m['created_at'] }.compact.max
+      last_message_created_at = messages.filter_map { |m| m[:created_at] || m['created_at'] }.max
       expect(last_message_created_at.to_i).to be <= conversation.updated_at.to_i if last_message_created_at
     end
   end
@@ -70,3 +85,4 @@ describe 'assignee change event ordering (item 3)' do
     expect(conversation.reload.conversation_participants.map(&:user_id)).not_to include(agent_a.id)
   end
 end
+# rubocop:enable RSpec/DescribeClass
