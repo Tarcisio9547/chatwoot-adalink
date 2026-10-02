@@ -57,22 +57,18 @@ module Enterprise::ActionCableBroadcastJob
     users_by_token = User.where(pubsub_token: members).index_by(&:pubsub_token)
     return nil if users_by_token.empty?
 
-    visible_user_ids = Conversations::RoleVisibility.visible_members(conversation, users_by_token.values).map(&:id).to_set
-
-    still_visible = []
-    lost_access = []
-    members.each do |token|
-      user = users_by_token[token]
-      if user.nil?
-        still_visible << token
-      elsif visible_user_ids.include?(user.id)
-        still_visible << token
-      else
-        lost_access << token
-      end
-    end
+    lost_access_tokens = tokens_without_access(users_by_token, conversation)
+    still_visible, lost_access = members.partition { |token| lost_access_tokens.exclude?(token) }
 
     { still_visible: still_visible, lost_access: lost_access }
+  end
+
+  # Só tokens de User entram aqui. Qualquer token que não seja de um User
+  # (contato do widget) nunca aparece neste resultado, então cai em
+  # "continua vendo" no partition acima.
+  def tokens_without_access(users_by_token, conversation)
+    visible_ids = Conversations::RoleVisibility.visible_members(conversation, users_by_token.values).to_set(&:id)
+    users_by_token.reject { |_token, user| visible_ids.include?(user.id) }.keys
   end
 
   def broadcast_filtered(members_by_recipient, event_name, data)

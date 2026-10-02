@@ -10,6 +10,9 @@ require 'rails_helper'
 # executa. Como o job releu a conversa do banco (prepare_broadcast_data),
 # o payload padrao incluiria a mensagem nova de B - o teste confere que A
 # NAO recebe esse conteudo.
+# rubocop:disable RSpec/DescribeClass -- cobre o job de upstream mais o
+# override Enterprise::ActionCableBroadcastJob (prepend_mod_with); o
+# comportamento testado e o conjunto, nao uma classe so.
 describe 'ActionCableBroadcastJob role visibility on delayed delivery (item 2)' do
   let!(:account) { create(:account) }
   let!(:agent_a) { create(:user, account: account, role: :agent) }
@@ -118,3 +121,4 @@ describe 'ActionCableBroadcastJob role visibility on delayed delivery (item 2)' 
     end
   end
 end
+# rubocop:enable RSpec/DescribeClass
