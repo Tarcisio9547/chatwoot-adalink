@@ -37,22 +37,12 @@ class Conversations::RoleVisibility
 
     # Escopo de conversas visíveis pro usuário, seguindo a mesma regra.
     # Usado pela busca (#2083), que já recebe o escopo pré-filtrado por inbox.
-    def filter(conversations, user, account)
-      account_user = account_user_for(user, account.id)
+    def filter(conversations, user, account, account_user: :not_given)
+      account_user = account_user_for(user, account.id) if account_user == :not_given
       return conversations if account_user.blank? || account_user.administrator?
       return conversations if account_user.custom_role_id.blank?
 
-      case permission_tier(account_user.permissions)
-      when :manage_all
-        conversations
-      when :unassigned
-        conversations.where(assignee_id: [nil, user.id])
-      when :participating
-        participant_ids = ConversationParticipant.where(user_id: user.id).select(:conversation_id)
-        conversations.where(assignee_id: user.id).or(conversations.where(id: participant_ids))
-      else
-        conversations.none
-      end
+      filter_by_tier(conversations, user, permission_tier(account_user.permissions))
     end
 
     # Usado pelo ActionCableListener: membros cujo ÚNICO
@@ -79,6 +69,20 @@ class Conversations::RoleVisibility
     end
 
     private
+
+    def filter_by_tier(conversations, user, tier)
+      case tier
+      when :manage_all
+        conversations
+      when :unassigned
+        conversations.where(assignee_id: [nil, user.id])
+      when :participating
+        participant_ids = ConversationParticipant.where(user_id: user.id).select(:conversation_id)
+        conversations.where(assignee_id: user.id).or(conversations.where(id: participant_ids))
+      else
+        conversations.none
+      end
+    end
 
     def unassigned_manage_only_account_user?(account_user)
       return false if account_user.blank? || account_user.administrator?

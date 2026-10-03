@@ -63,7 +63,7 @@ class Notification < ApplicationRecord
       primary_actor_type: primary_actor_type,
       primary_actor_id: primary_actor_id,
       read_at: read_at,
-      secondary_actor: secondary_actor&.push_event_data,
+      secondary_actor: secondary_actor_push_data,
       user: user&.push_event_data,
       created_at: created_at.to_i,
       last_activity_at: last_activity_at.to_i,
@@ -74,6 +74,21 @@ class Notification < ApplicationRecord
     payload.merge!(primary_actor_data) if primary_actor.present?
     payload
   end
+
+  # Dados do ator principal (a conversa) e do secundario (ex.: a mensagem) como
+  # saem no sino e no broadcast. Ponto de extensao: a edicao Enterprise esconde
+  # o conteudo quando o dono da notificacao nao enxerga mais a conversa.
+  def primary_actor_push_data
+    primary_actor&.push_event_data
+  end
+
+  def secondary_actor_push_data
+    secondary_actor&.push_event_data
+  end
+
+  # Gancho pra calcular em lote o que a edicao Enterprise precisa antes de
+  # montar uma lista de notificacoes (evita consulta por notificacao).
+  def self.preload_content_visibility(_notifications); end
 
   def fcm_push_data
     {
@@ -199,10 +214,12 @@ class Notification < ApplicationRecord
 
   def primary_actor_data
     {
-      primary_actor: primary_actor&.push_event_data,
+      primary_actor: primary_actor_push_data,
       # TODO: Rename push_message_title to push_message_body
       push_message_title: push_message_body,
       push_message_body: push_message_body
     }
   end
 end
+
+Notification.prepend_mod_with('Notification')
