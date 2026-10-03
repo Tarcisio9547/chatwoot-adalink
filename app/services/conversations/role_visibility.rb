@@ -16,6 +16,8 @@
 # NotificationListener, ActionCableListener) escolhe caixa por caixa,
 # restringindo a Channel::Whatsapp.
 class Conversations::RoleVisibility
+  WHATSAPP_CHANNEL_TYPE = 'Channel::Whatsapp'.freeze
+
   class << self
     # Dado um conjunto de usuários (tipicamente membros da inbox), devolve só
     # quem pode ver a conversa. Não adiciona ninguém de fora da lista — quem
@@ -37,8 +39,7 @@ class Conversations::RoleVisibility
 
     # Escopo de conversas visíveis pro usuário, seguindo a mesma regra.
     # Usado pela busca (#2083), que já recebe o escopo pré-filtrado por inbox.
-    def filter(conversations, user, account, account_user: :not_given)
-      account_user = account_user_for(user, account.id) if account_user == :not_given
+    def filter(conversations, user, account_user:)
       return conversations if account_user.blank? || account_user.administrator?
       return conversations if account_user.custom_role_id.blank?
 
@@ -58,13 +59,10 @@ class Conversations::RoleVisibility
       members.select { |member| unassigned_manage_only_account_user?(account_users_by_user_id[member.id]) }
     end
 
-    # Agente sem custom_role e administrador não passam por nenhuma query
-    # extra (busca sai cedo antes de tocar em ConversationParticipant/ids).
-    # account_user é opcional: quem chama passa o AccountUser que já tem em
-    # memória (ex.: SearchService#account_user) pra evitar um find_by
-    # redundante a cada chamada.
-    def unrestricted?(user, account_id, account_user: :not_given)
-      account_user = account_user_for(user, account_id) if account_user == :not_given
+    # Agente sem custom_role e administrador não passam por nenhuma query extra:
+    # quem chama passa o AccountUser que já tem em memória (ex.:
+    # SearchService#account_user), ou nil se o usuário não é da conta.
+    def unrestricted?(account_user)
       account_user.blank? || account_user.administrator? || account_user.custom_role_id.blank?
     end
 
@@ -131,12 +129,6 @@ class Conversations::RoleVisibility
       AccountUser.where(account_id: account_id, user_id: members.map(&:id))
                  .includes(:custom_role)
                  .index_by(&:user_id)
-    end
-
-    def account_user_for(user, account_id)
-      return nil unless user.respond_to?(:account_users)
-
-      user.account_users.find_by(account_id: account_id)
     end
   end
 end

@@ -33,10 +33,10 @@ module Enterprise::Notification
 
     def visible_conversation_ids(user, account, conversation_ids)
       account_user = user.account_users.find_by(account_id: account.id)
-      return conversation_ids if Conversations::RoleVisibility.unrestricted?(user, account.id, account_user: account_user)
+      return conversation_ids if Conversations::RoleVisibility.unrestricted?(account_user)
 
       scope = Conversation.where(id: conversation_ids)
-      Conversations::RoleVisibility.filter(scope, user, account, account_user: account_user).pluck(:id)
+      Conversations::RoleVisibility.filter(scope, user, account_user: account_user).pluck(:id)
     end
 
     def whatsapp_conversation?(actor)

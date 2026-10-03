@@ -3,8 +3,15 @@ class SearchService
 
   pattr_initialize [:current_user!, :current_account!, :params!, :search_type!]
 
+  # O controller ja carregou o AccountUser da requisicao (Current.account_user):
+  # reaproveita quando e do mesmo usuario e conta, em vez de consultar de novo.
   def account_user
-    @account_user ||= current_account.account_users.find_by(user: current_user)
+    @account_user ||= current_request_account_user || current_account.account_users.find_by(user: current_user)
+  end
+
+  def current_request_account_user
+    candidate = Current.account_user
+    candidate if candidate&.user_id == current_user.id && candidate.account_id == current_account.id
   end
 
   def perform
@@ -24,8 +31,20 @@ class SearchService
 
   private
 
+  # Um pluck so (id + channel_type): as caixas WhatsApp acessiveis saem daqui,
+  # sem consulta extra pra aplicar a visibilidade por papel.
+  def accessable_inbox_rows
+    @accessable_inbox_rows ||= @current_user.assigned_inboxes.pluck(:id, :channel_type)
+  end
+
   def accessable_inbox_ids
-    @accessable_inbox_ids ||= @current_user.assigned_inboxes.pluck(:id)
+    @accessable_inbox_ids ||= accessable_inbox_rows.map(&:first)
+  end
+
+  def accessable_whatsapp_inbox_ids
+    @accessable_whatsapp_inbox_ids ||= accessable_inbox_rows.filter_map do |id, channel_type|
+      id if channel_type == Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE
+    end
   end
 
   def search_query

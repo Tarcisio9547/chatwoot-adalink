@@ -78,67 +78,44 @@ RSpec.describe Conversations::RoleVisibility do
   end
 
   describe '.unrestricted?' do
+    def account_user_of(user)
+      AccountUser.find_by(user: user, account: account)
+    end
+
+    def count_queries(&)
+      count = 0
+      counter_f = ->(_name, _started, _finished, _unique_id, payload) { count += 1 unless payload[:name].in?(%w[SCHEMA CACHE]) }
+      ActiveSupport::Notifications.subscribed(counter_f, 'sql.active_record', &)
+      count
+    end
+
     it 'is true for an administrator' do
-      expect(described_class.unrestricted?(admin, account.id)).to be true
+      expect(described_class.unrestricted?(account_user_of(admin))).to be true
     end
 
     it 'is true for an agent without a custom_role' do
-      expect(described_class.unrestricted?(colleague, account.id)).to be true
+      expect(described_class.unrestricted?(account_user_of(colleague))).to be true
     end
 
     it 'is false for an agent with a custom_role' do
       AccountUser.find_by(user: agent, account: account).update(custom_role: setor_role)
-      expect(described_class.unrestricted?(agent, account.id)).to be false
+      expect(described_class.unrestricted?(account_user_of(agent))).to be false
     end
 
-    # unrestricted? aceita account_user: opcional pra reaproveitar o AccountUser que o
-    # chamador (SearchService) já tem em memória, sem um find_by a cada chamada.
-    describe 'query reuse' do
-      let!(:whatsapp_inbox) do
-        create(:channel_whatsapp, account: account, provider: 'whatsapp_cloud', sync_templates: false, validate_provider_config: false).inbox
+    it 'is true when the user has no AccountUser in the account' do
+      expect(described_class.unrestricted?(nil)).to be true
+    end
+
+    it 'runs no query for an administrator or an agent without a custom_role (the caller already holds the AccountUser)' do
+      admin_account_user = account_user_of(admin)
+      agent_account_user = account_user_of(colleague)
+
+      queries = count_queries do
+        described_class.unrestricted?(admin_account_user)
+        described_class.unrestricted?(agent_account_user)
       end
 
-      before do
-        create(:inbox_member, user: admin, inbox: whatsapp_inbox)
-        create(:inbox_member, user: colleague, inbox: whatsapp_inbox)
-        Current.account = account
-      end
-
-      after { Current.account = nil }
-
-      it 'passing the preloaded account_user avoids an extra query, compared to not passing it' do
-        account_user = AccountUser.find_by(user: admin, account: account)
-
-        without_preload = count_queries { described_class.unrestricted?(admin, account.id) }
-        with_preload = count_queries { described_class.unrestricted?(admin, account.id, account_user: account_user) }
-
-        expect(with_preload).to eq(without_preload - 1)
-      end
-
-      it 'SearchService reuses its own memoized account_user - admin triggers zero extra queries' do
-        search_service = SearchService.new(current_user: admin, current_account: account, params: { q: 'x' }, search_type: 'Message')
-        preloaded_account_user = search_service.send(:account_user)
-
-        query_count = count_queries { described_class.unrestricted?(admin, account.id, account_user: preloaded_account_user) }
-
-        expect(query_count).to eq(0)
-      end
-
-      it 'agent without a custom_role also reuses the preloaded account_user with zero extra queries' do
-        search_service = SearchService.new(current_user: colleague, current_account: account, params: { q: 'x' }, search_type: 'Message')
-        preloaded_account_user = search_service.send(:account_user)
-
-        query_count = count_queries { described_class.unrestricted?(colleague, account.id, account_user: preloaded_account_user) }
-
-        expect(query_count).to eq(0)
-      end
-
-      def count_queries(&)
-        count = 0
-        counter_f = ->(_name, _started, _finished, _unique_id, payload) { count += 1 unless payload[:name].in?(%w[SCHEMA CACHE]) }
-        ActiveSupport::Notifications.subscribed(counter_f, 'sql.active_record', &)
-        count
-      end
+      expect(queries).to eq(0)
     end
   end
 
@@ -172,7 +149,7 @@ RSpec.describe Conversations::RoleVisibility do
       before { AccountUser.find_by(user: agent, account: account).update(custom_role: setor_role) }
 
       it 'only returns the conversations assigned to the agent or where they participate' do
-        result = described_class.filter(account.conversations, agent, account)
+        result = described_class.filter(account.conversations, agent, account_user: AccountUser.find_by(user: agent, account: account))
 
         expect(result).to include(mine)
         expect(result).not_to include(colleague_conversation)
@@ -182,7 +159,7 @@ RSpec.describe Conversations::RoleVisibility do
 
     context 'when the user is an administrator' do
       it 'returns every conversation' do
-        result = described_class.filter(account.conversations, admin, account)
+        result = described_class.filter(account.conversations, admin, account_user: AccountUser.find_by(user: admin, account: account))
 
         expect(result).to include(mine, colleague_conversation, unassigned_conversation)
       end
@@ -194,7 +171,7 @@ RSpec.describe Conversations::RoleVisibility do
       before { AccountUser.find_by(user: agent, account: account).update(custom_role: empty_role) }
 
       it 'returns no conversations (matches PermissionFilterService native behaviour)' do
-        result = described_class.filter(account.conversations, agent, account)
+        result = described_class.filter(account.conversations, agent, account_user: AccountUser.find_by(user: agent, account: account))
 
         expect(result).to be_empty
       end

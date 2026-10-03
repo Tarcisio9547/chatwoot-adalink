@@ -27,8 +27,9 @@ module Enterprise::SearchService
   ROLE_VISIBILITY_CONVERSATION_LIMIT = 10_000
 
   # Na caixa WhatsApp Cloud a busca avançada só devolve mensagens de conversas
-  # visíveis ao papel do usuário (mesma regra do SearchService). Admin e agente
-  # sem papel restrito saem cedo, sem consulta extra.
+  # visíveis ao papel do usuário (mesma regra do SearchService). Admin, agente
+  # sem papel restrito e conta sem caixa WhatsApp saem sem consulta extra: as
+  # caixas vêm do pluck de accessable_inbox_ids.
   #
   # O filtro é POSITIVO (_or: inbox_id das outras caixas + conversation_id das
   # WhatsApp visíveis): o Elasticsearch limita a 65.536 termos por cláusula
@@ -36,14 +37,11 @@ module Enterprise::SearchService
   # conditions[:_or], que compõe em AND e não colide com apply_inbox_filter
   # (que sobrescreve conditions[:inbox_id]).
   def apply_role_visibility_to_where_conditions(conditions)
-    return conditions if Conversations::RoleVisibility.unrestricted?(current_user, current_account.id, account_user: account_user)
+    return conditions if Conversations::RoleVisibility.unrestricted?(account_user)
+    return conditions if accessable_whatsapp_inbox_ids.empty?
 
-    whatsapp_inbox_ids = current_account.inboxes.where(channel_type: 'Channel::Whatsapp').pluck(:id)
-    whatsapp_inbox_ids &= accessable_inbox_ids unless should_skip_inbox_filtering?
-    return conditions if whatsapp_inbox_ids.empty?
-
-    other_inbox_ids = (conditions[:inbox_id] || current_account.inboxes.pluck(:id)) - whatsapp_inbox_ids
-    visible_ids = visible_conversation_ids(since_scoped_whatsapp_conversations(whatsapp_inbox_ids))
+    other_inbox_ids = accessable_inbox_ids - accessable_whatsapp_inbox_ids
+    visible_ids = visible_conversation_ids(since_scoped_whatsapp_conversations(accessable_whatsapp_inbox_ids))
 
     conditions[:_or] = [{ inbox_id: other_inbox_ids }, { conversation_id: visible_ids }]
     conditions
@@ -59,7 +57,7 @@ module Enterprise::SearchService
   end
 
   def visible_conversation_ids(whatsapp_conversations)
-    visible = Conversations::RoleVisibility.filter(whatsapp_conversations, current_user, current_account)
+    visible = Conversations::RoleVisibility.filter(whatsapp_conversations, current_user, account_user: account_user)
     ids = visible.reorder(last_activity_at: :desc).limit(ROLE_VISIBILITY_CONVERSATION_LIMIT + 1).pluck(:id)
     return ids if ids.size <= ROLE_VISIBILITY_CONVERSATION_LIMIT
 

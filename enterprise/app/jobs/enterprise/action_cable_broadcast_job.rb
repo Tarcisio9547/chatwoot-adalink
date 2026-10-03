@@ -9,8 +9,6 @@
 module Enterprise::ActionCableBroadcastJob
   include Events::Types
 
-  WHATSAPP_CHANNEL_TYPE = 'Channel::Whatsapp'.freeze
-
   def perform(members, event_name, data)
     return super if members.blank? || !whatsapp_conversation_event?(event_name, data)
 
@@ -29,7 +27,7 @@ module Enterprise::ActionCableBroadcastJob
     return false unless ActionCableBroadcastJob::CONVERSATION_UPDATE_EVENTS.include?(event_name)
     return false if data[:account_id].blank? || data[:id].blank?
 
-    (data[:channel] || channel_type_for(data)) == WHATSAPP_CHANNEL_TYPE
+    (data[:channel] || channel_type_for(data)) == Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE
   end
 
   # O payload de conversa já traz :channel (Conversation#push_event_data). Sem
