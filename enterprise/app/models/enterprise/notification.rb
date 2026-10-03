@@ -4,6 +4,12 @@
 # dela: o corpo do push vem vazio, o ator principal vai sem `messages` e o ator
 # secundário, quando é uma mensagem, não é enviado. A notificação em si (tipo,
 # id da conversa) continua, pra tela ainda poder listá-la.
+#
+# Limites conhecidos: só o conteúdo de mensagens some. Os metadados da conversa
+# (contato, etiquetas, responsável atual) seguem no ator principal, como no
+# upstream. E o que já saiu quando a notificação foi criada (e-mail, push
+# entregue) não é retirado depois: naquele momento o dono ainda enxergava a
+# conversa.
 module Enterprise::Notification
   def self.prepended(base)
     base.singleton_class.prepend(ClassMethods)

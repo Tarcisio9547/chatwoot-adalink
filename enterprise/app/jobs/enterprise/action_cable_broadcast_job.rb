@@ -6,6 +6,10 @@
 # assignee.changed, sem `messages` (o bastante pra tela tirar a conversa da
 # lista); nos demais eventos de conversa ele sai da lista. Outras caixas e
 # eventos que não são de conversa seguem o upstream, sem consulta extra.
+#
+# Limite conhecido: quem perdeu acesso e recebe o assignee.changed fica só sem
+# `messages`; os metadados da conversa (contato, etiquetas, novo responsável)
+# vão no payload, porque a tela precisa deles pra tirar a conversa da lista.
 module Enterprise::ActionCableBroadcastJob
   include Events::Types
 
