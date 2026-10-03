@@ -1,0 +1,33 @@
+# Na caixa WhatsApp o responsável é lido do banco, dentro de um lock de linha, e
+# não do payload do evento: o job assíncrono pode rodar depois de uma nova troca
+# (A->B) e, sem isso, reinseriria o responsável antigo como participante pra
+# sempre. O lock serializa com WhatsappParticipationCleanupListener, que remove
+# o responsável anterior. Outras caixas seguem o comportamento upstream.
+module Enterprise::ParticipationListener
+  def assignee_changed(event)
+    conversation, _account = extract_conversation_and_account(event)
+    return super unless event.data[:channel_type] == Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE
+
+    add_current_assignee_as_participant(conversation.id)
+  rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
+    Rails.logger.warn "Failed to create conversation participant for account #{conversation.account_id} " \
+                      ": conversation #{conversation.id}"
+  end
+
+  private
+
+  # Trava e lê uma instância NOVA da conversa, nunca a do evento: reload nela
+  # apagaria os saved_changes que outros callbacks ainda podem ler. Com a linha
+  # travada, o responsável não muda entre a leitura e a inserção, e a troca
+  # (UPDATE) espera este bloco terminar. FOR NO KEY UPDATE basta (o UPDATE também
+  # o toma) e, ao contrário de FOR UPDATE, não conflita com FOR KEY SHARE (INSERT
+  # com chave estrangeira pra conversa; o schema de hoje não tem essa FK).
+  def add_current_assignee_as_participant(conversation_id)
+    Conversation.transaction do
+      locked = Conversation.lock('FOR NO KEY UPDATE').find_by(id: conversation_id)
+      next if locked.nil? || locked.assignee_id.blank?
+
+      locked.conversation_participants.find_or_create_by!(user_id: locked.assignee_id)
+    end
+  end
+end

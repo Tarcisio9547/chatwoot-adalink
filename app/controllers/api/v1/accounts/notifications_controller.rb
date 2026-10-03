@@ -8,6 +8,7 @@ class Api::V1::Accounts::NotificationsController < Api::V1::Accounts::BaseContro
 
   def index
     @notifications = notification_finder.notifications
+    Notification.preload_content_visibility(@notifications)
     @unread_count = notification_finder.unread_count
     @count = notification_finder.count
   end

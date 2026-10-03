@@ -18,7 +18,52 @@ module Enterprise::SearchService
   def build_where_conditions
     conditions = { account_id: current_account.id }
     conditions[:inbox_id] = accessable_inbox_ids unless should_skip_inbox_filtering?
+    apply_role_visibility_to_where_conditions(conditions)
+  end
+
+  # Teto de conversation_id enviados ao Elasticsearch por busca no papel "Sem
+  # atendente" (que enxerga toda conversa sem atendente da conta). Passando
+  # disso, ficam as mais recentes por last_activity_at e o corte vai pro log.
+  ROLE_VISIBILITY_CONVERSATION_LIMIT = 10_000
+
+  # Na caixa WhatsApp Cloud a busca avançada só devolve mensagens de conversas
+  # visíveis ao papel do usuário (mesma regra do SearchService). Admin, agente
+  # sem papel restrito e conta sem caixa WhatsApp saem sem consulta extra: as
+  # caixas vêm do pluck de accessable_inbox_ids.
+  #
+  # O filtro é POSITIVO (_or: inbox_id das outras caixas + conversation_id das
+  # WhatsApp visíveis): o Elasticsearch limita a 65.536 termos por cláusula
+  # "not in", e a lista de ocultas cresce com a conta toda. A condição vai em
+  # conditions[:_or], que compõe em AND e não colide com apply_inbox_filter
+  # (que sobrescreve conditions[:inbox_id]).
+  def apply_role_visibility_to_where_conditions(conditions)
+    return conditions if Conversations::RoleVisibility.unrestricted?(account_user)
+    return conditions if accessable_whatsapp_inbox_ids.empty?
+
+    other_inbox_ids = accessable_inbox_ids - accessable_whatsapp_inbox_ids
+    visible_ids = visible_conversation_ids(since_scoped_whatsapp_conversations(accessable_whatsapp_inbox_ids))
+
+    conditions[:_or] = [{ inbox_id: other_inbox_ids }, { conversation_id: visible_ids }]
     conditions
+  end
+
+  # Só o limite inicial do período: uma mensagem criada depois de `since`
+  # implica last_activity_at >= since, então nenhuma conversa legítima sai.
+  # Um limite final por last_activity_at esconderia mensagens do período em
+  # conversas com atividade posterior, então ele não é aplicado.
+  def since_scoped_whatsapp_conversations(whatsapp_inbox_ids)
+    current_account.conversations.where(inbox_id: whatsapp_inbox_ids)
+                   .where('conversations.last_activity_at >= ?', enforce_time_limit(params[:since]))
+  end
+
+  def visible_conversation_ids(whatsapp_conversations)
+    visible = Conversations::RoleVisibility.filter(whatsapp_conversations, current_user, account_user: account_user)
+    ids = visible.reorder(last_activity_at: :desc).limit(ROLE_VISIBILITY_CONVERSATION_LIMIT + 1).pluck(:id)
+    return ids if ids.size <= ROLE_VISIBILITY_CONVERSATION_LIMIT
+
+    Rails.logger.warn "Advanced search role visibility list cut at the limit of #{ROLE_VISIBILITY_CONVERSATION_LIMIT} " \
+                      "conversations (account #{current_account.id}, user #{current_user.id})"
+    ids.first(ROLE_VISIBILITY_CONVERSATION_LIMIT)
   end
 
   def apply_filters(where_conditions)

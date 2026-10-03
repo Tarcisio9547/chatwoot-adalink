@@ -13,3 +13,5 @@ class ParticipationListener < BaseListener
                       ": user #{conversation.assignee_id} : conversation #{conversation.id}"
   end
 end
+
+ParticipationListener.prepend_mod_with('ParticipationListener')

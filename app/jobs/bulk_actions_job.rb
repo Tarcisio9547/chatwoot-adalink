@@ -64,3 +64,5 @@ class BulkActionsJob < ApplicationJob
     current_model.constantize&.where(account_id: @account.id, display_id: ids)
   end
 end
+
+BulkActionsJob.prepend_mod_with('BulkActionsJob')

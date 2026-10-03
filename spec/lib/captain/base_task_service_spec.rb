@@ -52,9 +52,13 @@ RSpec.describe Captain::BaseTaskService do
     end
 
     it 'memoizes the conversation' do
-      expect(account.conversations).to receive(:find_by).once.and_return(conversation)
       service.send(:conversation)
-      service.send(:conversation)
+
+      queries = []
+      collector = ->(_name, _started, _finished, _id, payload) { queries << payload[:sql] unless payload[:name].in?(%w[SCHEMA CACHE]) }
+      ActiveSupport::Notifications.subscribed(collector, 'sql.active_record') { service.send(:conversation) }
+
+      expect(queries).to be_empty
     end
   end
 
