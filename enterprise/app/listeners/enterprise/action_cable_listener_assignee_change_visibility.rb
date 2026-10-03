@@ -1,11 +1,10 @@
-# Adalink: extraído de Enterprise::ActionCableListener (que passou do limite
-# de Metrics/ModuleLength) - resolve quem deve receber o evento
-# assignee.changed numa caixa Channel::Whatsapp, além de quem já vê a
-# conversa depois da troca.
+# Resolve quem recebe o assignee.changed numa caixa Channel::Whatsapp, além de
+# quem já enxerga a conversa depois da troca. Separado do
+# Enterprise::ActionCableListener pra não estourar o limite de Metrics/ModuleLength.
 module Enterprise::ActionCableListenerAssigneeChangeVisibility
   private
 
-  # Adalink: quem PERDE a conversa numa reatribuição também precisa do evento
+  # Quem PERDE a conversa numa reatribuição também precisa do evento
   # assignee.changed, pra tela dele tirar a conversa da lista — mesmo que a
   # regra de papel não deixe mais ele ver a conversa depois da troca (o
   # WhatsappParticipationCleanupListener já removeu o participante antes

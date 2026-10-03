@@ -113,6 +113,18 @@ RSpec.describe Enterprise::SearchService do
         expect(Rails.logger).to have_received(:warn).with(/role visibility.*limit/i)
       end
 
+      it 'asks the database for at most the cap plus one row (the LIMIT is in the SQL, not applied after loading)' do
+        stub_const('Enterprise::SearchService::ROLE_VISIBILITY_CONVERSATION_LIMIT', 2)
+        statements = []
+        collector = ->(_name, _start, _finish, _id, payload) { statements << payload }
+
+        ActiveSupport::Notifications.subscribed(collector, 'sql.active_record') { search_service.send(:build_where_conditions) }
+
+        limited = statements.select { |payload| payload[:sql].include?('FROM "conversations"') && payload[:sql].include?('LIMIT') }
+        expect(limited).not_to be_empty
+        expect(limited.any? { |payload| payload[:sql].include?('LIMIT 3') || payload[:type_casted_binds].to_a.include?(3) }).to be true
+      end
+
       it 'does not log when the list fits in the limit' do
         stub_const('Enterprise::SearchService::ROLE_VISIBILITY_CONVERSATION_LIMIT', 10)
 

@@ -30,7 +30,7 @@ describe 'ActionCableBroadcastJob role visibility on delayed delivery' do
     # perform diretamente com o token de A, sem passar pelo enqueue real -
     # o ponto do teste e o PERFORM (que sempre releu do banco), nao o
     # enqueue.
-    data = { id: conversation.display_id, account_id: account.id }
+    data = conversation.push_event_data.merge(account_id: account.id)
 
     # A conversa e reatribuida pra B DEPOIS do "disparo" do job (que so
     # tinha o token de A), e B manda uma mensagem nova - o cenario que o
@@ -55,7 +55,7 @@ describe 'ActionCableBroadcastJob role visibility on delayed delivery' do
   end
 
   it 'still delivers assignee.changed to whoever lost access, but without messages' do
-    data = { id: conversation.display_id, account_id: account.id }
+    data = conversation.push_event_data.merge(account_id: account.id)
 
     conversation.update!(assignee: agent_b)
     create(:message, account: account, inbox: whatsapp_inbox, conversation: conversation, content: 'mensagem nova de B', message_type: :outgoing)
@@ -75,7 +75,7 @@ describe 'ActionCableBroadcastJob role visibility on delayed delivery' do
   end
 
   it 'still delivers the full payload (including messages) to whoever can still see the conversation' do
-    data = { id: conversation.display_id, account_id: account.id }
+    data = conversation.push_event_data.merge(account_id: account.id)
     new_message = create(:message, account: account, inbox: whatsapp_inbox, conversation: conversation, content: 'ainda visivel',
                                    message_type: :outgoing)
 
@@ -97,7 +97,7 @@ describe 'ActionCableBroadcastJob role visibility on delayed delivery' do
     before { create(:inbox_member, user: agent_a, inbox: other_inbox) }
 
     it 'keeps delivering the full payload (current behaviour, unchanged)' do
-      data = { id: other_conversation.display_id, account_id: account.id }
+      data = other_conversation.push_event_data.merge(account_id: account.id)
       other_conversation.update!(assignee: agent_b)
       new_message = create(:message, account: account, inbox: other_inbox, conversation: other_conversation, content: 'sem filtro',
                                      message_type: :outgoing)
@@ -157,17 +157,16 @@ describe 'ActionCableBroadcastJob role visibility on delayed delivery' do
     end
 
     it 'adds no queries to events that are not conversation events' do
-      data = { id: conversation.display_id, account_id: account.id }
+      data = conversation.push_event_data.merge(account_id: account.id)
 
       expect(count_queries { override_perform('message.created', data) }).to eq(0)
     end
 
-    it 'adds a single lightweight query when the payload does not carry the channel' do
-      data = { id: other_conversation.display_id, account_id: account.id }
-      upstream_perform('conversation.updated', data)
+    it 'passes a conversation payload without :channel straight to the upstream behaviour' do
+      data = other_conversation.push_event_data.merge(account_id: account.id).except(:channel)
 
       expect(count_queries { override_perform('conversation.updated', data) })
-        .to eq(count_queries { upstream_perform('conversation.updated', data) } + 1)
+        .to eq(count_queries { upstream_perform('conversation.updated', data) })
     end
 
     it 'loads the conversation once on a WhatsApp conversation event' do

@@ -31,13 +31,8 @@ module Enterprise::ActionCableBroadcastJob
     return false unless ActionCableBroadcastJob::CONVERSATION_UPDATE_EVENTS.include?(event_name)
     return false if data[:account_id].blank? || data[:id].blank?
 
-    (data[:channel] || channel_type_for(data)) == Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE
-  end
-
-  # O payload de conversa já traz :channel (Conversation#push_event_data). Sem
-  # ele (ex.: job enfileirado por uma versão anterior), 1 consulta leve.
-  def channel_type_for(data)
-    Conversation.where(account_id: data[:account_id], display_id: data[:id]).joins(:inbox).pick('inboxes.channel_type')
+    # O payload de conversa sempre traz :channel (Conversation#push_event_data).
+    data[:channel] == Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE
   end
 
   # Separa members (tokens) em quem continua vendo a conversa e quem perdeu o
