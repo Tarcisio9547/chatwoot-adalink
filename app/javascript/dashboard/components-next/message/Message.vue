@@ -124,7 +124,7 @@ const props = defineProps({
   createdAt: { type: Number, required: true }, // eslint-disable-line vue/no-unused-properties
   currentUserId: { type: Number, required: true }, // eslint-disable-line vue/no-unused-properties
   groupWithNext: { type: Boolean, default: false },
-  inboxId: { type: Number, default: null }, // eslint-disable-line vue/no-unused-properties
+  inboxId: { type: Number, default: null },
   inboxSupportsReplyTo: { type: Object, default: () => ({}) },
   inReplyTo: { type: Object, default: null }, // eslint-disable-line vue/no-unused-properties
   isEmailInbox: { type: Boolean, default: false },
@@ -133,7 +133,10 @@ const props = defineProps({
   sender: { type: Object, default: null },
   senderId: { type: Number, default: null },
   senderType: { type: String, default: null },
-  sourceId: { type: String, default: '' }, // eslint-disable-line vue/no-unused-properties
+  // Expostos como data-source-id / data-inbox-id na raiz do template: o CRM da
+  // Adalink (iframe do Atendimento) usa para carregar a mídia do WhatsApp
+  // pessoal sob demanda, sem depender da ordem das mensagens.
+  sourceId: { type: String, default: '' },
 });
 
 const emit = defineEmits(['retry']);
@@ -520,6 +523,8 @@ provideMessageContext({
     :id="`message${props.id}`"
     class="flex w-full mb-2 message-bubble-container"
     :data-message-id="props.id"
+    :data-source-id="props.sourceId || undefined"
+    :data-inbox-id="props.inboxId || undefined"
     :class="[
       flexOrientationClass,
       {
