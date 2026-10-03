@@ -171,4 +171,59 @@ describe 'Notification role visibility on WhatsApp conversations', type: :reques
       expect(many).to eq(few)
     end
   end
+
+  describe 'query cost' do
+    let!(:other_inbox) { create(:inbox, account: account) }
+
+    before { create(:inbox_member, user: agent_a, inbox: other_inbox) }
+
+    def notification_on_other_channel
+      other = create(:conversation, account: account, inbox: other_inbox, assignee: agent_b)
+      create(:message, account: account, inbox: other_inbox, conversation: other, message_type: :incoming, content: 'oi')
+      create(:notification, account: account, user: agent_a, primary_actor: other, notification_type: 'conversation_assignment')
+    end
+
+    def count_queries(&)
+      count = 0
+      counter = ->(_name, _started, _finished, _id, payload) { count += 1 unless payload[:name].in?(%w[SCHEMA CACHE]) }
+      ActiveSupport::Notifications.subscribed(counter, 'sql.active_record', &)
+      count
+    end
+
+    # base: a mesma notificação com a checagem de papel neutralizada
+    def base_and_checked(method_name)
+      base = notification_on_other_channel
+      checked = notification_on_other_channel
+      allow(base).to receive(:content_hidden?).and_return(false)
+      [base, checked].each { |notification| Notification.find(notification.id).public_send(method_name) } # aquece caches
+      [count_queries { base.public_send(method_name) }, count_queries { checked.public_send(method_name) }]
+    end
+
+    it 'adds no query to push_event_data (the broadcast) on another channel' do
+      base, checked = base_and_checked(:push_event_data)
+
+      expect(checked).to eq(base)
+    end
+
+    it 'adds at most one light query to push_message_body on another channel (and none once the inbox is loaded)' do
+      base, checked = base_and_checked(:push_message_body)
+
+      expect(checked).to be <= base + 1
+    end
+
+    it 'does not look up the AccountUser again in the bell preload when the request already carries it' do
+      hidden = create(:conversation, account: account, inbox: whatsapp_inbox, assignee: agent_b)
+      create(:notification, account: account, user: agent_a, primary_actor: hidden, notification_type: 'conversation_assignment')
+      Current.account_user = AccountUser.find_by(user: agent_a, account: account)
+      notifications = agent_a.notifications.where(account_id: account.id)
+
+      account_user_queries = 0
+      counter = ->(_n, _s, _f, _i, payload) { account_user_queries += 1 if payload[:sql].include?('FROM "account_users"') }
+      ActiveSupport::Notifications.subscribed(counter, 'sql.active_record') { Notification.preload_content_visibility(notifications) }
+
+      expect(account_user_queries).to eq(0)
+    ensure
+      Current.account_user = nil
+    end
+  end
 end

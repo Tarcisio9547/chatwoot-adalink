@@ -100,4 +100,21 @@ describe 'Captain tasks role visibility', type: :request do
 
     expect(response).not_to have_http_status(:not_found)
   end
+
+  describe 'query cost on other channels' do
+    # O role check reaproveita a conversa que o service ja carrega (com o canal na
+    # mesma consulta): outra caixa le a conversa uma vez, como no upstream.
+    it 'reads the conversation once in the request, with no extra lookup for the role check' do
+      other_inbox = create(:inbox, account: account)
+      other = create(:conversation, account: account, inbox: other_inbox, assignee: colleague)
+      add_customer_messages(other, 'outra caixa')
+      call_task('summarize', agent, other) # aquece caches
+
+      reads = 0
+      counter = ->(_name, _started, _finished, _id, payload) { reads += 1 if payload[:sql].include?('FROM "conversations"') }
+      ActiveSupport::Notifications.subscribed(counter, 'sql.active_record') { call_task('summarize', agent, other) }
+
+      expect(reads).to eq(1)
+    end
+  end
 end
