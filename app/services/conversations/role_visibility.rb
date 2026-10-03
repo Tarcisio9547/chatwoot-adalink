@@ -46,6 +46,17 @@ class Conversations::RoleVisibility
       filter_by_tier(conversations, user, permission_tier(account_user.permissions))
     end
 
+    # Restringe um escopo de conversas ao que o usuário enxerga: as de caixas
+    # WhatsApp só entram se o papel permite, as de outras caixas ficam como estão.
+    # Uma query só (subconsultas), pra jobs que agem em lote por display_id.
+    def restrict_to_visible(conversations, user, account_user:)
+      return conversations if unrestricted?(account_user)
+
+      whatsapp = conversations.where(inbox_id: Inbox.where(channel_type: WHATSAPP_CHANNEL_TYPE).select(:id))
+      hidden = whatsapp.where.not(id: filter(whatsapp, user, account_user: account_user).select(:id))
+      conversations.where.not(id: hidden.select(:id))
+    end
+
     # Usado pelo ActionCableListener: membros cujo ÚNICO
     # acesso à conversa vem de conversation_unassigned_manage - ou seja, só
     # vêem enquanto ela estiver sem atendente. Serve pra saber quem precisa
