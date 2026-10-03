@@ -10,6 +10,11 @@ require 'rails_helper'
 # volta pra A e o ParticipationListener insere A. Sem lock a limpeza retomada
 # apagaria o participante A do responsável atual; com o lock a troca B->A espera.
 #
+# O lock é FOR NO KEY UPDATE, não FOR UPDATE: enquanto a limpeza segura a linha da
+# conversa, um FOR KEY SHARE (o lock que o INSERT de uma linha com chave estrangeira
+# pra conversa pediria) não espera. O spec prova o modo do lock direto, pois o schema
+# de hoje não tem FK pra conversations.
+#
 # Duas threads, cada uma com sua conexão real do pool, e uma Queue como
 # barreira. O grupo roda fora da transação de teste: dentro dela o Rails faz
 # todas as threads compartilharem a mesma conexão (lock_thread), e dois
@@ -21,6 +26,7 @@ describe 'race between the participation listeners and a reassignment' do
   self.use_transactional_tests = false
 
   let(:participation_listener) { ParticipationListener.instance }
+  let(:whatsapp_channel) { Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE }
   let!(:account) { create(:account) }
   let!(:agent_a) { create(:user, account: account, role: :agent) }
   let!(:agent_b) { create(:user, account: account, role: :agent) }
@@ -98,7 +104,8 @@ describe 'race between the participation listeners and a reassignment' do
 
     pause_old_job_when_inserting(paused: paused, resume: resume) do
       old_job = run_in_thread(old_job: true) do
-        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: Conversation.find(conversation.id))
+        fresh = Conversation.find(conversation.id)
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: fresh, channel_type: whatsapp_channel)
         participation_listener.assignee_changed(event)
       end
       paused.pop(timeout: 15) || raise('old job never reached the insert')
@@ -106,7 +113,8 @@ describe 'race between the participation listeners and a reassignment' do
       reassignment = run_in_thread do
         reassigned = Conversation.find(conversation.id)
         reassigned.update!(assignee: agent_b)
-        participation_listener.assignee_changed(Events::Base.new(:assignee_changed, Time.zone.now, conversation: reassigned))
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: reassigned, channel_type: whatsapp_channel)
+        participation_listener.assignee_changed(event)
       end
       # Com o lock, a troca fica bloqueada esperando o job; sem ele, termina já.
       reassignment.join(2)
@@ -137,7 +145,8 @@ describe 'race between the participation listeners and a reassignment' do
       back_to_a = run_in_thread do
         reassigned = Conversation.find(conversation.id)
         reassigned.update!(assignee: agent_a)
-        participation_listener.assignee_changed(Events::Base.new(:assignee_changed, Time.zone.now, conversation: reassigned))
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: reassigned, channel_type: whatsapp_channel)
+        participation_listener.assignee_changed(event)
       end
       # Com o lock, a volta pra A fica bloqueada esperando a limpeza; sem ele, termina já.
       back_to_a.join(2)
@@ -149,6 +158,32 @@ describe 'race between the participation listeners and a reassignment' do
     participant_ids = ConversationParticipant.where(conversation_id: conversation.id).pluck(:user_id)
     expect(Conversation.find(conversation.id).assignee_id).to eq(agent_a.id)
     expect(participant_ids).to contain_exactly(agent_a.id)
+  end
+
+  it 'holds the conversation row with FOR NO KEY UPDATE: a FOR KEY SHARE (foreign-key INSERT) is not blocked' do
+    conversation.update!(assignee: agent_b)
+    conversation.conversation_participants.create!(user: agent_a)
+    paused = Queue.new
+    resume = Queue.new
+
+    pause_cleanup_when_destroying(paused: paused, resume: resume) do
+      cleanup = run_in_thread(cleanup: true) do
+        changed = { 'assignee_id' => [agent_a.id, agent_b.id] }
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: Conversation.find(conversation.id), changed_attributes: changed)
+        WhatsappParticipationCleanupListener.instance.assignee_changed(event)
+      end
+      paused.pop(timeout: 15) || raise('cleanup never reached the destroy')
+
+      key_share = run_in_thread do
+        Conversation.transaction { Conversation.lock('FOR KEY SHARE').find_by(id: conversation.id) }
+      end
+      # Se o lock da limpeza fosse FOR UPDATE, o FOR KEY SHARE esperaria a limpeza (que esta pausada).
+      not_blocked = key_share.join(5)
+
+      resume << true
+      join_all(cleanup, key_share)
+      expect(not_blocked).not_to be_nil
+    end
   end
 end
 # rubocop:enable RSpec/DescribeClass

@@ -5,6 +5,7 @@ require 'rails_helper'
 # que ler o responsável do banco, não confiar no valor do evento no enqueue.
 describe ParticipationListener do
   let(:listener) { described_class.instance }
+  let(:whatsapp_channel) { Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE }
   let!(:account) { create(:account) }
   let!(:agent_a) { create(:user, account: account, role: :agent) }
   let!(:agent_b) { create(:user, account: account, role: :agent) }
@@ -27,7 +28,7 @@ describe ParticipationListener do
         # a separate Ruby object, like a job deserializing its own copy.
         conversation.update!(assignee: agent_a)
         stale_conversation = Conversation.find(conversation.id)
-        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: stale_conversation)
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: stale_conversation, channel_type: whatsapp_channel)
 
         # The DB has already moved on to B by the time the listener runs (e.g.
         # the cleanup listener already ran for the A->B transition).
@@ -43,7 +44,7 @@ describe ParticipationListener do
       it 'does not insert anyone when the DB has since moved to unassigned' do
         conversation.update!(assignee: agent_a)
         stale_conversation = Conversation.find(conversation.id)
-        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: stale_conversation)
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: stale_conversation, channel_type: whatsapp_channel)
 
         conversation.update!(assignee: nil)
 
@@ -54,7 +55,7 @@ describe ParticipationListener do
 
       it 'does not alter the conversation object carried by the event' do
         conversation.update!(assignee: agent_a)
-        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: conversation)
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: conversation, channel_type: whatsapp_channel)
 
         listener.assignee_changed(event)
 
@@ -63,7 +64,7 @@ describe ParticipationListener do
 
       it 'still adds the assignee normally when there is no race (DB matches the event)' do
         conversation.update!(assignee: agent_a)
-        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: conversation)
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: conversation, channel_type: whatsapp_channel)
 
         listener.assignee_changed(event)
 

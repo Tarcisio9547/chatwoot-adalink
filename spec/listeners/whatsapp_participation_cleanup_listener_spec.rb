@@ -55,6 +55,18 @@ describe WhatsappParticipationCleanupListener do
         expect { listener.assignee_changed(event) }.not_to raise_error
       end
 
+      # O responsável é relido sob lock: um evento atrasado de A->B não pode remover A
+      # se a conversa já voltou pra A.
+      it 'keeps the participant when the previous assignee is the current assignee again' do
+        changed_attributes = { 'assignee_id' => [agent_a.id, agent_b.id] }
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: conversation, changed_attributes: changed_attributes)
+
+        listener.assignee_changed(event)
+
+        expect(conversation.reload.assignee_id).to eq(agent_a.id)
+        expect(conversation.conversation_participants.map(&:user_id)).to include(agent_a.id)
+      end
+
       # Este listener roda dentro do after_commit do model, antes dos callbacks
       # que ainda leem saved_changes (ex.: AssignmentHandler#notify_assignment_change
       # avalia saved_change_to_team_id? depois do assignee.changed). Recarregar o

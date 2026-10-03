@@ -8,7 +8,7 @@
 class WhatsappParticipationCleanupListener < BaseListener
   def assignee_changed(event)
     conversation, _account = extract_conversation_and_account(event)
-    return unless whatsapp_conversation?(event, conversation)
+    return unless conversation.inbox.whatsapp?
 
     previous_assignee_id = previous_assignee_id_for(event)
     return if previous_assignee_id.blank?
@@ -24,8 +24,10 @@ class WhatsappParticipationCleanupListener < BaseListener
   # O lock serializa com o ParticipationListener, que insere o novo responsável, e
   # com a troca de responsável (o UPDATE também toma FOR NO KEY UPDATE). Sem ele, a
   # limpeza de uma troca antiga apagaria o participante de quem acabou de voltar
-  # (B->A). FOR NO KEY UPDATE em vez de FOR UPDATE: não bloqueia o INSERT de
-  # mensagens, que só pede FOR KEY SHARE na conversa.
+  # (B->A). FOR NO KEY UPDATE em vez de FOR UPDATE: o UPDATE do responsável também
+  # o toma (segue serializando), mas ele não conflita com FOR KEY SHARE, o lock que
+  # um INSERT com chave estrangeira pra conversa pediria. O schema de hoje não tem
+  # essa FK; o modo mais fraco evita bloquear se algum dia vier.
   def remove_previous_assignee(conversation_id, previous_assignee_id)
     Conversation.transaction do
       locked = Conversation.lock('FOR NO KEY UPDATE').find_by(id: conversation_id)

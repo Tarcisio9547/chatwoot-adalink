@@ -6,7 +6,7 @@
 module Enterprise::ParticipationListener
   def assignee_changed(event)
     conversation, _account = extract_conversation_and_account(event)
-    return super unless whatsapp_conversation?(event, conversation)
+    return super unless event.data[:channel_type] == Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE
 
     add_current_assignee_as_participant(conversation.id)
   rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
@@ -20,7 +20,8 @@ module Enterprise::ParticipationListener
   # apagaria os saved_changes que outros callbacks ainda podem ler. Com a linha
   # travada, o responsável não muda entre a leitura e a inserção, e a troca
   # (UPDATE) espera este bloco terminar. FOR NO KEY UPDATE basta (o UPDATE também
-  # o toma) e, ao contrário de FOR UPDATE, não bloqueia o INSERT de mensagens.
+  # o toma) e, ao contrário de FOR UPDATE, não conflita com FOR KEY SHARE (INSERT
+  # com chave estrangeira pra conversa; o schema de hoje não tem essa FK).
   def add_current_assignee_as_participant(conversation_id)
     Conversation.transaction do
       locked = Conversation.lock('FOR NO KEY UPDATE').find_by(id: conversation_id)

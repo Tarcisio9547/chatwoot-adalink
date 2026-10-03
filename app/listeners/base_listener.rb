@@ -6,14 +6,6 @@ class BaseListener
     [conversation, conversation.account]
   end
 
-  # Tipo de canal da conversa do evento sem consulta extra: o despacho assincrono
-  # leva channel_type no payload; sem ele (evento sincrono ou de outra origem) usa
-  # a caixa da conversa.
-  def whatsapp_conversation?(event, conversation)
-    channel_type = event.data[:channel_type] || conversation.inbox&.channel_type
-    channel_type == Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE
-  end
-
   def extract_notification_and_account(event)
     notification = event.data[:notification]
     notification_finder = NotificationFinder.new(notification.user, notification.account)
