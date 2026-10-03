@@ -5,6 +5,11 @@ require 'rails_helper'
 # Sem lock, a limpeza (que remove A) roda antes do job inserir A e A fica
 # participante pra sempre. Com o lock de linha, a troca espera o job terminar.
 #
+# A limpeza tem a corrida inversa (B->A): ela lê o responsável (B), é pausada
+# antes de remover o participante A da troca A->B, e nesse intervalo a conversa
+# volta pra A e o ParticipationListener insere A. Sem lock a limpeza retomada
+# apagaria o participante A do responsável atual; com o lock a troca B->A espera.
+#
 # Duas threads, cada uma com sua conexão real do pool, e uma Queue como
 # barreira. O grupo roda fora da transação de teste: dentro dela o Rails faz
 # todas as threads compartilharem a mesma conexão (lock_thread), e dois
@@ -59,9 +64,26 @@ describe 'race between the participation listeners and a reassignment' do
     ActiveRecord::Relation.define_method(:find_or_create_by!, original)
   end
 
-  def run_in_thread(old_job: false, &)
+  # Pausa a thread marcada como "limpeza" dentro do destroy_all dos participantes:
+  # depois da leitura do responsável e antes da remoção.
+  def pause_cleanup_when_destroying(paused:, resume:)
+    original = ActiveRecord::Relation.instance_method(:destroy_all)
+    ActiveRecord::Relation.define_method(:destroy_all) do |*args|
+      if klass == ConversationParticipant && Thread.current[:cleanup]
+        paused << true
+        resume.pop
+      end
+      original.bind_call(self, *args)
+    end
+    yield
+  ensure
+    ActiveRecord::Relation.define_method(:destroy_all, original)
+  end
+
+  def run_in_thread(old_job: false, cleanup: false, &)
     Thread.new do
       Thread.current[:old_job] = old_job
+      Thread.current[:cleanup] = cleanup
       ActiveRecord::Base.connection_pool.with_connection(&)
     end
   end
@@ -96,6 +118,37 @@ describe 'race between the participation listeners and a reassignment' do
     participant_ids = ConversationParticipant.where(conversation_id: conversation.id).pluck(:user_id)
     expect(Conversation.find(conversation.id).assignee_id).to eq(agent_b.id)
     expect(participant_ids).to contain_exactly(agent_b.id)
+  end
+
+  it 'keeps the current assignee as a participant when the cleanup of an older change is paused (B->A race)' do
+    conversation.update!(assignee: agent_b)
+    conversation.conversation_participants.create!(user: agent_a)
+    paused = Queue.new
+    resume = Queue.new
+
+    pause_cleanup_when_destroying(paused: paused, resume: resume) do
+      cleanup = run_in_thread(cleanup: true) do
+        changed = { 'assignee_id' => [agent_a.id, agent_b.id] }
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: Conversation.find(conversation.id), changed_attributes: changed)
+        WhatsappParticipationCleanupListener.instance.assignee_changed(event)
+      end
+      paused.pop(timeout: 15) || raise('cleanup never reached the destroy')
+
+      back_to_a = run_in_thread do
+        reassigned = Conversation.find(conversation.id)
+        reassigned.update!(assignee: agent_a)
+        participation_listener.assignee_changed(Events::Base.new(:assignee_changed, Time.zone.now, conversation: reassigned))
+      end
+      # Com o lock, a volta pra A fica bloqueada esperando a limpeza; sem ele, termina já.
+      back_to_a.join(2)
+
+      resume << true
+      join_all(cleanup, back_to_a)
+    end
+
+    participant_ids = ConversationParticipant.where(conversation_id: conversation.id).pluck(:user_id)
+    expect(Conversation.find(conversation.id).assignee_id).to eq(agent_a.id)
+    expect(participant_ids).to contain_exactly(agent_a.id)
   end
 end
 # rubocop:enable RSpec/DescribeClass
