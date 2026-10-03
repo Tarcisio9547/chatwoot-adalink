@@ -5,11 +5,13 @@ require 'rails_helper'
 # a thread 2 sobrescreveria o valor da thread 1 e o evento de uma conversa
 # WhatsApp iria, sem filtro de papel, pra todos os membros da caixa.
 #
-# O spec força a intercalação com uma Queue como barreira dentro de
-# around_member_filtering: a thread 1 pausa depois de marcar a conversa, a
-# thread 2 processa um evento de outra caixa até o fim, e só então a thread 1
-# continua. Com estado por thread (ActiveSupport::IsolatedExecutionState) ela
-# mantém a conversa dela; com variável de instância leria a da thread 2.
+# O spec força a intercalação com Queues dentro de around_member_filtering: as
+# duas threads ficam DENTRO do bloco, cada uma com a sua marca já gravada. A
+# thread 1 só roda o super (user_tokens) depois que a thread 2 entrou no bloco
+# dela, e a thread 2 só sai depois que a thread 1 terminou. Com estado por
+# thread (ActiveSupport::IsolatedExecutionState) a thread 1 mantém a conversa
+# dela; com variável de instância leria a marca da thread 2, mesmo restaurando o
+# valor anterior no ensure.
 # rubocop:disable RSpec/DescribeMethod, RSpec/SpecFilePathFormat -- nao testa
 # um metodo especifico, testa a ausencia de vazamento de estado entre
 # threads compartilhando o Singleton (varios metodos privados envolvidos:
@@ -18,6 +20,7 @@ require 'rails_helper'
 # upstream_coverage).
 describe ActionCableListener, 'thread-safety of member filtering (concurrency)' do
   let(:listener) { described_class.instance }
+  let(:barrier) { { wa_in: Queue.new, other_in: Queue.new, wa_done: Queue.new } }
 
   let!(:account) { create(:account) }
   let!(:setor_role) { create(:custom_role, account: account, permissions: %w[conversation_participating_manage]) }
@@ -47,62 +50,57 @@ describe ActionCableListener, 'thread-safety of member filtering (concurrency)' 
     other_conversation.inbox.reload
   end
 
+  # Barreira direto no metodo privado (um mock RSpec nao e garantidamente
+  # thread-safe). O original grava a marca e chama o bloco recebido, que aqui e
+  # o lambda de cada thread.
+  def barrier_wrapper_for(conversation, block)
+    queues = barrier
+    if conversation&.id == wa_conversation.id
+      lambda do
+        queues[:wa_in] << true
+        queues[:other_in].pop
+        block.call
+        queues[:wa_done] << true
+      end
+    else
+      lambda do
+        queues[:other_in] << true
+        queues[:wa_done].pop
+        block.call
+      end
+    end
+  end
+
+  def run_in_thread(conversation)
+    Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do
+        listener.conversation_updated(Events::Base.new(:'conversation.updated', Time.zone.now, conversation: conversation))
+      end
+    end
+  end
+
   it 'does not leak the conversation context between threads sharing the same Singleton instance' do
-    thread1_entered_yield = Queue.new
-    thread2_finished = Queue.new
     results = {}
     results_mutex = Mutex.new
-
     allow(ActionCableBroadcastJob).to receive(:perform_later) do |tokens, event_name, _payload|
-      next unless event_name == 'conversation.updated'
-
-      results_mutex.synchronize { results[Thread.current] = tokens }
+      results_mutex.synchronize { results[Thread.current] = tokens } if event_name == 'conversation.updated'
     end
 
-    # Insere a barreira DIRETO no metodo privado around_member_filtering (em
-    # vez de um mock RSpec, que nao e garantidamente thread-safe): guarda a
-    # implementacao original e a substitui por uma versao que, so na
-    # chamada com a conversa WhatsApp, pausa exatamente entre marcar o
-    # estado e rodar o bloco (que aciona user_tokens) - a janela onde o bug
-    # de concorrencia vive. Restaurado no ensure do teste.
+    spec = self
     listener_class = listener.singleton_class
     original_method = listener_class.instance_method(:around_member_filtering)
-    wa_conversation_id = wa_conversation.id
-
     listener_class.define_method(:around_member_filtering) do |conversation, &block|
-      if conversation&.id == wa_conversation_id
-        wrapped = lambda do
-          thread1_entered_yield << true
-          thread2_finished.pop
-          block.call
-        end
-        original_method.bind_call(self, conversation, &wrapped)
-      else
-        original_method.bind_call(self, conversation, &block)
-      end
+      original_method.bind_call(self, conversation, &spec.barrier_wrapper_for(conversation, block))
     end
 
-    thread1 = Thread.new do
-      ActiveRecord::Base.connection_pool.with_connection do
-        event = Events::Base.new(:'conversation.updated', Time.zone.now, conversation: wa_conversation)
-        listener.conversation_updated(event)
-      end
+    begin
+      thread1 = run_in_thread(wa_conversation)
+      barrier[:wa_in].pop
+      thread2 = run_in_thread(other_conversation)
+      [thread1, thread2].each { |thread| thread.join(30) || raise('thread did not finish (deadlock?)') }
+    ensure
+      listener_class.define_method(:around_member_filtering, original_method)
     end
-
-    thread1_entered_yield.pop
-
-    thread2 = Thread.new do
-      ActiveRecord::Base.connection_pool.with_connection do
-        event = Events::Base.new(:'conversation.updated', Time.zone.now, conversation: other_conversation)
-        listener.conversation_updated(event)
-      end
-    end
-    thread2.join
-    thread2_finished << true
-
-    thread1.join
-
-    listener_class.define_method(:around_member_filtering, original_method)
 
     thread1_tokens = results[thread1]
     thread2_tokens = results[thread2]
