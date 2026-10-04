@@ -90,6 +90,7 @@ describe 'Bulk actions and macros on conversations a restricted user cannot see'
     end
 
     it 'runs the same macro on the conversations he sees, in the same call' do
+      create(:team_member, team: team, user: restricted) # o dono continua no time: a troca não o tira da conversa
       run_macro(restricted, [hidden, visible],
                 { 'action_name' => 'assign_team', 'action_params' => [team.id] },
                 { 'action_name' => 'change_status', 'action_params' => ['resolved'] })

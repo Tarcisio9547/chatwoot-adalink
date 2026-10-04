@@ -111,7 +111,8 @@ RSpec.describe 'Conversation Participants API', type: :request do
           end
 
           it 'can still add through PUT (the list keeps the manager and adds a colleague)' do
-            put participants_url.call(conversation), params: { user_ids: [manager.id, colleague.id] }, headers: restricted.create_new_auth_token, as: :json
+            headers = restricted.create_new_auth_token
+            put participants_url.call(conversation), params: { user_ids: [manager.id, colleague.id] }, headers: headers, as: :json
 
             expect(response).to have_http_status(:success)
             expect(conversation.conversation_participants.pluck(:user_id)).to contain_exactly(manager.id, colleague.id)

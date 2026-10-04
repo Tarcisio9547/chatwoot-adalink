@@ -3,7 +3,8 @@ class Api::V1::Accounts::Conversations::ParticipantsController < Api::V1::Accoun
   # (participante, visão restrita) se adicionaria numa conversa sem responsável e
   # ficaria com acesso mesmo depois de a roleta entregar o lead a outro corretor.
   # A regra está em ConversationPolicy#manage_participants?.
-  before_action :authorize_manage_participants, only: [:create, :update, :destroy]
+  before_action :authorize_manage_participants, only: [:create, :update]
+  before_action :authorize_remove_participants, only: [:destroy]
   before_action :validate_user_ids, only: [:create, :update, :destroy]
 
   def show
@@ -21,6 +22,8 @@ class Api::V1::Accounts::Conversations::ParticipantsController < Api::V1::Accoun
   def update
     added_ids = participants_to_be_added_ids
     removed_ids = participants_to_be_removed_ids
+    # Quem só pode adicionar (responsável restrito) não pode mandar uma lista que tira alguém.
+    authorize @conversation, :remove_participants? if removed_ids.any?
     ActiveRecord::Base.transaction do
       added_ids.each { |user_id| @conversation.conversation_participants.find_or_create_by(user_id: user_id) }
       removed_ids.each { |user_id| @conversation.conversation_participants.find_by(user_id: user_id)&.destroy }
@@ -51,6 +54,10 @@ class Api::V1::Accounts::Conversations::ParticipantsController < Api::V1::Accoun
 
   def authorize_manage_participants
     authorize @conversation, :manage_participants?
+  end
+
+  def authorize_remove_participants
+    authorize @conversation, :remove_participants?
   end
 
   # user_ids tem que ser uma lista de inteiros (ou de números em texto). Qualquer outra

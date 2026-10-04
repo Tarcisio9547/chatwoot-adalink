@@ -29,15 +29,29 @@ class ConversationPolicy < ApplicationPolicy
     administrator? || agent_bot? || agent_can_view_conversation?
   end
 
-  # Adalink: criar, alterar ou remover participantes. Participar dá acesso à conversa,
-  # então não pode ser aberto a quem apenas a enxerga: só administrador, agente com papel
-  # sem restrição de conversas (sem custom_role, ou "Todas" no módulo enterprise) ou o
-  # RESPONSÁVEL atual. Quem é só participante, ou tem visão "Minhas"/"Não atribuídas"
-  # sem ser o responsável, não pode se adicionar (nem adicionar outros).
+  # Adalink: ADICIONAR participantes (criar e acrescentar na lista). Participar dá acesso à
+  # conversa, então não pode ser aberto a quem apenas a enxerga: só administrador, agente com
+  # papel sem restrição de conversas (sem custom_role, ou "Todas" no módulo enterprise) ou o
+  # RESPONSÁVEL atual. Quem é só participante, ou tem visão "Minhas"/"Não atribuídas" sem ser o
+  # responsável, não pode se adicionar (nem adicionar outros).
   def manage_participants?
     return false if agent_bot? || account_user.blank?
 
     administrator? || assigned_to_user? || unrestricted_conversation_role?
+  end
+
+  # Adalink: REMOVER participantes. O responsável restrito adiciona mas não remove (senão o
+  # corretor tiraria o gestor que o mark-work do CRM adicionou): só administrador, agente sem
+  # custom_role e "Todas".
+  def remove_participants?
+    return false if agent_bot? || account_user.blank?
+
+    administrator? || unrestricted_conversation_role?
+  end
+
+  # Adalink: papel restrito de conversas (custom_role sem conversation_manage, que não é administrador).
+  def restricted_role?
+    account_user.present? && !administrator? && !unrestricted_conversation_role?
   end
 
   # Adalink: quem tem visão restrita ("Minhas" ou "Não atribuídas", custom_role sem
@@ -45,14 +59,50 @@ class ConversationPolicy < ApplicationPolicy
   # responsável se ele mesmo for o responsável atual. Administrador, agente sem custom_role e
   # "Todas" seguem como sempre. `new_assignee_id` é o alvo da troca (nil = tirar o responsável;
   # agente bot, passe nil). Vale para a tela, as ações em massa e as macros, em todos os canais.
+  # Exige também enxergar a conversa (show?) e, como manage_participants?, um account_user.
   def change_assignee?(new_assignee_id)
-    return true if agent_bot? || account_user.blank? || administrator? || unrestricted_conversation_role?
-    return true if assigned_to_user?
+    return true if agent_bot?
+    return false if account_user.blank?
+    return true if administrator?
+    return false unless show?
 
-    record.assignee_id.nil? && new_assignee_id.to_s == user.id.to_s
+    unrestricted_conversation_role? || owner_or_takes_ownerless?(new_assignee_id)
+  end
+
+  # Adalink: trocar o time pode trocar o responsável (o AssignmentHandler zera o dono que não é do
+  # time novo e o round-robin do time pode entregar a conversa a um colega). Para visão restrita, a
+  # troca de time que mudaria o responsável só passa para o próprio responsável; as que não mexem no
+  # dono (sem time, time que já tem o dono, time sem auto-atribuição numa conversa sem dono) passam.
+  # `team` é o time de destino (nil = sem time).
+  def change_team?(team)
+    return true if agent_bot?
+    return false if account_user.blank?
+    return true if administrator?
+    return false unless show?
+    return true if unrestricted_conversation_role? || !team_change_alters_assignee?(team)
+
+    assigned_to_user?
+  end
+
+  # Adalink: ações em massa e macros que mudam o status. Quem tem visão restrita só age no que enxerga
+  # (em todos os canais); os demais seguem como sempre.
+  def change_status?
+    !restricted_role? || show?
   end
 
   private
+
+  # Restrito: o dono mexe como quiser; sem dono, só se atribui a si mesmo.
+  def owner_or_takes_ownerless?(new_assignee_id)
+    assigned_to_user? || (record.assignee_id.nil? && new_assignee_id.to_s == user.id.to_s)
+  end
+
+  def team_change_alters_assignee?(team)
+    return false if team.nil?
+    return !team.team_members.exists?(user_id: record.assignee_id) if record.assignee_id.present?
+
+    team.allow_auto_assign.present?
+  end
 
   # Papel padrão do Chatwoot (sem custom_role) enxerga e gerencia todas as conversas das
   # suas caixas. O módulo enterprise restringe isso para custom_role sem conversation_manage.

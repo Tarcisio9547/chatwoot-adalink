@@ -97,8 +97,12 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
     @conversation.status == 'pending' && params[:status] == 'open'
   end
 
+  # Adalink: reabrir não pode roubar o dono de quem tem visão restrita (o gestor participante virava
+  # responsável e a limpeza tirava o corretor da própria conversa). Só atribui se a regra de
+  # atribuição (change_assignee?) permitir; senão reabre sem trocar o responsável.
   def should_assign_conversation?
-    @conversation.status == 'open' && Current.user.is_a?(User) && Current.user&.agent?
+    @conversation.status == 'open' && Current.user.is_a?(User) && Current.user&.agent? &&
+      policy(@conversation).change_assignee?(Current.user.id)
   end
 
   def toggle_priority

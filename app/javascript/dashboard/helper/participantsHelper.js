@@ -25,3 +25,18 @@ export const canManageParticipants = ({
 
   return !!assigneeId && assigneeId === currentUserId;
 };
+
+/**
+ * Quem pode REMOVER participantes. O responsável restrito adiciona mas não remove (senão o
+ * corretor tiraria o gestor que o mark-work do CRM adicionou): só administrador, agente sem
+ * custom_role e custom_role com conversation_manage ("Todas"). Espelha
+ * ConversationPolicy#remove_participants? do servidor.
+ *
+ * @param {Object} params
+ * @param {string} params.role - retorno de getUserRole ('administrator', 'agent' ou 'custom_role')
+ * @param {Array<string>} params.permissions - permissões do usuário na conta
+ * @returns {boolean}
+ */
+export const canRemoveParticipants = ({ role, permissions = [] }) =>
+  ['administrator', 'agent'].includes(role) ||
+  permissions.includes('conversation_manage');

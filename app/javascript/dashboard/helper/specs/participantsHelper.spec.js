@@ -1,4 +1,7 @@
-import { canManageParticipants } from '../participantsHelper';
+import {
+  canManageParticipants,
+  canRemoveParticipants,
+} from '../participantsHelper';
 
 // Mesma regra do servidor (ConversationPolicy#manage_participants?): administrador,
 // agente sem custom_role, custom_role com conversation_manage ("Todas") ou o
@@ -71,6 +74,47 @@ describe('participantsHelper', () => {
           permissions: [],
           assigneeId: undefined,
           currentUserId: undefined,
+        })
+      ).toBe(false);
+    });
+  });
+
+  // O responsável restrito adiciona participantes mas não remove (senão o corretor tiraria o gestor
+  // que o mark-work do CRM adicionou). Remover: administrador, agente sem custom_role e "Todas".
+  describe('#canRemoveParticipants', () => {
+    it('permite ao administrador, ao agente sem custom_role e a "Todas"', () => {
+      expect(canRemoveParticipants({ role: 'administrator' })).toBe(true);
+      expect(canRemoveParticipants({ role: 'agent' })).toBe(true);
+      expect(
+        canRemoveParticipants({
+          role: 'custom_role',
+          permissions: ['conversation_manage'],
+        })
+      ).toBe(true);
+    });
+
+    it.each([
+      ['Minhas', ['conversation_participating_manage']],
+      ['Não atribuídas', ['conversation_unassigned_manage']],
+    ])(
+      'nega à visão restrita %s, mesmo sendo o responsável',
+      (_nome, permissions) => {
+        expect(
+          canRemoveParticipants({
+            role: 'custom_role',
+            permissions,
+            assigneeId: 1,
+            currentUserId: 1,
+          })
+        ).toBe(false);
+      }
+    );
+
+    it('nega ao custom_role sem permissão de conversa', () => {
+      expect(
+        canRemoveParticipants({
+          role: 'custom_role',
+          permissions: ['contact_manage'],
         })
       ).toBe(false);
     });

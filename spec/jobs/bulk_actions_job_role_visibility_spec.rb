@@ -58,18 +58,25 @@ describe 'BulkActionsJob role visibility' do
     expect(colleague_conversation.reload.assignee_id).to eq(admin.id)
   end
 
-  # A visibilidade por papel só filtra caixas WhatsApp, então as outras ações seguem valendo nas
-  # outras caixas. Já a regra de atribuição (só toma conversa sem dono; só reatribui se for o dono)
-  # vale em TODOS os canais: ver spec/jobs/bulk_actions_job_assignee_restriction_spec.rb.
-  it 'keeps updating the other fields on other channels, but the assignee rule applies there too' do
+  # A visibilidade por papel de rótulos e soneca só filtra caixas WhatsApp (outras caixas seguem como
+  # estavam). Já responsável, time e status valem em TODOS os canais: quem tem visão restrita só age no
+  # que enxerga, e a atribuição só vale conversa sem dono ou do próprio dono (ver
+  # spec/jobs/bulk_actions_job_assignee_restriction_spec.rb e bulk_and_macro_invisible_conversations_spec.rb).
+  it 'does not change assignee or status of a colleague conversation on other channels either, but still applies labels' do
     other_inbox = create(:inbox, account: account)
     create(:inbox_member, user: setor_agent, inbox: other_inbox)
     other = create(:conversation, account: account, inbox: other_inbox, assignee: colleague, status: :open)
+    create(:label, account: account, title: 'vendas')
 
-    run_bulk(setor_agent, [other], { assignee_id: setor_agent.id, status: 'resolved' })
+    BulkActionsJob.perform_now(account: account, user: setor_agent,
+                               params: { type: 'Conversation', ids: [other.display_id],
+                                         fields: { assignee_id: setor_agent.id, status: 'resolved' } })
+    BulkActionsJob.perform_now(account: account, user: setor_agent,
+                               params: { type: 'Conversation', ids: [other.display_id], labels: { add: ['vendas'] } })
 
-    expect(other.reload.status).to eq('resolved')
+    expect(other.reload.status).to eq('open')
     expect(other.assignee_id).to eq(colleague.id)
+    expect(other.label_list).to eq(['vendas'])
   end
 end
 # rubocop:enable RSpec/DescribeClass

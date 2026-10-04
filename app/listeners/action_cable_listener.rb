@@ -176,10 +176,12 @@ class ActionCableListener < BaseListener
   private
 
   # Adalink: quem acompanha a conversa ao vivo = membros da caixa + participantes. Um participante
-  # pode não ser membro da caixa (ex.: gestor adicionado à mão). Uma consulta só (subselects), sem
-  # um acesso por participante; o token repetido some no uniq do user_tokens.
+  # pode não ser membro da caixa (ex.: gestor adicionado à mão), mas precisa ainda ser da conta (a
+  # linha de participação sobrevive a quem saiu). Uma consulta só (subselects), sem um acesso por
+  # participante; o token repetido some no uniq do user_tokens.
   def conversation_agents(conversation)
     participants = User.where(id: ConversationParticipant.where(conversation_id: conversation.id).select(:user_id))
+                       .where(id: AccountUser.where(account_id: conversation.account_id).select(:user_id))
     User.where(id: conversation.inbox.members.select(:id)).or(participants)
   end
 

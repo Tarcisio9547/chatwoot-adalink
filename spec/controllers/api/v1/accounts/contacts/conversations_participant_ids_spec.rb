@@ -20,12 +20,12 @@ RSpec.describe 'GET /api/v1/accounts/{account.id}/contacts/{id}/conversations (p
     get "/api/v1/accounts/#{account.id}/contacts/#{contact.id}/conversations", headers: admin.create_new_auth_token, as: :json
   end
 
-  def participant_selects
+  def participant_selects(&)
     selects = []
     counter = lambda do |_name, _started, _finished, _id, payload|
       selects << payload[:sql] if payload[:sql].include?('FROM "conversation_participants"')
     end
-    ActiveSupport::Notifications.subscribed(counter, 'sql.active_record') { yield }
+    ActiveSupport::Notifications.subscribed(counter, 'sql.active_record', &)
     selects
   end
 

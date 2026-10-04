@@ -25,6 +25,7 @@ const montar = (
   agentes,
   { actions = {}, role = 'agent', permissions = [], assigneeId = null } = {}
 ) => {
+  const update = vi.fn();
   const store = createStore({
     getters: {
       getCurrentUser: () => ({
@@ -58,7 +59,7 @@ const montar = (
           getUIFlags: () => ({ isFetching: false }),
           getByConversationId: () => () => [],
         },
-        actions: { show: vi.fn(), update: vi.fn() },
+        actions: { show: vi.fn(), update },
       },
     },
   });
@@ -85,7 +86,7 @@ const montar = (
       },
     },
   });
-  return { wrapper, store };
+  return { wrapper, store, update };
 };
 
 const opcoes = wrapper =>
@@ -239,5 +240,47 @@ describe('ConversationParticipant: quem pode alterar a lista', () => {
 
     expect(temParticipar(wrapper)).toBe(false);
     expect(temEngrenagem(wrapper)).toBe(false);
+  });
+});
+
+// O responsável restrito adiciona participantes mas não remove: clicar num já selecionado não faz nada
+// (o servidor também barra com 401). Administrador, agente sem custom_role e "Todas" removem.
+describe('ConversationParticipant: remover participante', () => {
+  const ana = agente(2, 'Ana', { availability_status: 'online' });
+  const bruno = agente(3, 'Bruno', { availability_status: 'online' });
+  const seletor = wrapper =>
+    wrapper.findComponent({ name: 'MultiselectDropdownItems' });
+  const idsEnviados = update =>
+    update.mock.calls.map(([, payload]) => payload.userIds);
+
+  it('o responsável restrito adiciona mas não remove', async () => {
+    const { wrapper, update } = montar([voce, ana, bruno], {
+      role: 'custom_role',
+      permissions: ['conversation_unassigned_manage'],
+      assigneeId: 1,
+    });
+    await wrapper.setData({ selectedWatchers: [ana] });
+
+    seletor(wrapper).vm.$emit('select', ana); // já é participante: seria remover
+    await wrapper.vm.$nextTick();
+    expect(update).not.toHaveBeenCalled();
+
+    seletor(wrapper).vm.$emit('select', bruno); // adicionar
+    await wrapper.vm.$nextTick();
+    expect(idsEnviados(update)).toEqual([[2, 3]]);
+  });
+
+  it.each([
+    ['agente sem custom_role', { role: 'agent' }],
+    ['administrador', { role: 'administrator' }],
+    ['"Todas"', { role: 'custom_role', permissions: ['conversation_manage'] }],
+  ])('%s remove', async (_nome, opcoesUsuario) => {
+    const { wrapper, update } = montar([voce, ana, bruno], opcoesUsuario);
+    await wrapper.setData({ selectedWatchers: [ana] });
+
+    seletor(wrapper).vm.$emit('select', ana);
+    await wrapper.vm.$nextTick();
+
+    expect(idsEnviados(update)).toEqual([[]]);
   });
 });

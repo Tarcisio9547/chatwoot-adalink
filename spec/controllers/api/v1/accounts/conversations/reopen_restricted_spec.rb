@@ -30,17 +30,25 @@ describe 'POST /api/v1/accounts/{account.id}/conversations/{id}/toggle_status (r
     context "with the restricted visibility #{permission}" do
       before { restrict!(manager, permission) }
 
-      [true, false].each do |member|
-        it "reopens a conversation he only participates in (#{member ? 'inbox member' : 'not a member'}) without taking the owner" do
-          create(:inbox_member, inbox: inbox, user: manager) if member
-          create(:conversation_participant, conversation: resolved, account: account, user: manager)
+      it 'reopens a conversation he only participates in (not a member of the inbox) without taking the owner' do
+        create(:conversation_participant, conversation: resolved, account: account, user: manager)
 
-          reopen(manager, resolved)
+        reopen(manager, resolved)
 
-          expect(response).to have_http_status(:success)
-          expect(resolved.reload.status).to eq('open')
-          expect(resolved.assignee_id).to eq(broker.id)
-        end
+        expect(response).to have_http_status(:success)
+        expect(resolved.reload.status).to eq('open')
+        expect(resolved.assignee_id).to eq(broker.id)
+      end
+
+      it 'reopens a conversation he participates in as a member of the inbox, without taking the owner' do
+        create(:inbox_member, inbox: inbox, user: manager)
+        create(:conversation_participant, conversation: resolved, account: account, user: manager)
+
+        reopen(manager, resolved)
+
+        expect(response).to have_http_status(:success)
+        expect(resolved.reload.status).to eq('open')
+        expect(resolved.assignee_id).to eq(broker.id)
       end
 
       it 'does not take away the access of the broker (owner) when the manager reopens' do
@@ -55,6 +63,7 @@ describe 'POST /api/v1/accounts/{account.id}/conversations/{id}/toggle_status (r
       end
 
       it 'reopens his own conversation normally (he stays the owner)' do
+        create(:inbox_member, inbox: inbox, user: manager)
         resolved.update!(assignee: manager)
 
         reopen(manager, resolved)

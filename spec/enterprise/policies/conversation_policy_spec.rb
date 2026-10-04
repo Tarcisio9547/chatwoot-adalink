@@ -114,7 +114,10 @@ RSpec.describe ConversationPolicy, type: :policy do
 
     %w[conversation_participating_manage conversation_unassigned_manage].each do |permission|
       context "with the restricted visibility #{permission}" do
-        before { restrict!(permission) }
+        before do
+          restrict!(permission)
+          create(:conversation_participant, conversation: ownerless, account: account, user: agent) # precisa enxergar a conversa
+        end
 
         it 'takes an ownerless conversation for himself (id as number or text)' do
           expect(allowed?(ownerless, agent.id)).to be true
@@ -198,13 +201,19 @@ RSpec.describe ConversationPolicy, type: :policy do
   # o round-robin pode entregar a conversa). Para visão restrita, só passa se a troca de responsável
   # que ela causaria também passaria.
   describe '#change_team?' do
-    let(:owner) { create(:user, account: account, role: :agent) }
-    let(:owned) { create(:conversation, account: account, inbox: inbox, assignee: owner) }
-    let(:mine) { create(:conversation, account: account, inbox: inbox, assignee: agent) }
-    let(:ownerless) { create(:conversation, account: account, inbox: inbox, assignee: nil) }
-    let(:team_with_owner) { create(:team, account: account, allow_auto_assign: false).tap { |team| create(:team_member, team: team, user: owner) } }
-    let(:team_without_owner) { create(:team, account: account, allow_auto_assign: false) }
-    let(:auto_team) { create(:team, account: account, allow_auto_assign: true) }
+    let(:scene) do
+      owner = create(:user, account: account, role: :agent)
+      team_with_owner = create(:team, account: account, allow_auto_assign: false)
+      create(:team_member, team: team_with_owner, user: owner)
+      {
+        owned: create(:conversation, account: account, inbox: inbox, assignee: owner),
+        mine: create(:conversation, account: account, inbox: inbox, assignee: agent),
+        ownerless: create(:conversation, account: account, inbox: inbox, assignee: nil),
+        team_with_owner: team_with_owner,
+        team_without_owner: create(:team, account: account, allow_auto_assign: false),
+        auto_team: create(:team, account: account, allow_auto_assign: true)
+      }
+    end
 
     def team_allowed?(conversation, team)
       described_class.new(context, conversation).change_team?(team)
@@ -214,40 +223,42 @@ RSpec.describe ConversationPolicy, type: :policy do
       before do
         role = create(:custom_role, account: account, permissions: %w[conversation_participating_manage])
         agent_account_user.update!(role: :agent, custom_role: role)
-        [owned, ownerless].each { |conversation| create(:conversation_participant, conversation: conversation, account: account, user: agent) }
+        %i[owned ownerless].each do |name|
+          create(:conversation_participant, conversation: scene[name], account: account, user: agent)
+        end
       end
 
       it 'allows no team (removing it) and a team that keeps the owner' do
-        expect(team_allowed?(owned, nil)).to be true
-        expect(team_allowed?(owned, team_with_owner)).to be true
+        expect(team_allowed?(scene[:owned], nil)).to be true
+        expect(team_allowed?(scene[:owned], scene[:team_with_owner])).to be true
       end
 
       it 'denies a team that would clear the owner of someone else' do
-        expect(team_allowed?(owned, team_without_owner)).to be false
+        expect(team_allowed?(scene[:owned], scene[:team_without_owner])).to be false
       end
 
       it 'allows the owner to move his own conversation to any team' do
-        expect(team_allowed?(mine, team_without_owner)).to be true
+        expect(team_allowed?(scene[:mine], scene[:team_without_owner])).to be true
       end
 
       it 'denies an auto-assign team on an ownerless conversation, allows a plain team' do
-        expect(team_allowed?(ownerless, auto_team)).to be false
-        expect(team_allowed?(ownerless, team_without_owner)).to be true
+        expect(team_allowed?(scene[:ownerless], scene[:auto_team])).to be false
+        expect(team_allowed?(scene[:ownerless], scene[:team_without_owner])).to be true
       end
 
       it 'denies when he cannot even see the conversation' do
         hidden = create(:conversation, account: account, inbox: create(:inbox, account: account), assignee: nil)
 
-        expect(team_allowed?(hidden, team_without_owner)).to be false
+        expect(team_allowed?(hidden, scene[:team_without_owner])).to be false
       end
     end
 
     it 'allows everything to an agent without custom role and to the "Todas" role' do
-      expect(team_allowed?(owned, team_without_owner)).to be true
+      expect(team_allowed?(scene[:owned], scene[:team_without_owner])).to be true
 
       role = create(:custom_role, account: account, permissions: %w[conversation_manage])
       agent_account_user.update!(role: :agent, custom_role: role)
-      expect(team_allowed?(owned, team_without_owner)).to be true
+      expect(team_allowed?(scene[:owned], scene[:team_without_owner])).to be true
     end
   end
 

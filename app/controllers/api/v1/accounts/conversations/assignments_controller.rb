@@ -43,6 +43,9 @@ class Api::V1::Accounts::Conversations::AssignmentsController < Api::V1::Account
 
   def set_team
     @team = Current.account.teams.find_by(id: params[:team_id])
+    # Adalink: a troca de time pode trocar o responsável (ver ConversationPolicy#change_team?).
+    raise Pundit::NotAuthorizedError unless policy(@conversation).change_team?(@team)
+
     @conversation.update!(team: @team)
     render json: @team
   end

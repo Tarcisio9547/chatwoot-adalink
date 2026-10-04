@@ -10,7 +10,10 @@ import {
   getUserPermissions,
   getUserRole,
 } from 'dashboard/helper/permissionsHelper';
-import { canManageParticipants } from 'dashboard/helper/participantsHelper';
+import {
+  canManageParticipants,
+  canRemoveParticipants,
+} from 'dashboard/helper/participantsHelper';
 
 import ThumbnailGroup from 'dashboard/components/widgets/ThumbnailGroup.vue';
 import MultiselectDropdownItems from 'shared/components/ui/MultiselectDropdownItems.vue';
@@ -54,6 +57,16 @@ export default {
         ),
         assigneeId: chat?.meta?.assignee?.id,
         currentUserId: this.currentUser.id,
+      });
+    },
+    // Adalink: o responsável restrito adiciona mas não remove participante (o servidor barra com 401).
+    canRemoveParticipants() {
+      return canRemoveParticipants({
+        role: getUserRole(this.currentUser, this.currentAccountId),
+        permissions: getUserPermissions(
+          this.currentUser,
+          this.currentAccountId
+        ),
       });
     },
     // Adalink: candidatos a participante = todos os agentes confirmados da
@@ -167,6 +180,8 @@ export default {
       );
 
       if (isAgentSelected) {
+        if (!this.canRemoveParticipants) return;
+
         const updatedList = this.watchersList.filter(
           participant => participant.id !== agent.id
         );
