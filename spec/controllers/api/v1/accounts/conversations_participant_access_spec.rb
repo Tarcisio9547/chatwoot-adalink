@@ -188,14 +188,15 @@ describe 'Conversations API: acesso do participante', type: :request do
       expect(response.parsed_body['participant_ids']).to contain_exactly(participant.id)
     end
 
-    it 'comes in the realtime push payload' do
-      expect(conversation.push_event_data[:participant_ids]).to contain_exactly(participant.id)
+    it 'comes in the realtime payload sent to agents (and only there: the common push payload has none)' do
+      expect(conversation.agent_push_event_data[:participant_ids]).to contain_exactly(participant.id)
+      expect(conversation.push_event_data).not_to have_key(:participant_ids)
     end
 
     it 'is an empty list when nobody participates' do
       ConversationParticipant.where(conversation: conversation).destroy_all
 
-      expect(conversation.push_event_data[:participant_ids]).to eq([])
+      expect(conversation.agent_push_event_data[:participant_ids]).to eq([])
     end
   end
 end
