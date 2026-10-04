@@ -107,6 +107,68 @@ RSpec.describe 'Conversation Participants API', type: :request do
     end
   end
 
+  # Adicionar ou remover participante avisa a tela ao vivo (conversation.participants_changed):
+  # quem entrou passa a ver a conversa na lista, quem saiu a perde, sem recarregar.
+  describe 'live update event' do
+    let(:url) { api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id) }
+    let(:added) { create(:user, account: account, role: :agent) }
+    let(:kept) { create(:user, account: account, role: :agent) }
+    let(:removed) { create(:user, account: account, role: :agent) }
+    let(:event_name) { 'conversation.participants_changed' }
+
+    before do
+      allow(Rails.configuration.dispatcher).to receive(:dispatch)
+      create(:conversation_participant, conversation: conversation, account: account, user: kept)
+      create(:conversation_participant, conversation: conversation, account: account, user: removed)
+    end
+
+    def expect_dispatched(added_ids:, removed_ids:)
+      expect(Rails.configuration.dispatcher).to have_received(:dispatch).once.with(
+        event_name, anything, hash_including(conversation: conversation, added_user_ids: added_ids, removed_user_ids: removed_ids)
+      )
+    end
+
+    it 'dispatches on POST with the users who were really added' do
+      post url, params: { user_ids: [added.id, kept.id] }, headers: agent.create_new_auth_token, as: :json
+
+      expect_dispatched(added_ids: [added.id], removed_ids: [])
+    end
+
+    it 'dispatches on PUT with who came in and who left' do
+      put url, params: { user_ids: [kept.id, added.id] }, headers: agent.create_new_auth_token, as: :json
+
+      expect_dispatched(added_ids: [added.id], removed_ids: [removed.id])
+    end
+
+    it 'dispatches on DELETE with who left' do
+      delete url, params: { user_ids: [removed.id] }, headers: agent.create_new_auth_token, as: :json
+
+      expect_dispatched(added_ids: [], removed_ids: [removed.id])
+    end
+
+    it 'does not dispatch when nothing changed (already participant, foreign id, unknown id)' do
+      foreign = create(:user, account: create(:account), role: :agent)
+
+      post url, params: { user_ids: [kept.id, foreign.id, 0] }, headers: agent.create_new_auth_token, as: :json
+      delete url, params: { user_ids: [added.id] }, headers: agent.create_new_auth_token, as: :json
+
+      expect(Rails.configuration.dispatcher).not_to have_received(:dispatch).with(event_name, anything, anything)
+    end
+
+    it 'does not dispatch when the call is denied or invalid' do
+      restricted = create(:user, account: account, role: :agent)
+      create(:inbox_member, inbox: conversation.inbox, user: restricted)
+      role = create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage])
+      AccountUser.find_by(user: restricted, account: account).update!(role: :agent, custom_role: role)
+      create(:conversation_participant, conversation: conversation, account: account, user: restricted)
+
+      post url, params: { user_ids: [added.id] }, headers: restricted.create_new_auth_token, as: :json
+      post url, params: { user_ids: 'abc' }, headers: agent.create_new_auth_token, as: :json
+
+      expect(Rails.configuration.dispatcher).not_to have_received(:dispatch).with(event_name, anything, anything)
+    end
+  end
+
   # user_ids que não é lista de inteiros nunca pode virar 500 nem mexer em nada.
   describe 'user_ids validation' do
     let(:url) { api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id) }
