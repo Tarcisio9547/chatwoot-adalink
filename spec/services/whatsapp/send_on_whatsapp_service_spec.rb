@@ -97,6 +97,60 @@ describe Whatsapp::SendOnWhatsappService do
         expect(message.reload.external_error).to eq('Template not found or invalid template name')
       end
 
+      context 'when the template is a carousel' do
+        let(:carousel_template) do
+          {
+            'name' => 'promo_carrossel',
+            'status' => 'approved',
+            'category' => 'MARKETING',
+            'language' => 'pt_BR',
+            'namespace' => '23423423_2342423_324234234_2343224',
+            'components' => [
+              { 'type' => 'BODY', 'text' => 'Confira os imoveis' },
+              { 'type' => 'CAROUSEL',
+                'cards' => [{ 'components' => [{ 'type' => 'HEADER', 'format' => 'IMAGE' }, { 'type' => 'BODY', 'text' => 'Cobertura' }] }] }
+            ]
+          }
+        end
+        let(:carousel_params) { build_template_params('promo_carrossel', '23423423_2342423_324234234_2343224', 'pt_BR', {}) }
+
+        before do
+          whatsapp_channel.update!(message_templates: whatsapp_channel.message_templates + [carousel_template])
+        end
+
+        it 'marks message as failed without calling the provider' do
+          message = create_message_with_template('', carousel_params)
+
+          described_class.new(message: message).perform
+
+          expect(message.reload.status).to eq('failed')
+          expect(message.external_error).to eq('Modelo carrossel ainda não é suportado pelo Atendimento')
+          expect(a_request(:post, 'https://waba.360dialog.io/v1/messages')).not_to have_been_made
+        end
+
+        it 'matches the template language without considering case' do
+          message = create_message_with_template('', carousel_params.merge(language: 'PT_br'))
+
+          described_class.new(message: message).perform
+
+          expect(message.reload.status).to eq('failed')
+          expect(a_request(:post, 'https://waba.360dialog.io/v1/messages')).not_to have_been_made
+        end
+
+        it 'does not block a regular template with the same name in another language' do
+          regular = carousel_template.merge('language' => 'en_US', 'components' => [{ 'type' => 'BODY', 'text' => 'Hi {{1}}' }])
+          whatsapp_channel.update!(message_templates: whatsapp_channel.message_templates + [regular])
+          params = build_template_params('promo_carrossel', '23423423_2342423_324234234_2343224', 'en_US', { 'body' => { '1' => '3' } })
+          message = create_message_with_template('', params)
+          stub_template_request(params, [{ 'type': 'body', 'parameters': [{ 'type': 'text', 'text': '3' }] }])
+
+          described_class.new(message: message).perform
+
+          expect(message.reload.status).not_to eq('failed')
+          expect(message.source_id).to eq('123456789')
+        end
+      end
+
       it 'calls channel.send_template when after 24 hour limit' do
         message = create(:message, message_type: :outgoing, content: 'Your package has been shipped. It will be delivered in 3 business days.',
                                    conversation: conversation, additional_attributes: { template_params: template_params },

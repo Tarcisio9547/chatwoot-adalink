@@ -342,6 +342,216 @@ describe('#getters', () => {
       expect(templateNames).toContain('order_confirmation');
     });
 
+    describe('lista de permitidos (só o que o Atendimento sabe enviar)', () => {
+      const buildState = messageTemplates => ({
+        records: [
+          {
+            id: 1,
+            channel_type: 'Channel::Whatsapp',
+            message_templates: messageTemplates,
+          },
+        ],
+      });
+
+      const approved = (name, components) => ({
+        name,
+        status: 'approved',
+        category: 'MARKETING',
+        language: 'pt_BR',
+        components,
+      });
+
+      const filterNames = messageTemplates =>
+        getters
+          .getFilteredWhatsAppTemplates(buildState(messageTemplates))(1)
+          .map(template => template.name);
+
+      it('esconde o modelo carrossel (a Meta devolve #132012 se enviado incompleto)', () => {
+        const carousel = approved('promo_carrossel', [
+          { type: 'BODY', text: 'Confira os imóveis' },
+          {
+            type: 'CAROUSEL',
+            cards: [
+              {
+                components: [
+                  { type: 'HEADER', format: 'IMAGE' },
+                  { type: 'BODY', text: 'Cobertura {{1}}' },
+                  {
+                    type: 'BUTTONS',
+                    buttons: [
+                      { type: 'URL', text: 'Ver', url: 'https://x.com' },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ]);
+        const regular = approved('simples', [{ type: 'BODY', text: 'Olá' }]);
+
+        expect(filterNames([carousel, regular])).toEqual(['simples']);
+      });
+
+      it('esconde o modelo de oferta por tempo limitado (LTO)', () => {
+        const lto = approved('oferta_relampago', [
+          { type: 'HEADER', format: 'IMAGE' },
+          { type: 'LIMITED_TIME_OFFER', limited_time_offer: { text: 'Hoje' } },
+          { type: 'BODY', text: 'Só hoje' },
+          {
+            type: 'BUTTONS',
+            buttons: [{ type: 'COPY_CODE', example: 'CODIGO10' }],
+          },
+        ]);
+        const regular = approved('simples', [{ type: 'BODY', text: 'Olá' }]);
+
+        expect(filterNames([lto, regular])).toEqual(['simples']);
+      });
+
+      it('esconde o modelo com botão de FLOW', () => {
+        const flow = approved('formulario_flow', [
+          { type: 'BODY', text: 'Preencha o formulário' },
+          {
+            type: 'BUTTONS',
+            buttons: [{ type: 'FLOW', text: 'Abrir', flow_id: '123' }],
+          },
+        ]);
+        const regular = approved('simples', [{ type: 'BODY', text: 'Olá' }]);
+
+        expect(filterNames([flow, regular])).toEqual(['simples']);
+      });
+
+      it('esconde o modelo com botão misturado quando um deles não é suportado', () => {
+        const mixed = approved('misto', [
+          { type: 'BODY', text: 'Escolha' },
+          {
+            type: 'BUTTONS',
+            buttons: [
+              { type: 'QUICK_REPLY', text: 'Sim' },
+              { type: 'FLOW', text: 'Abrir', flow_id: '123' },
+            ],
+          },
+        ]);
+
+        expect(filterNames([mixed])).toEqual([]);
+      });
+
+      it('esconde tipos de componente que ainda não existem (desconhecido)', () => {
+        const unknown = approved('futuro', [
+          { type: 'BODY', text: 'Novo' },
+          { type: 'TIPO_NOVO_DA_META', foo: 'bar' },
+        ]);
+        const regular = approved('simples', [{ type: 'BODY', text: 'Olá' }]);
+
+        expect(filterNames([unknown, regular])).toEqual(['simples']);
+      });
+
+      it('esconde formato de cabeçalho desconhecido ou sem formato', () => {
+        const unknownFormat = approved('cabecalho_novo', [
+          { type: 'HEADER', format: 'FORMATO_NOVO' },
+          { type: 'BODY', text: 'Olá' },
+        ]);
+        const noFormat = approved('cabecalho_sem_formato', [
+          { type: 'HEADER' },
+          { type: 'BODY', text: 'Olá' },
+        ]);
+        const location = approved('cabecalho_local', [
+          { type: 'HEADER', format: 'LOCATION' },
+          { type: 'BODY', text: 'Olá' },
+        ]);
+
+        expect(filterNames([unknownFormat, noFormat, location])).toEqual([]);
+      });
+
+      it('esconde tipo de botão desconhecido', () => {
+        const unknownButton = approved('botao_novo', [
+          { type: 'BODY', text: 'Olá' },
+          {
+            type: 'BUTTONS',
+            buttons: [{ type: 'BOTAO_NOVO', text: 'Clique' }],
+          },
+        ]);
+
+        expect(filterNames([unknownButton])).toEqual([]);
+      });
+
+      it('esconde modelo cujos componentes não vêm como lista', () => {
+        const broken = { ...approved('quebrado', []), components: 'texto' };
+
+        expect(filterNames([broken])).toEqual([]);
+      });
+
+      it.each(['TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'])(
+        'mantém cabeçalho com formato %s',
+        format => {
+          const withHeader = approved('com_cabecalho', [
+            { type: 'HEADER', format },
+            { type: 'BODY', text: 'Olá' },
+            { type: 'FOOTER', text: 'Rodapé' },
+          ]);
+
+          expect(filterNames([withHeader])).toEqual(['com_cabecalho']);
+        }
+      );
+
+      it.each(['QUICK_REPLY', 'URL', 'PHONE_NUMBER', 'COPY_CODE'])(
+        'mantém botão do tipo %s',
+        type => {
+          const withButton = approved('com_botao', [
+            { type: 'BODY', text: 'Olá' },
+            { type: 'BUTTONS', buttons: [{ type, text: 'Botão' }] },
+          ]);
+
+          expect(filterNames([withButton])).toEqual(['com_botao']);
+        }
+      );
+
+      it('mantém modelo com os quatro tipos de botão juntos', () => {
+        const allButtons = approved('todos_botoes', [
+          { type: 'HEADER', format: 'TEXT', text: 'Título' },
+          { type: 'BODY', text: 'Olá' },
+          { type: 'FOOTER', text: 'Rodapé' },
+          {
+            type: 'BUTTONS',
+            buttons: [
+              { type: 'QUICK_REPLY', text: 'Sim' },
+              { type: 'URL', text: 'Site', url: 'https://x.com/{{1}}' },
+              { type: 'PHONE_NUMBER', text: 'Ligar', phone_number: '+5511' },
+              { type: 'COPY_CODE', text: 'Copiar' },
+            ],
+          },
+        ]);
+
+        expect(filterNames([allButtons])).toEqual(['todos_botoes']);
+      });
+
+      it('mantém todos os modelos válidos que já existem nos fixtures', () => {
+        const result = getters.getFilteredWhatsAppTemplates(
+          buildState(templates)
+        )(1);
+
+        expect(result).toHaveLength(templates.length);
+      });
+
+      it('mantém as exclusões antigas: não aprovado, AUTHENTICATION e CSAT', () => {
+        const pending = {
+          ...approved('pendente', [{ type: 'BODY', text: 'Olá' }]),
+          status: 'pending',
+        };
+        const auth = {
+          ...approved('codigo', [{ type: 'BODY', text: 'Código {{1}}' }]),
+          category: 'AUTHENTICATION',
+        };
+        const csat = approved('customer_satisfaction_survey_12', [
+          { type: 'BODY', text: 'Nota?' },
+        ]);
+        const regular = approved('simples', [{ type: 'BODY', text: 'Olá' }]);
+
+        expect(filterNames([pending, auth, csat, regular])).toEqual([
+          'simples',
+        ]);
+      });
+    });
+
     it('prioritizes message_templates over additional_attributes.message_templates', () => {
       const primaryTemplates = [
         {
