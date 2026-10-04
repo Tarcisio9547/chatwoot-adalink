@@ -183,6 +183,19 @@ describe ParticipationCleanupListener do
         expect(conversation.conversation_participants.map(&:user_id)).not_to include(agent_a.id)
       end
 
+      # Na caixa pessoal o CRM põe o gestor como MEMBRO (hierarquia) e como participante. Ele nunca
+      # foi responsável: a limpeza só olha o responsável anterior.
+      it 'never removes a manager who is a member of the inbox and a participant but never was the assignee' do
+        manager = create(:user, account: account, role: :agent)
+        create(:inbox_member, user: manager, inbox: inbox)
+        conversation.conversation_participants.create!(user: manager)
+
+        listener.assignee_changed(reassign_event(from: agent_a, to: agent_b))
+
+        expect(conversation.conversation_participants.map(&:user_id)).to include(manager.id)
+        expect(conversation.conversation_participants.map(&:user_id)).not_to include(agent_a.id)
+      end
+
       it 'removes a previous assignee that has a restricted role (the access it would otherwise keep forever)' do
         role = create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage])
         AccountUser.find_by(user: agent_a, account: account).update!(role: :agent, custom_role: role)

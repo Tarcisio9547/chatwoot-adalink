@@ -163,25 +163,27 @@ describe 'Conversations API: acesso do participante', type: :request do
 
   # O CRM adiciona o gestor do corretor como participante de uma conversa do WhatsApp Pessoal
   # (caixa Channel::Api, wa-pessoal-mark-work / wa-classifier-confirm, com o token de
-  # administrador da conta). O gestor não é membro da caixa nem responsável: o acesso dele vem SÓ
-  # da participação, e o backfill de limpeza não pode tirá-lo.
-  describe 'manager added by the CRM to a personal WhatsApp conversation (after the backfill)' do
+  # administrador da conta). O gestor nunca foi responsável: a limpeza do responsável anterior
+  # (todos os canais) só remove o responsável anterior e nunca tira o gestor, seja ele membro da
+  # caixa pessoal do subordinado (hierarquia do CRM) ou não.
+  describe 'manager added by the CRM to a personal WhatsApp conversation (real callbacks)' do
     let!(:personal_inbox) { create(:inbox, account: account, channel: create(:channel_api, account: account)) }
     let!(:broker) { create(:user, account: account, role: :agent) }
+    let!(:new_broker) { create(:user, account: account, role: :agent) }
     let!(:personal_conversation) { create(:conversation, account: account, inbox: personal_inbox, assignee: broker) }
     let!(:manager) { create(:user, account: account, role: :agent) }
-    let(:migration) { RemoveStaleConversationParticipantsOfAgents.new }
 
     def show_as(user)
       get "/api/v1/accounts/#{account.id}/conversations/#{personal_conversation.display_id}", headers: user.create_new_auth_token, as: :json
     end
 
     before do
-      require Rails.root.join('db/migrate/20261004153847_remove_stale_conversation_participants_of_agents.rb')
-      create(:inbox_member, inbox: personal_inbox, user: broker)
+      stub_request(:post, 'http://example.com/') # webhook da caixa Channel::Api (conversation_updated)
+      [broker, new_broker].each { |user| create(:inbox_member, inbox: personal_inbox, user: user) }
+      create(:conversation_participant, conversation: personal_conversation, account: account, user: broker)
     end
 
-    it 'adds the manager with the administrator token and he can open and answer the conversation' do
+    it 'adds the manager with the administrator token and he can open the conversation' do
       post "/api/v1/accounts/#{account.id}/conversations/#{personal_conversation.display_id}/participants",
            params: { user_ids: [manager.id] }, headers: admin.create_new_auth_token, as: :json
       expect(response).to have_http_status(:success)
@@ -191,27 +193,28 @@ describe 'Conversations API: acesso do participante', type: :request do
     end
 
     [nil, 'conversation_participating_manage', 'conversation_unassigned_manage'].each do |permission|
-      it "keeps the access of the manager (#{permission || 'no custom role'}) after the backfill" do
-        give_role(manager, [permission]) if permission
-        create(:conversation_participant, conversation: personal_conversation, account: account, user: manager)
-        migration.suppress_messages { migration.up }
+      [true, false].each do |member|
+        it "keeps the manager (#{permission || 'no custom role'}, #{member ? 'member' : 'not a member'} of the inbox) when the conversation changes hands" do
+          give_role(manager, [permission]) if permission
+          create(:inbox_member, inbox: personal_inbox, user: manager) if member
+          create(:conversation_participant, conversation: personal_conversation, account: account, user: manager)
 
-        show_as(manager)
+          perform_enqueued_jobs { personal_conversation.update!(assignee: new_broker) }
 
-        expect(response).to have_http_status(:ok)
-        expect(personal_conversation.conversation_participants.pluck(:user_id)).to include(manager.id)
+          show_as(manager)
+          expect(response).to have_http_status(:ok)
+          expect(personal_conversation.reload.conversation_participants.pluck(:user_id)).to contain_exactly(manager.id, new_broker.id)
+        end
       end
     end
 
-    it 'takes away the access of a restricted ex-assignee who is a member of the inbox' do
-      ex_assignee = create(:user, account: account, role: :agent)
-      create(:inbox_member, inbox: personal_inbox, user: ex_assignee)
-      give_role(ex_assignee, %w[conversation_unassigned_manage])
-      create(:conversation_participant, conversation: personal_conversation, account: account, user: ex_assignee)
-      migration.suppress_messages { migration.up }
+    it 'removes only the previous assignee when it changes hands' do
+      give_role(broker, %w[conversation_unassigned_manage])
 
-      get "/api/v1/accounts/#{account.id}/conversations/#{personal_conversation.display_id}", headers: ex_assignee.create_new_auth_token, as: :json
+      perform_enqueued_jobs { personal_conversation.update!(assignee: new_broker) }
 
+      expect(personal_conversation.reload.conversation_participants.pluck(:user_id)).to eq([new_broker.id])
+      show_as(broker)
       expect(response).to have_http_status(:unauthorized)
     end
   end
