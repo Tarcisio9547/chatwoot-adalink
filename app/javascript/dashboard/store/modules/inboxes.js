@@ -12,6 +12,53 @@ import camelcaseKeys from 'camelcase-keys';
 import { ACCOUNT_EVENTS } from '../../helper/AnalyticsHelper/events';
 import { channelActions, buildInboxData } from './inboxes/channelActions';
 
+// Peças de modelo do WhatsApp que o Atendimento sabe montar e enviar.
+// Qualquer coisa fora destas listas (inclusive tipos novos da Meta) é escondida.
+const SUPPORTED_TEMPLATE_COMPONENT_TYPES = [
+  'HEADER',
+  'BODY',
+  'FOOTER',
+  'BUTTONS',
+];
+const SUPPORTED_TEMPLATE_HEADER_FORMATS = [
+  'TEXT',
+  'IMAGE',
+  'VIDEO',
+  'DOCUMENT',
+];
+const SUPPORTED_TEMPLATE_BUTTON_TYPES = [
+  'QUICK_REPLY',
+  'URL',
+  'PHONE_NUMBER',
+  'COPY_CODE',
+];
+
+const isSupportedButton = button =>
+  SUPPORTED_TEMPLATE_BUTTON_TYPES.includes(button?.type);
+
+const isSupportedComponent = component => {
+  if (!SUPPORTED_TEMPLATE_COMPONENT_TYPES.includes(component?.type)) {
+    return false;
+  }
+
+  if (component.type === 'HEADER') {
+    return SUPPORTED_TEMPLATE_HEADER_FORMATS.includes(component.format);
+  }
+
+  if (component.type === 'BUTTONS' && component.buttons !== undefined) {
+    return (
+      Array.isArray(component.buttons) &&
+      component.buttons.every(isSupportedButton)
+    );
+  }
+
+  return true;
+};
+
+const isSupportedTemplate = template =>
+  Array.isArray(template.components) &&
+  template.components.every(isSupportedComponent);
+
 export const state = {
   records: [],
   uiFlags: {
@@ -91,20 +138,10 @@ export const getters = {
         return false;
       }
 
-      // Filter out interactive templates (LIST, PRODUCT, CATALOG), location templates, and call permission templates
-      const hasUnsupportedComponents = template.components.some(
-        component =>
-          ['LIST', 'PRODUCT', 'CATALOG', 'CALL_PERMISSION_REQUEST'].includes(
-            component.type
-          ) ||
-          (component.type === 'HEADER' && component.format === 'LOCATION')
-      );
-
-      if (hasUnsupportedComponents) {
-        return false;
-      }
-
-      return true;
+      // Lista de permitidos: só entra modelo feito apenas de peças que o
+      // Atendimento sabe montar e enviar (ex.: carrossel, LTO e FLOW ficam de
+      // fora, senão a Meta devolve #132012 por parâmetros faltando).
+      return isSupportedTemplate(template);
     });
   },
   getNewConversationInboxes($state) {

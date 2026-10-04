@@ -378,7 +378,9 @@ describe('#getters', () => {
                   { type: 'BODY', text: 'Cobertura {{1}}' },
                   {
                     type: 'BUTTONS',
-                    buttons: [{ type: 'URL', text: 'Ver', url: 'https://x.com' }],
+                    buttons: [
+                      { type: 'URL', text: 'Ver', url: 'https://x.com' },
+                    ],
                   },
                 ],
               },
@@ -544,7 +546,9 @@ describe('#getters', () => {
         ]);
         const regular = approved('simples', [{ type: 'BODY', text: 'Olá' }]);
 
-        expect(filterNames([pending, auth, csat, regular])).toEqual(['simples']);
+        expect(filterNames([pending, auth, csat, regular])).toEqual([
+          'simples',
+        ]);
       });
     });
 
