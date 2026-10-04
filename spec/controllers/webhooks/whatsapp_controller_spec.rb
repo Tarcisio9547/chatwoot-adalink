@@ -48,6 +48,7 @@ RSpec.describe 'Webhooks::WhatsappController', type: :request do
   before do
     InstallationConfig.where(name: 'WHATSAPP_APP_SECRET').delete_all
     GlobalConfig.clear_cache
+    MetaWebhook::UnverifiedWarningThrottle.reset!
     allow(Webhooks::WhatsappEventsJob).to receive(:perform_later)
     allow(Rails.logger).to receive(:warn)
   end
@@ -83,11 +84,35 @@ RSpec.describe 'Webhooks::WhatsappController', type: :request do
 
   describe 'POST /webhooks/whatsapp/{:phone_number}' do
     context 'when no app secret is configured anywhere (channel or global)' do
-      it 'accepts an unsigned request, enqueues the job and logs a warning once' do
+      it 'accepts an unsigned request, enqueues the job and logs a warning' do
         post_webhook("/webhooks/whatsapp/#{manual_cloud_channel.phone_number}", business_account_payload(manual_cloud_channel))
 
         expect(response).to have_http_status(:success)
         expect_job_enqueued
+        expect(Rails.logger).to have_received(:warn).with(/nenhum app secret configurado/).once
+      end
+
+      it 'logs the warning at most once per hour per process and reports how many requests were accepted in between' do
+        3.times { post_webhook('/webhooks/whatsapp/123221321', body) }
+
+        expect(Rails.logger).to have_received(:warn).with(/nenhum app secret configurado.*desde o ultimo aviso: 1\b/).once
+
+        travel 61.minutes do
+          post_webhook('/webhooks/whatsapp/123221321', body)
+        end
+
+        expect(Rails.logger).to have_received(:warn).with(/nenhum app secret configurado.*desde o ultimo aviso: 3\b/).once
+        expect(Rails.logger).to have_received(:warn).with(/nenhum app secret configurado/).twice
+        expect(Webhooks::WhatsappEventsJob).to have_received(:perform_later).exactly(4).times
+      end
+
+      it 'does not throttle across a request that is still inside the hour' do
+        post_webhook('/webhooks/whatsapp/123221321', body)
+
+        travel 59.minutes do
+          post_webhook('/webhooks/whatsapp/123221321', body)
+        end
+
         expect(Rails.logger).to have_received(:warn).with(/nenhum app secret configurado/).once
       end
 
@@ -308,6 +333,285 @@ RSpec.describe 'Webhooks::WhatsappController', type: :request do
 
         with_modified_env WHATSAPP_APP_SECRET: global_secret do
           post_webhook("/webhooks/whatsapp/#{other_channel.phone_number}", business_account_payload(other_channel), secret: global_secret)
+        end
+
+        expect(response).to have_http_status(:success)
+        expect_job_enqueued
+      end
+    end
+
+    context 'when META_WEBHOOK_REQUIRE_SIGNATURE is on and no secret is configured' do
+      around do |example|
+        with_modified_env(META_WEBHOOK_REQUIRE_SIGNATURE: 'true') { example.run }
+      end
+
+      it 'returns unauthorized for a manual cloud channel and does not enqueue' do
+        post_webhook("/webhooks/whatsapp/#{manual_cloud_channel.phone_number}", business_account_payload(manual_cloud_channel))
+
+        expect(response).to have_http_status(:unauthorized)
+        expect_job_not_enqueued
+        expect(Rails.logger).to have_received(:warn).with(/rejeitada.*nenhum app secret configurado.*META_WEBHOOK_REQUIRE_SIGNATURE/).once
+      end
+
+      it 'returns unauthorized for an embedded signup cloud channel' do
+        post_webhook("/webhooks/whatsapp/#{channel.phone_number}", business_account_payload(channel))
+
+        expect(response).to have_http_status(:unauthorized)
+        expect_job_not_enqueued
+      end
+
+      it 'returns unauthorized for an unknown phone number' do
+        post_webhook('/webhooks/whatsapp/123221321', body)
+
+        expect(response).to have_http_status(:unauthorized)
+        expect_job_not_enqueued
+      end
+
+      it 'returns unauthorized even when the request carries a signature, since there is no secret to compare' do
+        post_webhook('/webhooks/whatsapp/123221321', body, secret: 'qualquer-segredo')
+
+        expect(response).to have_http_status(:unauthorized)
+        expect_job_not_enqueued
+      end
+
+      it 'does not emit the throttled "accepted without checking" warning' do
+        post_webhook('/webhooks/whatsapp/123221321', body)
+
+        expect(Rails.logger).not_to have_received(:warn).with(/NAO conferida/)
+      end
+
+      it 'still skips 360dialog channels' do
+        dialog_channel = create(:channel_whatsapp, provider: 'default', sync_templates: false, validate_provider_config: false)
+
+        post_webhook("/webhooks/whatsapp/#{dialog_channel.phone_number}", body)
+
+        expect(response).to have_http_status(:success)
+        expect_job_enqueued
+      end
+
+      it 'accepts a valid signature once a secret is configured' do
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          post_webhook('/webhooks/whatsapp/123221321', body, secret: global_secret)
+        end
+
+        expect(response).to have_http_status(:success)
+        expect_job_enqueued
+      end
+    end
+
+    context 'when META_WEBHOOK_REQUIRE_SIGNATURE is off or has an unknown value' do
+      ['false', '0', 'no', '', 'talvez'].each do |value|
+        it "keeps accepting requests without a secret when the flag is #{value.inspect}" do
+          with_modified_env META_WEBHOOK_REQUIRE_SIGNATURE: value do
+            post_webhook('/webhooks/whatsapp/123221321', body)
+          end
+
+          expect(response).to have_http_status(:success)
+          expect_job_enqueued
+        end
+      end
+    end
+
+    context 'when trying to bypass the signature check' do
+      let(:channel_a_secret) { 'segredo-da-caixa-a' }
+      let(:channel_b_secret) { 'segredo-da-caixa-b' }
+      let(:dialog_channel) { create(:channel_whatsapp, provider: 'default', sync_templates: false, validate_provider_config: false) }
+
+      it 'rejects a Cloud payload posted to the URL of a 360dialog channel when the metadata matches a Cloud channel' do
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          post_webhook("/webhooks/whatsapp/#{dialog_channel.phone_number}", business_account_payload(channel))
+        end
+
+        expect(response).to have_http_status(:unauthorized)
+        expect_job_not_enqueued
+      end
+
+      it 'accepts that same Cloud payload on the 360dialog URL only with a valid signature' do
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          post_webhook("/webhooks/whatsapp/#{dialog_channel.phone_number}", business_account_payload(channel), secret: global_secret)
+        end
+
+        expect(response).to have_http_status(:success)
+        expect_job_enqueued
+      end
+
+      it 'rejects a payload for channel A signed with the secret of channel B' do
+        other_channel = create(:channel_whatsapp, provider: 'whatsapp_cloud', sync_templates: false, validate_provider_config: false)
+        with_channel_secret(channel, channel_a_secret)
+        with_channel_secret(other_channel, channel_b_secret)
+
+        post_webhook("/webhooks/whatsapp/#{channel.phone_number}", business_account_payload(channel), secret: channel_b_secret)
+
+        expect(response).to have_http_status(:unauthorized)
+        expect_job_not_enqueued
+      end
+
+      it 'rejects a payload for channel A posted to the URL of channel B and signed with the secret of B' do
+        other_channel = create(:channel_whatsapp, provider: 'whatsapp_cloud', sync_templates: false, validate_provider_config: false)
+        with_channel_secret(channel, channel_a_secret)
+        with_channel_secret(other_channel, channel_b_secret)
+
+        post_webhook("/webhooks/whatsapp/#{other_channel.phone_number}", business_account_payload(channel), secret: channel_b_secret)
+
+        expect(response).to have_http_status(:unauthorized)
+        expect_job_not_enqueued
+      end
+
+      it 'does not let query string parameters reach the job' do
+        enqueued = nil
+        allow(Webhooks::WhatsappEventsJob).to receive(:perform_later) { |args| enqueued = args }
+
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          post_webhook("/webhooks/whatsapp/#{channel.phone_number}?injected=1&object=whatsapp_business_account",
+                       { messages: [] }.to_json, secret: global_secret)
+        end
+
+        expect(response).to have_http_status(:success)
+        expect(enqueued.keys).to match_array(%w[messages phone_number])
+        expect(enqueued['phone_number']).to eq(channel.phone_number)
+      end
+
+      it 'does not let a query string object turn a 360dialog request into a Cloud payload' do
+        # object na query não vale: a decisão (e o que vai para o job) sai só do corpo
+        dialog_url = "/webhooks/whatsapp/#{dialog_channel.phone_number}?object=whatsapp_business_account"
+
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          post_webhook(dialog_url, { messages: [] }.to_json)
+        end
+
+        expect(response).to have_http_status(:success)
+        expect_job_enqueued
+      end
+    end
+
+    context 'when looking at the payload that reaches the job' do
+      it 'keeps the same format as before: indifferent access hash with the body keys plus the route phone number' do
+        enqueued = nil
+        allow(Webhooks::WhatsappEventsJob).to receive(:perform_later) { |args| enqueued = args }
+        payload = business_account_payload(channel)
+
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          post_webhook("/webhooks/whatsapp/#{channel.phone_number}", payload, secret: global_secret)
+        end
+
+        expect(enqueued).to be_a(ActiveSupport::HashWithIndifferentAccess)
+        expect(enqueued[:object]).to eq('whatsapp_business_account')
+        expect(enqueued.dig(:entry, 0, :changes, 0, :value, :metadata, :phone_number_id)).to eq(channel.provider_config['phone_number_id'])
+        expect(enqueued[:phone_number]).to eq(channel.phone_number)
+        expect(enqueued.keys).to match_array(%w[object entry phone_number])
+      end
+
+      it 'runs the real job end to end with the enqueued arguments' do
+        service = instance_double(Whatsapp::IncomingMessageWhatsappCloudService, perform: true)
+        received_params = nil
+        allow(Whatsapp::IncomingMessageWhatsappCloudService).to receive(:new) do |params:, **|
+          received_params = params
+          service
+        end
+        allow(Webhooks::WhatsappEventsJob).to receive(:perform_later).and_call_original
+
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          perform_enqueued_jobs do
+            post_webhook("/webhooks/whatsapp/#{channel.phone_number}?injected=1", business_account_payload(channel), secret: global_secret)
+          end
+        end
+
+        expect(response).to have_http_status(:success)
+        expect(service).to have_received(:perform)
+        expect(received_params[:object]).to eq('whatsapp_business_account')
+        expect(received_params[:phone_number]).to eq(channel.phone_number)
+        expect(received_params.keys).not_to include('injected', 'controller', 'action')
+      end
+
+      it 'survives the ActiveJob serialization keeping indifferent access' do
+        enqueued = nil
+        allow(Webhooks::WhatsappEventsJob).to receive(:perform_later) { |args| enqueued = args }
+
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          post_webhook("/webhooks/whatsapp/#{channel.phone_number}", business_account_payload(channel), secret: global_secret)
+        end
+
+        round_trip = ActiveJob::Arguments.deserialize(ActiveJob::Arguments.serialize([enqueued])).first
+        expect(round_trip[:object]).to eq('whatsapp_business_account')
+        expect(round_trip.dig(:entry, 0, :changes, 0, :value, :metadata, :display_phone_number)).to eq(channel.phone_number.delete_prefix('+'))
+        expect(round_trip[:phone_number]).to eq(channel.phone_number)
+      end
+    end
+
+    context 'when the payload is malformed' do
+      let(:malformed_bodies) do
+        {
+          'metadata as a string' => { object: 'whatsapp_business_account', entry: [{ changes: [{ value: { metadata: 'texto' } }] }] },
+          'value as a string' => { object: 'whatsapp_business_account', entry: [{ changes: [{ value: 'texto' }] }] },
+          'entry as an object' => { object: 'whatsapp_business_account', entry: { changes: [] } },
+          'entry as a string' => { object: 'whatsapp_business_account', entry: 'texto' },
+          'changes as an object' => { object: 'whatsapp_business_account', entry: [{ changes: { value: {} } }] },
+          'entry items as numbers' => { object: 'whatsapp_business_account', entry: [1, 2, 3] },
+          'object as an array' => { object: ['whatsapp_business_account'], entry: [] }
+        }
+      end
+
+      it 'answers 401 instead of 500 when a secret is configured and the request is unsigned' do
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          malformed_bodies.each do |label, malformed|
+            post_webhook("/webhooks/whatsapp/#{channel.phone_number}", malformed.to_json)
+
+            expect(response.status).to eq(401), "expected 401 for #{label}, got #{response.status}"
+          end
+        end
+        expect_job_not_enqueued
+      end
+
+      it 'does not answer 5xx when no secret is configured' do
+        malformed_bodies.each do |label, malformed|
+          post_webhook("/webhooks/whatsapp/#{channel.phone_number}", malformed.to_json)
+
+          expect(response.status).to be < 500, "expected no 5xx for #{label}, got #{response.status}"
+        end
+      end
+
+      it 'does not answer 5xx when the request is properly signed' do
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          malformed_bodies.each do |label, malformed|
+            post_webhook("/webhooks/whatsapp/#{channel.phone_number}", malformed.to_json, secret: global_secret)
+
+            expect(response.status).to be < 500, "expected no 5xx for #{label}, got #{response.status}"
+          end
+        end
+      end
+
+      it 'answers 400 for a JSON body that is not an object, once the signature is valid' do
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          post_webhook("/webhooks/whatsapp/#{channel.phone_number}", [1, 2].to_json, secret: global_secret)
+        end
+
+        expect(response).to have_http_status(:bad_request)
+        expect_job_not_enqueued
+      end
+
+      it 'answers 401 for a JSON body that is not an object when the request is unsigned' do
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          post_webhook("/webhooks/whatsapp/#{channel.phone_number}", [1, 2].to_json)
+        end
+
+        expect(response).to have_http_status(:unauthorized)
+        expect_job_not_enqueued
+      end
+    end
+
+    context 'when a secret has surrounding whitespace' do
+      it 'strips the channel secret before comparing, like the global one' do
+        with_channel_secret(channel, "  channel-whatsapp-secret\n")
+
+        post_webhook("/webhooks/whatsapp/#{channel.phone_number}", business_account_payload(channel), secret: 'channel-whatsapp-secret')
+
+        expect(response).to have_http_status(:success)
+        expect_job_enqueued
+      end
+
+      it 'strips the global secret too' do
+        with_modified_env WHATSAPP_APP_SECRET: " #{global_secret}\n" do
+          post_webhook('/webhooks/whatsapp/123221321', body, secret: global_secret)
         end
 
         expect(response).to have_http_status(:success)

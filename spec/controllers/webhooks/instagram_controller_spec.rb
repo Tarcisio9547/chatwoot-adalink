@@ -18,6 +18,7 @@ RSpec.describe 'Webhooks::InstagramController', type: :request do
   before do
     InstallationConfig.where(name: %w[FB_APP_SECRET IG_VERIFY_TOKEN INSTAGRAM_APP_SECRET INSTAGRAM_VERIFY_TOKEN]).delete_all
     GlobalConfig.clear_cache
+    MetaWebhook::UnverifiedWarningThrottle.reset!
     allow(Webhooks::InstagramEventsJob).to receive(:perform_later)
     allow(Rails.logger).to receive(:warn)
   end
@@ -57,13 +58,27 @@ RSpec.describe 'Webhooks::InstagramController', type: :request do
     let!(:dm_params) { build(:instagram_message_create_event).with_indifferent_access }
     let(:body) { dm_params.merge(object: 'instagram').to_json }
 
-    context 'when no app secret is configured anywhere (channel or global)' do
+    context 'when no global app secret is configured' do
       it 'accepts an unsigned request, enqueues the job and logs a warning once' do
         post_instagram_webhook(body)
 
         expect(response).to have_http_status(:success)
         expect_job_enqueued
         expect(Rails.logger).to have_received(:warn).with(/nenhum app secret configurado/).once
+      end
+
+      it 'logs the warning at most once per hour per process and reports how many requests were accepted in between' do
+        3.times { post_instagram_webhook(body) }
+
+        expect(Rails.logger).to have_received(:warn).with(/nenhum app secret configurado.*desde o ultimo aviso: 1\b/).once
+
+        travel 61.minutes do
+          post_instagram_webhook(body)
+        end
+
+        expect(Rails.logger).to have_received(:warn).with(/nenhum app secret configurado.*desde o ultimo aviso: 3\b/).once
+        expect(Rails.logger).to have_received(:warn).with(/nenhum app secret configurado/).twice
+        expect(Webhooks::InstagramEventsJob).to have_received(:perform_later).exactly(4).times
       end
 
       it 'accepts a request with a bogus signature header, since there is nothing to compare against' do
@@ -210,48 +225,194 @@ RSpec.describe 'Webhooks::InstagramController', type: :request do
       end
     end
 
-    context 'when the channel has its own app secret' do
-      let(:channel_secret) { 'channel-instagram-secret' }
-      let(:instagram_channel) { create(:channel_instagram, instagram_id: 'chatwoot-app-user-id-1') }
+    context 'when checking the signature before doing any work' do
+      let(:many_messaging_items) do
+        Array.new(50) do |index|
+          { sender: { id: "sender-#{index}" }, recipient: { id: "recipient-#{index}" }, message: { mid: "mid-#{index}", text: 'oi' } }
+        end
+      end
+      let(:big_body) { { object: 'instagram', entry: [{ id: 'entry-1', messaging: many_messaging_items }] }.to_json }
 
-      before do
-        # Channel::Instagram não tem coluna app_secret hoje; o concern aceita o segredo se o canal expuser um.
-        instagram_channel.define_singleton_method(:app_secret) { 'channel-instagram-secret' }
-        allow(Channel::Instagram).to receive(:find_by).and_call_original
-        allow(Channel::Instagram).to receive(:find_by).with(instagram_id: 'chatwoot-app-user-id-1').and_return(instagram_channel)
+      it 'does not query channels for an unsigned request, however many items the payload carries' do
+        expect(Channel::Instagram).not_to receive(:find_by)
+        expect(Channel::FacebookPage).not_to receive(:find_by)
+
+        with_modified_env INSTAGRAM_APP_SECRET: instagram_secret do
+          post_instagram_webhook(big_body)
+        end
+
+        expect(response).to have_http_status(:unauthorized)
+        expect_job_not_enqueued
       end
 
-      it 'accepts a request signed with the channel secret when no global secret exists' do
-        post_instagram_webhook(body, secret: channel_secret)
+      it 'does not query channels for a signed request either, since secrets are global only' do
+        expect(Channel::Instagram).not_to receive(:find_by)
+        expect(Channel::FacebookPage).not_to receive(:find_by)
+
+        with_modified_env INSTAGRAM_APP_SECRET: instagram_secret do
+          post_instagram_webhook(big_body, secret: instagram_secret)
+        end
 
         expect(response).to have_http_status(:success)
         expect_job_enqueued
-        expect(Rails.logger).not_to have_received(:warn).with(/nenhum app secret configurado/)
       end
 
-      it 'returns unauthorized when the request is unsigned and no global secret exists' do
+      it 'does not run any channel query while rejecting a request with a bogus signature' do
+        queries = []
+        callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?('instagram_id') }
+
+        ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') do
+          with_modified_env INSTAGRAM_APP_SECRET: instagram_secret do
+            post_instagram_webhook(big_body, headers: { signature_header => 'sha256=invalid-signature' })
+          end
+        end
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(queries).to be_empty
+      end
+    end
+
+    context 'when META_WEBHOOK_REQUIRE_SIGNATURE is on and no secret is configured' do
+      around do |example|
+        with_modified_env(META_WEBHOOK_REQUIRE_SIGNATURE: 'true') { example.run }
+      end
+
+      it 'returns unauthorized for an unsigned request and does not enqueue' do
         post_instagram_webhook(body)
 
         expect(response).to have_http_status(:unauthorized)
         expect_job_not_enqueued
+        expect(Rails.logger).to have_received(:warn).with(/rejeitada.*nenhum app secret configurado.*META_WEBHOOK_REQUIRE_SIGNATURE/).once
       end
 
-      it 'gives the channel secret priority over the global secret' do
+      it 'returns unauthorized even when the request carries a signature' do
+        post_instagram_webhook(body, secret: 'qualquer-segredo')
+
+        expect(response).to have_http_status(:unauthorized)
+        expect_job_not_enqueued
+      end
+
+      it 'accepts a valid signature once a secret is configured' do
         with_modified_env INSTAGRAM_APP_SECRET: instagram_secret do
-          post_instagram_webhook(body, secret: channel_secret)
+          post_instagram_webhook(body, secret: instagram_secret)
         end
 
         expect(response).to have_http_status(:success)
         expect_job_enqueued
       end
+    end
 
-      it 'does not accept the global secret for a channel that has its own secret' do
+    context 'when META_WEBHOOK_REQUIRE_SIGNATURE is off or has an unknown value' do
+      ['false', '0', 'no', '', 'talvez'].each do |value|
+        it "keeps accepting requests without a secret when the flag is #{value.inspect}" do
+          with_modified_env META_WEBHOOK_REQUIRE_SIGNATURE: value do
+            post_instagram_webhook(body)
+          end
+
+          expect(response).to have_http_status(:success)
+          expect_job_enqueued
+        end
+      end
+    end
+
+    context 'when looking at the payload that reaches the job' do
+      it 'enqueues only the entry array of the body, with indifferent access, ignoring the query string' do
+        enqueued = nil
+        allow(Webhooks::InstagramEventsJob).to receive(:perform_later) { |args| enqueued = args }
+
         with_modified_env INSTAGRAM_APP_SECRET: instagram_secret do
+          post '/webhooks/instagram?injected=1&entry=bogus',
+               params: body,
+               headers: { 'CONTENT_TYPE' => 'application/json', signature_header => signature_for(body, instagram_secret) }
+        end
+
+        expect(response).to have_http_status(:success)
+        expect(enqueued).to be_an(Array)
+        expect(enqueued.first).to be_a(ActiveSupport::HashWithIndifferentAccess)
+        expect(enqueued.first[:messaging].first[:recipient][:id]).to eq('chatwoot-app-user-id-1')
+      end
+
+      it 'survives the ActiveJob serialization keeping indifferent access' do
+        enqueued = nil
+        allow(Webhooks::InstagramEventsJob).to receive(:perform_later) { |args| enqueued = args }
+
+        post_instagram_webhook(body)
+
+        round_trip = ActiveJob::Arguments.deserialize(ActiveJob::Arguments.serialize([enqueued])).first
+        expect(round_trip.first[:messaging].first[:message][:text]).to eq('This is the first message from the customer')
+      end
+    end
+
+    context 'when the payload is malformed' do
+      let(:malformed_bodies) do
+        {
+          'no object' => { entry: [] },
+          'object as an array' => { object: ['instagram'], entry: [] },
+          'entry as an object' => { object: 'instagram', entry: { messaging: [] } },
+          'entry as a string' => { object: 'instagram', entry: 'texto' },
+          'messaging as a string' => { object: 'instagram', entry: [{ messaging: 'texto' }] },
+          'messaging items as numbers' => { object: 'instagram', entry: [{ messaging: [1, 2] }] },
+          'message as a string' => { object: 'instagram', entry: [{ messaging: [{ message: 'texto' }] }] }
+        }
+      end
+
+      it 'answers 401 instead of 500 when a secret is configured and the request is unsigned' do
+        with_modified_env INSTAGRAM_APP_SECRET: instagram_secret do
+          malformed_bodies.each do |label, malformed|
+            post_instagram_webhook(malformed.to_json)
+
+            expect(response.status).to eq(401), "expected 401 for #{label}, got #{response.status}"
+          end
+        end
+        expect_job_not_enqueued
+      end
+
+      it 'does not answer 5xx when no secret is configured' do
+        malformed_bodies.each do |label, malformed|
+          post_instagram_webhook(malformed.to_json)
+
+          expect(response.status).to be < 500, "expected no 5xx for #{label}, got #{response.status}"
+        end
+      end
+
+      it 'does not answer 5xx when the request is properly signed' do
+        with_modified_env INSTAGRAM_APP_SECRET: instagram_secret do
+          malformed_bodies.each do |label, malformed|
+            post_instagram_webhook(malformed.to_json, secret: instagram_secret)
+
+            expect(response.status).to be < 500, "expected no 5xx for #{label}, got #{response.status}"
+          end
+        end
+      end
+
+      it 'does not enqueue anything for payloads that are not an instagram entry list' do
+        with_modified_env INSTAGRAM_APP_SECRET: instagram_secret do
+          malformed_bodies.except('messaging as a string', 'messaging items as numbers', 'message as a string').each_value do |malformed|
+            post_instagram_webhook(malformed.to_json, secret: instagram_secret)
+          end
+        end
+
+        expect_job_not_enqueued
+      end
+
+      it 'answers 400 for a JSON body that is not an object, once the signature is valid' do
+        with_modified_env INSTAGRAM_APP_SECRET: instagram_secret do
+          post_instagram_webhook([1, 2].to_json, secret: instagram_secret)
+        end
+
+        expect(response).to have_http_status(:bad_request)
+        expect_job_not_enqueued
+      end
+    end
+
+    context 'when a secret has surrounding whitespace' do
+      it 'strips the global secret before comparing' do
+        with_modified_env INSTAGRAM_APP_SECRET: " #{instagram_secret}\n" do
           post_instagram_webhook(body, secret: instagram_secret)
         end
 
-        expect(response).to have_http_status(:unauthorized)
-        expect_job_not_enqueued
+        expect(response).to have_http_status(:success)
+        expect_job_enqueued
       end
     end
 

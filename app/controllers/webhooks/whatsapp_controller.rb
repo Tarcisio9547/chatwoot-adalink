@@ -4,17 +4,26 @@ class Webhooks::WhatsappController < ActionController::API
   before_action :verify_meta_signature!, only: :process_payload
 
   def process_payload
+    return head :bad_request if meta_webhook_payload.nil?
+
     if inactive_whatsapp_number?
       Rails.logger.warn("Rejected webhook for inactive WhatsApp number: #{params[:phone_number]}")
       render json: { error: 'Inactive WhatsApp number' }, status: :unprocessable_entity
       return
     end
 
-    Webhooks::WhatsappEventsJob.perform_later(params.to_unsafe_hash)
+    Webhooks::WhatsappEventsJob.perform_later(job_params)
     head :ok
   end
 
   private
+
+  # O job recebe só o corpo assinado (Hash com acesso indiferente, como antes) mais o phone_number da rota.
+  # Query string e demais parâmetros do Rails não chegam ao job, então o canal que o job resolve é o mesmo
+  # que a assinatura acabou de validar.
+  def job_params
+    meta_webhook_payload.merge(phone_number: params[:phone_number])
+  end
 
   def valid_token?(token)
     channel = Channel::Whatsapp.find_by(phone_number: params[:phone_number])
@@ -46,14 +55,16 @@ class Webhooks::WhatsappController < ActionController::API
     whatsapp_channel.blank? || whatsapp_channel.provider == 'whatsapp_cloud'
   end
 
+  # Mesma resolução do Webhooks::WhatsappEventsJob (número do payload + phone_number_id), lida só do corpo e
+  # sem estourar com formatos inesperados, porque isto roda ANTES de a assinatura ser conferida.
   def whatsapp_business_payload_channel
-    return unless params[:object] == 'whatsapp_business_account'
+    return unless meta_webhook_payload&.dig('object') == 'whatsapp_business_account'
 
-    metadata = params.dig(:entry, 0, :changes, 0, :value, :metadata)
-    return if metadata.blank?
+    metadata = meta_payload_dig(meta_webhook_payload, 'entry', 0, 'changes', 0, 'value', 'metadata')
+    return unless metadata.is_a?(Hash)
 
-    phone_number = normalized_phone_number(metadata[:display_phone_number])
-    phone_number_id = metadata[:phone_number_id]
+    phone_number = normalized_phone_number(metadata['display_phone_number'])
+    phone_number_id = metadata['phone_number_id']
     channel = Channel::Whatsapp.find_by(phone_number: phone_number)
 
     return channel if channel && channel.provider_config['phone_number_id'] == phone_number_id
