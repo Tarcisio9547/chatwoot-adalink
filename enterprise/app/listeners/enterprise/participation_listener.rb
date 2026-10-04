@@ -1,12 +1,11 @@
-# Na caixa WhatsApp o responsável é lido do banco, dentro de um lock de linha, e
+# Em todos os canais o responsável é lido do banco, dentro de um lock de linha, e
 # não do payload do evento: o job assíncrono pode rodar depois de uma nova troca
 # (A->B) e, sem isso, reinseriria o responsável antigo como participante pra
-# sempre. O lock serializa com WhatsappParticipationCleanupListener, que remove
-# o responsável anterior. Outras caixas seguem o comportamento upstream.
+# sempre. O lock serializa com ParticipationCleanupListener, que remove
+# o responsável anterior.
 module Enterprise::ParticipationListener
   def assignee_changed(event)
     conversation, _account = extract_conversation_and_account(event)
-    return super unless event.data[:channel_type] == Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE
 
     add_current_assignee_as_participant(conversation.id)
   rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid

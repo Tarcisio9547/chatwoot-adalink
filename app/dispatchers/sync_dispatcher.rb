@@ -5,7 +5,7 @@ class SyncDispatcher < BaseDispatcher
   end
 
   def listeners
-    # WhatsappParticipationCleanupListener roda ANTES do ActionCableListener pra
+    # ParticipationCleanupListener roda ANTES do ActionCableListener pra
     # remover o responsável anterior dos participantes antes do broadcast do
     # mesmo assignee_changed calcular quem pode ver a conversa.
     #
@@ -15,6 +15,6 @@ class SyncDispatcher < BaseDispatcher
     # spec/listeners/assignee_change_event_ordering_spec.rb), então quem perde a
     # conversa pode receber os dois. O conteúdo não vaza porque
     # Enterprise::ActionCableBroadcastJob refiltra os destinatários na execução.
-    [WhatsappParticipationCleanupListener.instance, ActionCableListener.instance, AgentBotListener.instance]
+    [ParticipationCleanupListener.instance, ActionCableListener.instance, AgentBotListener.instance]
   end
 end

@@ -118,6 +118,49 @@ describe 'Conversations API: acesso do participante', type: :request do
     end
   end
 
+  # O Chatwoot faz de todo responsável um participante. Se o ex-responsável (de qualquer canal,
+  # não só WhatsApp) continuasse na lista, um agente de visão restrita que perdeu a conversa
+  # para a roleta seguiria vendo e respondendo nela para sempre.
+  describe 'ex-assignee after A -> B on an inbox that is not WhatsApp (real callbacks)' do
+    let!(:new_owner) { create(:user, account: account, role: :agent) }
+    let!(:fresh) { create(:conversation, account: account, inbox: inbox, assignee: nil) }
+
+    %w[conversation_participating_manage conversation_unassigned_manage].each do |permission|
+      context "with the restricted visibility #{permission}" do
+        before do
+          [owner, new_owner].each { |user| create(:inbox_member, user: user, inbox: inbox) }
+          give_role(owner, [permission])
+          perform_enqueued_jobs { fresh.update!(assignee: owner) }
+        end
+
+        it 'becomes a participant while he is the assignee (upstream behaviour)' do
+          expect(fresh.conversation_participants.pluck(:user_id)).to eq([owner.id])
+        end
+
+        it 'stops seeing, opening and answering the conversation once it goes to someone else' do
+          perform_enqueued_jobs { fresh.update!(assignee: new_owner) }
+
+          expect(fresh.reload.conversation_participants.pluck(:user_id)).to eq([new_owner.id])
+          expect(listed_ids(owner)).not_to include(fresh.display_id)
+          get "/api/v1/accounts/#{account.id}/conversations/#{fresh.display_id}", headers: owner.create_new_auth_token, as: :json
+          expect(response).to have_http_status(:unauthorized)
+          post "/api/v1/accounts/#{account.id}/conversations/#{fresh.display_id}/messages",
+               headers: owner.create_new_auth_token, params: { content: reply }, as: :json
+          expect(response).to have_http_status(:unauthorized)
+        end
+
+        it 'keeps a participant added by hand when the conversation changes hands' do
+          manual = create(:user, account: account, role: :agent)
+          create(:conversation_participant, conversation: fresh, account: account, user: manual)
+
+          perform_enqueued_jobs { fresh.update!(assignee: new_owner) }
+
+          expect(fresh.reload.conversation_participants.pluck(:user_id)).to contain_exactly(manual.id, new_owner.id)
+        end
+      end
+    end
+  end
+
   describe 'participant_ids in the payload (the browser filter needs it to keep the conversation in the list)' do
     before { create(:conversation_participant, conversation: conversation, account: account, user: participant) }
 

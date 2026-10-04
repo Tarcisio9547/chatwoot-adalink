@@ -7,7 +7,7 @@ module Enterprise::ActionCableListenerAssigneeChangeVisibility
   # Quem PERDE a conversa numa reatribuição também precisa do evento
   # assignee.changed, pra tela dele tirar a conversa da lista — mesmo que a
   # regra de papel não deixe mais ele ver a conversa depois da troca (o
-  # WhatsappParticipationCleanupListener já removeu o participante antes
+  # ParticipationCleanupListener já removeu o participante antes
   # deste método rodar). Por isso a lista de destino soma o assignee
   # anterior (se ele ainda for membro da inbox) aos destinatários calculados
   # com o estado já atualizado. Também cobre quem tinha o papel "Sem

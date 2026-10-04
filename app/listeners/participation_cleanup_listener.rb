@@ -1,19 +1,21 @@
-# Na caixa WhatsApp, quem perde a conversa deixa de ser participante. O
+# Em TODOS os canais, quem perde a conversa deixa de ser participante. O
 # ParticipationListener upstream só adiciona o novo responsável e nunca remove
-# o anterior, que continuaria vendo a conversa nos eventos ao vivo e na busca.
-# Remove só o responsável anterior (participantes manuais ficam) e roda no
-# SyncDispatcher antes do ActionCableListener, pra valer no broadcast da própria
-# troca. Vale também pra admin e agente sem papel: eles seguem vendo tudo pela
-# visão "Todas" (Conversations::RoleVisibility.unrestricted?).
-class WhatsappParticipationCleanupListener < BaseListener
+# o anterior, que continuaria vendo a conversa nos eventos ao vivo, na busca e, com
+# visão restrita ("Minhas"/"Não atribuídas"), na própria lista, para sempre.
+# Remove só o responsável anterior (participantes manuais ficam; não há como
+# distinguir se o responsável anterior também tinha sido adicionado à mão, então
+# esse perde a participação junto) e roda no SyncDispatcher antes do
+# ActionCableListener, pra valer no broadcast da própria troca. Vale também pra admin
+# e agente sem papel: eles seguem vendo tudo pela visão "Todas"
+# (Conversations::RoleVisibility.unrestricted?).
+#
+# Sem responsável anterior (primeira atribuição) não faz nenhuma consulta.
+class ParticipationCleanupListener < BaseListener
   def assignee_changed(event)
-    conversation, _account = extract_conversation_and_account(event)
-    return unless conversation.inbox.whatsapp?
-
     previous_assignee_id = previous_assignee_id_for(event)
     return if previous_assignee_id.blank?
 
-    remove_previous_assignee(conversation.id, previous_assignee_id)
+    remove_previous_assignee(event.data[:conversation].id, previous_assignee_id)
   end
 
   private
