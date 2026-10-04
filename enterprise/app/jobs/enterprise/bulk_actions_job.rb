@@ -1,11 +1,8 @@
 # As ações em massa agem em qualquer display_id enviado. Numa caixa WhatsApp só
 # agem nas conversas que o usuário enxerga pelo papel (um Setor não se atribui à
-# conversa de um colega pra passar a enxergá-la). Adalink: quando o pedido muda responsável, time ou
-# status, quem tem visão restrita só age no que enxerga em TODOS os canais; rótulos e soneca ficam
-# como estavam nas outras caixas.
+# conversa de um colega pra passar a enxergá-la). Adalink: em qualquer ação em massa (responsável, time,
+# status, rótulos, soneca), quem tem visão restrita só age no que enxerga em TODOS os canais.
 module Enterprise::BulkActionsJob
-  RESTRICTED_FIELDS = %w[assignee_id team_id status].freeze
-
   def records_to_updated(ids)
     records = super
     return records if records.nil?
@@ -14,9 +11,8 @@ module Enterprise::BulkActionsJob
     @actor = Current.user
     account_user = account_user_for_policy
     records = Conversations::RoleVisibility.restrict_to_visible(records, @actor, account_user: account_user)
-    return records unless changes_assignee_team_or_status?
 
-    visible_ids = records.select { |conversation| policy_for(conversation).change_status? }.map(&:id)
+    visible_ids = records.select { |conversation| policy_for(conversation).actionable? }.map(&:id)
     records.where(id: visible_ids)
   end
 
@@ -37,11 +33,6 @@ module Enterprise::BulkActionsJob
     return params if key.nil? || yield(params[key])
 
     params.except(key)
-  end
-
-  def changes_assignee_team_or_status?
-    fields = @params[:fields]
-    fields.present? && fields.keys.any? { |name| RESTRICTED_FIELDS.include?(name.to_s) }
   end
 
   def team_for(team_id)

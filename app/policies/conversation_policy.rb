@@ -84,10 +84,15 @@ class ConversationPolicy < ApplicationPolicy
     assigned_to_user?
   end
 
-  # Adalink: ações em massa e macros que mudam o status. Quem tem visão restrita só age no que enxerga
-  # (em todos os canais); os demais seguem como sempre.
-  def change_status?
+  # Adalink: ações em massa e macros. Quem tem visão restrita só age no que enxerga (show?), em todos
+  # os canais; os demais seguem como sempre.
+  def actionable?
     !restricted_role? || show?
+  end
+
+  # Mudar o status em massa ou por macro: mesma regra de actionable?.
+  def change_status?
+    actionable?
   end
 
   private

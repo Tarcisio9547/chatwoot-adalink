@@ -153,14 +153,15 @@ describe 'Bulk actions and macros on conversations a restricted user cannot see'
       end
 
       it 'does not email the transcript or fire the webhook for it' do
-        allow_any_instance_of(Account).to receive(:email_transcript_enabled?).and_return(true) # rubocop:disable RSpec/AnyInstance
+        macro = create(:macro, account: account, actions: [
+                         { 'action_name' => 'send_email_transcript', 'action_params' => ['alvo@example.com'] },
+                         { 'action_name' => 'send_webhook_event', 'action_params' => ['https://example.com/hook'] }
+                       ])
+        allow(macro.account).to receive(:email_transcript_enabled?).and_return(true)
         allow(WebhookJob).to receive(:perform_later)
 
-        expect do
-          run_macro(restricted, [hidden],
-                    { 'action_name' => 'send_email_transcript', 'action_params' => ['alvo@example.com'] },
-                    { 'action_name' => 'send_webhook_event', 'action_params' => ['https://example.com/hook'] })
-        end.not_to have_enqueued_mail(ConversationReplyMailer, :conversation_transcript)
+        expect { MacrosExecutionJob.perform_now(macro, conversation_ids: [hidden.display_id], user: restricted) }
+          .not_to have_enqueued_mail(ConversationReplyMailer, :conversation_transcript)
         expect(WebhookJob).not_to have_received(:perform_later)
       end
 

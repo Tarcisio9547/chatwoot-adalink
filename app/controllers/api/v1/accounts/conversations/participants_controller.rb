@@ -73,8 +73,10 @@ class Api::V1::Accounts::Conversations::ParticipantsController < Api::V1::Accoun
     ids.is_a?(Array) && ids.all? { |id| id.is_a?(Integer) || (id.is_a?(String) && id.match?(/\A\d+\z/)) }
   end
 
+  # Só usuário confirmado entra como participante (a lista de candidatos da tela também é só de
+  # confirmados). Quem já é participante e ainda não confirmou fica, e pode ser removido.
   def participants_to_be_added_ids
-    requested_user_ids - current_participant_ids
+    confirmed_requested_user_ids - current_participant_ids
   end
 
   def participants_to_be_removed_ids
@@ -85,7 +87,15 @@ class Api::V1::Accounts::Conversations::ParticipantsController < Api::V1::Accoun
   # à caixa saiu em 89e95cd07), então o servidor só aceita usuários DESTA conta.
   # Sem isso, um user_id de outra conta (ou inexistente) entraria direto na lista.
   def requested_user_ids
-    @requested_user_ids ||= Current.account.users.where(id: params[:user_ids].map(&:to_i)).pluck(:id)
+    @requested_user_ids ||= requested_account_users.pluck(:id)
+  end
+
+  def confirmed_requested_user_ids
+    @confirmed_requested_user_ids ||= requested_account_users.where.not(confirmed_at: nil).pluck(:id)
+  end
+
+  def requested_account_users
+    Current.account.users.where(id: params[:user_ids].map(&:to_i))
   end
 
   def current_participant_ids

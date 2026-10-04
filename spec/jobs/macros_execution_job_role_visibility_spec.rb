@@ -60,16 +60,26 @@ describe 'MacrosExecutionJob role visibility' do
     expect(colleague_conversation.reload.assignee_id).to eq(admin.id)
   end
 
-  # A visibilidade por papel só filtra caixas WhatsApp, então as outras ações da macro seguem
-  # rodando nas outras caixas. Já a regra de atribuição (só toma conversa sem dono; só reatribui se
-  # for o dono) vale em TODOS os canais: ver spec/jobs/macros_execution_job_assignee_restriction_spec.rb.
-  it 'keeps running the other actions on other channels, but the assignee rule applies there too' do
+  # A visibilidade por papel agora vale em TODOS os canais para quem tem visão restrita: a macro só roda
+  # nas conversas que ele enxerga (spec/jobs/bulk_and_macro_invisible_conversations_spec.rb cobre as
+  # ações). Numa caixa que não é WhatsApp, a conversa de um colega onde ele não participa não roda nada.
+  it 'does not run anything on a colleague conversation of another channel either' do
     other_inbox = create(:inbox, account: account)
     create(:inbox_member, user: setor_agent, inbox: other_inbox)
     other = create(:conversation, account: account, inbox: other_inbox, assignee: colleague)
 
-    expect { run_macro([other]) }.to have_enqueued_mail(ConversationReplyMailer, :conversation_transcript)
+    expect { run_macro([other]) }.not_to have_enqueued_mail(ConversationReplyMailer, :conversation_transcript)
     expect(other.reload.assignee_id).to eq(colleague.id)
+  end
+
+  it 'keeps running on another channel when the Setor agent participates in the conversation' do
+    other_inbox = create(:inbox, account: account)
+    create(:inbox_member, user: setor_agent, inbox: other_inbox)
+    other = create(:conversation, account: account, inbox: other_inbox, assignee: colleague)
+    create(:conversation_participant, conversation: other, account: account, user: setor_agent)
+
+    expect { run_macro([other]) }.to have_enqueued_mail(ConversationReplyMailer, :conversation_transcript)
+    expect(other.reload.assignee_id).to eq(colleague.id) # atribuir a si mesmo segue barrado (dono é outro)
   end
 end
 # rubocop:enable RSpec/DescribeClass

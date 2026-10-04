@@ -200,6 +200,43 @@ RSpec.describe ConversationPolicy, type: :policy do
   # Trocar o time pode trocar o responsável (o AssignmentHandler zera o dono que não é do time novo e
   # o round-robin pode entregar a conversa). Para visão restrita, só passa se a troca de responsável
   # que ela causaria também passaria.
+  # Ações em massa e macros: quem tem visão restrita só age no que enxerga (em qualquer canal).
+  describe '#actionable?' do
+    let(:hidden) { create(:conversation, account: account, inbox: create(:inbox, account: account), assignee: nil) }
+
+    def actionable?(conversation)
+      described_class.new(context, conversation).actionable?
+    end
+
+    it 'denies a restricted agent on a conversation he cannot see, allows it once he participates' do
+      role = create(:custom_role, account: account, permissions: %w[conversation_participating_manage])
+      agent_account_user.update!(role: :agent, custom_role: role)
+
+      expect(actionable?(hidden)).to be false
+
+      create(:conversation_participant, conversation: hidden, account: account, user: agent)
+      expect(actionable?(hidden)).to be true
+    end
+
+    it 'does not filter an agent without custom role, the "Todas" role or an administrator' do
+      expect(actionable?(hidden)).to be true
+
+      role = create(:custom_role, account: account, permissions: %w[conversation_manage])
+      agent_account_user.update!(role: :agent, custom_role: role)
+      expect(actionable?(hidden)).to be true
+
+      agent_account_user.update!(role: :administrator, custom_role: nil)
+      expect(actionable?(hidden)).to be true
+    end
+
+    it 'keeps change_status? as an alias of the same rule' do
+      role = create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage])
+      agent_account_user.update!(role: :agent, custom_role: role)
+
+      expect(described_class.new(context, hidden).change_status?).to eq(actionable?(hidden))
+    end
+  end
+
   describe '#change_team?' do
     let(:scene) do
       owner = create(:user, account: account, role: :agent)
