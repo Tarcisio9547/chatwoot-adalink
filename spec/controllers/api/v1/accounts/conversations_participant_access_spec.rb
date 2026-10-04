@@ -192,9 +192,9 @@ describe 'Conversations API: acesso do participante', type: :request do
       expect(response).to have_http_status(:ok)
     end
 
-    [nil, 'conversation_participating_manage', 'conversation_unassigned_manage'].each do |permission|
-      [true, false].each do |member|
-        it "keeps the manager (#{permission || 'no custom role'}, #{member ? 'member' : 'not a member'} of the inbox) when the conversation changes hands" do
+    [nil, 'conversation_participating_manage', 'conversation_unassigned_manage'].product([true, false]).each do |permission, member|
+      context "with #{permission || 'no custom role'}, #{member ? 'member' : 'not a member'} of the inbox" do
+        it 'keeps the manager when the conversation changes hands' do
           give_role(manager, [permission]) if permission
           create(:inbox_member, inbox: personal_inbox, user: manager) if member
           create(:conversation_participant, conversation: personal_conversation, account: account, user: manager)
