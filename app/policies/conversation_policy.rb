@@ -1,4 +1,12 @@
 class ConversationPolicy < ApplicationPolicy
+  # Adalink: policy fora de uma requisição (menção, macro, ação em massa), com o AccountUser do
+  # usuário na conta da conversa.
+  def self.for_user(user, conversation, account_user: nil)
+    account = conversation.account
+    account_user ||= AccountUser.find_by(account_id: account.id, user_id: user.id)
+    new({ user: user, account: account, account_user: account_user }, conversation)
+  end
+
   def index?
     true
   end
@@ -30,6 +38,18 @@ class ConversationPolicy < ApplicationPolicy
     return false if agent_bot? || account_user.blank?
 
     administrator? || assigned_to_user? || unrestricted_conversation_role?
+  end
+
+  # Adalink: quem tem visão restrita ("Minhas" ou "Não atribuídas", custom_role sem
+  # conversation_manage) só se atribui a uma conversa SEM responsável e só reatribui ou tira o
+  # responsável se ele mesmo for o responsável atual. Administrador, agente sem custom_role e
+  # "Todas" seguem como sempre. `new_assignee_id` é o alvo da troca (nil = tirar o responsável;
+  # agente bot, passe nil). Vale para a tela, as ações em massa e as macros, em todos os canais.
+  def change_assignee?(new_assignee_id)
+    return true if agent_bot? || account_user.blank? || administrator? || unrestricted_conversation_role?
+    return true if assigned_to_user?
+
+    record.assignee_id.nil? && new_assignee_id.to_s == user.id.to_s
   end
 
   private

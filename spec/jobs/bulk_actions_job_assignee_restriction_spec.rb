@@ -3,7 +3,7 @@ require 'rails_helper'
 # Ações em massa e atribuição: quem tem visão restrita só se atribui a conversa SEM responsável
 # e só reatribui/tira o responsável se ele mesmo for o responsável atual. Vale em TODOS os canais
 # (aqui, uma caixa de site). As outras ações do mesmo pedido (status, etiquetas) seguem normais.
-# rubocop:disable RSpec/DescribeClass, RSpec/MultipleMemoizedHelpers -- cobre o job de upstream e o hook Enterprise.
+# rubocop:disable RSpec/DescribeClass -- cobre o job de upstream e o hook Enterprise.
 describe 'BulkActionsJob assignee restriction' do
   let!(:account) { create(:account) }
   let!(:inbox) { create(:inbox, account: account) }
@@ -19,7 +19,9 @@ describe 'BulkActionsJob assignee restriction' do
     [restricted, owner, colleague].each { |user| create(:inbox_member, user: user, inbox: inbox) }
     role = create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage])
     AccountUser.find_by(user: restricted, account: account).update!(role: :agent, custom_role: role)
-    [owned_by_other, ownerless].each { |conversation| create(:conversation_participant, conversation: conversation, account: account, user: restricted) }
+    [owned_by_other, ownerless].each do |conversation|
+      create(:conversation_participant, conversation: conversation, account: account, user: restricted)
+    end
   end
 
   def run_bulk(user, conversations, fields)
@@ -103,4 +105,4 @@ describe 'BulkActionsJob assignee restriction' do
     expect(owned_by_other.reload.assignee_id).to eq(restricted.id)
   end
 end
-# rubocop:enable RSpec/DescribeClass, RSpec/MultipleMemoizedHelpers
+# rubocop:enable RSpec/DescribeClass

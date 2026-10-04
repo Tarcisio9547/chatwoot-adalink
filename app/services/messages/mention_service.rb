@@ -76,8 +76,6 @@ class Messages::MentionService
     author = message.sender
     return false unless author.is_a?(User)
 
-    account_user = AccountUser.find_by(account_id: message.account_id, user_id: author.id)
-    ConversationPolicy.new({ user: author, account: message.account, account_user: account_user },
-                           message.conversation).manage_participants?
+    ConversationPolicy.for_user(author, message.conversation).manage_participants?
   end
 end

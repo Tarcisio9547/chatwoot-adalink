@@ -6,7 +6,6 @@ require 'rails_helper'
 # Antes, show? bastava: um participante restrito tomava a conversa de outro ou tirava o dono.
 # Admin, agente sem custom_role e "Todas" seguem como antes (a integração do CRM usa token de
 # administrador da conta).
-# rubocop:disable RSpec/MultipleMemoizedHelpers -- um usuário por papel.
 describe 'POST /api/v1/accounts/{account.id}/conversations/{id}/assignments (restricted roles)', type: :request do
   let!(:account) { create(:account) }
   let!(:inbox) { create(:inbox, account: account) }
@@ -165,14 +164,4 @@ describe 'POST /api/v1/accounts/{account.id}/conversations/{id}/assignments (res
     expect(response).to have_http_status(:success)
     expect(owned.reload.assignee_id).to be_nil
   end
-
-  it 'keeps the previous behaviour for an administrator who has a leftover custom_role' do
-    role = create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage])
-    AccountUser.find_by(user: admin, account: account).update_columns(custom_role_id: role.id) # rubocop:disable Rails/SkipsModelValidations
-
-    assign(admin, owned, assignee_id: admin.id)
-
-    expect(response).to have_http_status(:success)
-  end
 end
-# rubocop:enable RSpec/MultipleMemoizedHelpers

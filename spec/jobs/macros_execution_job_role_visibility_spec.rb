@@ -60,14 +60,16 @@ describe 'MacrosExecutionJob role visibility' do
     expect(colleague_conversation.reload.assignee_id).to eq(admin.id)
   end
 
-  it 'keeps running on other channels whatever the role (current behaviour, unchanged)' do
+  # A visibilidade por papel só filtra caixas WhatsApp, então as outras ações da macro seguem
+  # rodando nas outras caixas. Já a regra de atribuição (só toma conversa sem dono; só reatribui se
+  # for o dono) vale em TODOS os canais: ver spec/jobs/macros_execution_job_assignee_restriction_spec.rb.
+  it 'keeps running the other actions on other channels, but the assignee rule applies there too' do
     other_inbox = create(:inbox, account: account)
     create(:inbox_member, user: setor_agent, inbox: other_inbox)
     other = create(:conversation, account: account, inbox: other_inbox, assignee: colleague)
 
-    run_macro([other])
-
-    expect(other.reload.assignee_id).to eq(setor_agent.id)
+    expect { run_macro([other]) }.to have_enqueued_mail(ConversationReplyMailer, :conversation_transcript)
+    expect(other.reload.assignee_id).to eq(colleague.id)
   end
 end
 # rubocop:enable RSpec/DescribeClass

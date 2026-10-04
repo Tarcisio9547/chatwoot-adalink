@@ -4,7 +4,7 @@ require 'rails_helper'
 # conversa sem responsável; só reatribui ou tira o responsável se ele for o responsável atual).
 # Vale em TODOS os canais (aqui, uma caixa de site). Admin, agente sem custom_role e "Todas"
 # seguem como antes; as outras ações da mesma macro continuam rodando.
-# rubocop:disable RSpec/DescribeClass, RSpec/MultipleMemoizedHelpers -- cobre o job e o serviço de macro.
+# rubocop:disable RSpec/DescribeClass -- cobre o job e o serviço de macro.
 describe 'Macro assign_agent restriction' do
   let!(:account) { create(:account) }
   let!(:inbox) { create(:inbox, account: account) }
@@ -20,7 +20,9 @@ describe 'Macro assign_agent restriction' do
     [restricted, owner, colleague].each { |user| create(:inbox_member, user: user, inbox: inbox) }
     role = create(:custom_role, account: account, permissions: %w[conversation_participating_manage])
     AccountUser.find_by(user: restricted, account: account).update!(role: :agent, custom_role: role)
-    [owned_by_other, ownerless].each { |conversation| create(:conversation_participant, conversation: conversation, account: account, user: restricted) }
+    [owned_by_other, ownerless].each do |conversation|
+      create(:conversation_participant, conversation: conversation, account: account, user: restricted)
+    end
   end
 
   def run_macro(user, conversations, *actions)
@@ -95,4 +97,4 @@ describe 'Macro assign_agent restriction' do
     expect(owned_by_other.reload.assignee_id).to eq(colleague.id)
   end
 end
-# rubocop:enable RSpec/DescribeClass, RSpec/MultipleMemoizedHelpers
+# rubocop:enable RSpec/DescribeClass

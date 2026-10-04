@@ -24,7 +24,17 @@ class Macros::ExecutionService < ActionService
 
   def assign_agent(agent_ids)
     agent_ids = agent_ids.map { |id| id == 'self' ? @user.id : id }
+    return unless assignee_change_allowed?(agent_ids[0])
+
     super(agent_ids)
+  end
+
+  # Adalink: quem tem visão restrita só se atribui a conversa sem responsável e só reatribui/tira
+  # o responsável se for o responsável atual (ConversationPolicy#change_assignee?). As outras ações
+  # da macro seguem rodando.
+  def assignee_change_allowed?(target)
+    target = nil if target.to_s == 'nil'
+    ConversationPolicy.for_user(@user, @conversation).change_assignee?(target)
   end
 
   def add_private_note(message)

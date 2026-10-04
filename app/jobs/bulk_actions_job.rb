@@ -26,7 +26,7 @@ class BulkActionsJob < ApplicationJob
     records.each do |conversation|
       bulk_add_labels(conversation)
       bulk_snoozed_until(conversation)
-      conversation.update(params) if params
+      conversation.update(conversation_update_params(conversation, params)) if params
     end
   end
 
@@ -40,6 +40,12 @@ class BulkActionsJob < ApplicationJob
     return unless params[:fields]
 
     params[:fields].delete_if { |key, value| value.nil? && key == 'status' }
+  end
+
+  # Ponto de extensão: a edição Enterprise tira o assignee_id das conversas em que o usuário não
+  # pode mudar o responsável.
+  def conversation_update_params(_conversation, params)
+    params
   end
 
   def bulk_add_labels(conversation)
