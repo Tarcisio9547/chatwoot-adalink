@@ -6,6 +6,11 @@ import {
   getAgentsByUpdatedPresence,
   getSortedAgentsByAvailability,
 } from 'dashboard/helper/agentHelper';
+import {
+  getUserPermissions,
+  getUserRole,
+} from 'dashboard/helper/permissionsHelper';
+import { canManageParticipants } from 'dashboard/helper/participantsHelper';
 
 import ThumbnailGroup from 'dashboard/components/widgets/ThumbnailGroup.vue';
 import MultiselectDropdownItems from 'shared/components/ui/MultiselectDropdownItems.vue';
@@ -37,6 +42,20 @@ export default {
       currentAccountId: 'getCurrentAccountId',
       verifiedAgents: 'agents/getVerifiedAgents',
     }),
+    // Adalink: só administrador, agente sem custom_role, "Todas" ou o responsável atual
+    // mexem na lista (o servidor barra os demais com 401; aqui só escondemos o botão).
+    canManageParticipants() {
+      const chat = this.$store.getters.getConversationById(this.conversationId);
+      return canManageParticipants({
+        role: getUserRole(this.currentUser, this.currentAccountId),
+        permissions: getUserPermissions(
+          this.currentUser,
+          this.currentAccountId
+        ),
+        assigneeId: chat?.meta?.assignee?.id,
+        currentUserId: this.currentUser.id,
+      });
+    },
     // Adalink: candidatos a participante = todos os agentes confirmados da
     // conta, não só os membros da caixa (assignable_agents). Participante não
     // precisa ser da caixa; o servidor só aceita usuários da conta.
@@ -178,6 +197,7 @@ export default {
           </p>
         </div>
         <NextButton
+          v-if="canManageParticipants"
           v-tooltip.left="$t('CONVERSATION_PARTICIPANTS.ADD_PARTICIPANTS')"
           slate
           ghost
@@ -199,7 +219,7 @@ export default {
         {{ $t('CONVERSATION_PARTICIPANTS.YOU_ARE_WATCHING') }}
       </p>
       <NextButton
-        v-else
+        v-else-if="canManageParticipants"
         link
         xs
         icon="i-lucide-arrow-right"
@@ -209,6 +229,7 @@ export default {
       />
     </div>
     <div
+      v-if="canManageParticipants"
       v-on-clickaway="
         () => {
           onCloseDropdown();

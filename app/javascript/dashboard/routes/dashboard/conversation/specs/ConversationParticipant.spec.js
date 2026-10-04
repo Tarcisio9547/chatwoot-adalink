@@ -21,14 +21,29 @@ const agente = (id, nome, extra = {}) => ({
 
 const voce = agente(1, 'Voce', { availability_status: 'offline' });
 
-const montar = (agentes, { actions = {} } = {}) => {
+const montar = (
+  agentes,
+  { actions = {}, role = 'agent', permissions = [], assigneeId = null } = {}
+) => {
   const store = createStore({
     getters: {
       getCurrentUser: () => ({
         ...voce,
-        accounts: [{ id: 7, availability_status: 'online' }],
+        accounts: [
+          {
+            id: 7,
+            availability_status: 'online',
+            role: role === 'administrator' ? 'administrator' : 'agent',
+            custom_role_id: role === 'custom_role' ? 5 : null,
+            permissions,
+          },
+        ],
       }),
       getCurrentAccountId: () => 7,
+      getConversationById: () => () => ({
+        id: 321,
+        meta: { assignee: assigneeId ? { id: assigneeId } : null },
+      }),
     },
     modules: {
       agents: {
@@ -57,7 +72,11 @@ const montar = (agentes, { actions = {} } = {}) => {
       stubs: {
         Spinner: true,
         ThumbnailGroup: true,
-        NextButton: true,
+        NextButton: {
+          name: 'NextButton',
+          props: ['label', 'icon'],
+          template: '<button class="next-button" :data-icon="icon" />',
+        },
         MultiselectDropdownItems: {
           name: 'MultiselectDropdownItems',
           props: ['options', 'selectedItems'],
@@ -144,5 +163,81 @@ describe('ConversationParticipant: lista de candidatos', () => {
     const { wrapper } = montar([]);
 
     expect(opcoes(wrapper)).toEqual([]);
+  });
+});
+
+// Participar dá acesso à conversa, então só administrador, agente sem custom_role,
+// "Todas" ou o responsável atual veem o "Participar" e a edição da lista (mesma regra
+// do servidor, ConversationPolicy#manage_participants?). Os demais só leem.
+describe('ConversationParticipant: quem pode alterar a lista', () => {
+  const botoes = wrapper => wrapper.findAllComponents({ name: 'NextButton' });
+  const temEngrenagem = wrapper =>
+    botoes(wrapper).some(botao => botao.props('icon') === 'i-lucide-settings');
+  const temParticipar = wrapper =>
+    botoes(wrapper).some(
+      botao =>
+        botao.props('label') === 'CONVERSATION_PARTICIPANTS.WATCH_CONVERSATION'
+    );
+  const temSeletor = wrapper =>
+    wrapper.findComponent({ name: 'MultiselectDropdownItems' }).exists();
+
+  it.each([
+    ['administrador', { role: 'administrator' }],
+    ['agente sem custom_role', { role: 'agent' }],
+    [
+      'custom_role "Todas"',
+      { role: 'custom_role', permissions: ['conversation_manage'] },
+    ],
+    [
+      'responsável "Minhas"',
+      {
+        role: 'custom_role',
+        permissions: ['conversation_participating_manage'],
+        assigneeId: 1,
+      },
+    ],
+    [
+      'responsável "Não atribuídas"',
+      {
+        role: 'custom_role',
+        permissions: ['conversation_unassigned_manage'],
+        assigneeId: 1,
+      },
+    ],
+  ])('%s vê o Participar, a engrenagem e o seletor', (_nome, opcoesUsuario) => {
+    const { wrapper } = montar([voce], opcoesUsuario);
+
+    expect(temParticipar(wrapper)).toBe(true);
+    expect(temEngrenagem(wrapper)).toBe(true);
+    expect(temSeletor(wrapper)).toBe(true);
+  });
+
+  it.each([
+    ['Minhas', ['conversation_participating_manage']],
+    ['Não atribuídas', ['conversation_unassigned_manage']],
+  ])(
+    'com a visão restrita %s e sem ser o responsável: sem Participar, sem engrenagem, sem seletor',
+    (_nome, permissions) => {
+      const { wrapper } = montar([voce], {
+        role: 'custom_role',
+        permissions,
+        assigneeId: 2,
+      });
+
+      expect(temParticipar(wrapper)).toBe(false);
+      expect(temEngrenagem(wrapper)).toBe(false);
+      expect(temSeletor(wrapper)).toBe(false);
+    }
+  );
+
+  it('restrito em conversa sem responsável também não vê o Participar', () => {
+    const { wrapper } = montar([voce], {
+      role: 'custom_role',
+      permissions: ['conversation_unassigned_manage'],
+      assigneeId: null,
+    });
+
+    expect(temParticipar(wrapper)).toBe(false);
+    expect(temEngrenagem(wrapper)).toBe(false);
   });
 });
