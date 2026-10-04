@@ -1,8 +1,8 @@
 module Enterprise::Conversations::EventDataPresenter
-  # Adalink: participant_ids vai em todo evento ao vivo pra tela saber, sem nova
-  # consulta, quem participa da conversa. O filtro de visibilidade do navegador
-  # (applyRoleFilter) precisa disso pra manter na lista a conversa em que o
-  # usuário é participante e não responsável.
+  # Adalink: participant_ids vai em todo evento ao vivo (uma consulta indexada por
+  # evento, não por destinatário) pra tela saber quem participa da conversa. O filtro
+  # de visibilidade do navegador (applyRoleFilter) precisa disso pra manter na lista a
+  # conversa em que o usuário é participante e não responsável.
   def push_data
     data = super.merge(participant_ids: conversation_participants.pluck(:user_id))
     return data unless account.feature_enabled?('sla')
