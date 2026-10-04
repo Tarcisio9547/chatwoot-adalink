@@ -1,4 +1,6 @@
 class Whatsapp::SendOnWhatsappService < Base::SendOnChannelService
+  CAROUSEL_NOT_SUPPORTED_ERROR = 'Modelo carrossel ainda não é suportado pelo Atendimento'.freeze
+
   private
 
   def channel_class
@@ -15,6 +17,8 @@ class Whatsapp::SendOnWhatsappService < Base::SendOnChannelService
   end
 
   def send_template_message
+    return fail_carousel_template if carousel_template?
+
     processor = Whatsapp::TemplateProcessorService.new(
       channel: channel,
       template_params: template_params,
@@ -44,5 +48,24 @@ class Whatsapp::SendOnWhatsappService < Base::SendOnChannelService
 
   def template_params
     message.additional_attributes && message.additional_attributes['template_params']
+  end
+
+  # Carrossel exige os cartões na chamada; sem isso a Meta responde #132012.
+  # Falha aqui, com texto claro, em vez de gastar a chamada e mostrar erro cru.
+  def fail_carousel_template
+    message.update!(status: :failed, external_error: CAROUSEL_NOT_SUPPORTED_ERROR)
+  end
+
+  def carousel_template?
+    return false if template_params.blank?
+
+    Array(channel.message_templates).any? do |template|
+      same_template?(template) && Array(template['components']).any? { |component| component['type']&.upcase == 'CAROUSEL' }
+    end
+  end
+
+  def same_template?(template)
+    template['name'] == template_params['name'] &&
+      template['language']&.downcase == template_params['language']&.downcase
   end
 end
