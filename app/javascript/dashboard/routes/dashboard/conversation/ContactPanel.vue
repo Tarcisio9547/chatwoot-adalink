@@ -23,6 +23,7 @@ import ShopifyOrdersList from 'dashboard/components/widgets/conversation/Shopify
 import SidebarActionsHeader from 'dashboard/components-next/SidebarActionsHeader.vue';
 import LinearIssuesList from 'dashboard/components/widgets/conversation/linear/IssuesList.vue';
 import LinearSetupCTA from 'dashboard/components/widgets/conversation/linear/LinearSetupCTA.vue';
+import { buildCriarNegocioMessage } from './helpers/criarNegocioMessage';
 
 const props = defineProps({
   conversationId: {
@@ -123,17 +124,17 @@ const closeContactPanel = () => {
 
 // Adalink: Send contact data to CRM parent to create a deal
 // Type 'trama-criar-negocio' bate com listener no CRM (Atendimento.tsx).
+// conversationId/inboxId (conversa aberta) deixam o CRM ligar a conversa ao negócio.
 const criarNegocio = () => {
   if (!contact.value) return;
-  window.parent.postMessage({
-    type: 'trama-criar-negocio',
-    contato: {
-      nome: contact.value.name || '',
-      telefone: contact.value.phone_number || '',
-      email: contact.value.email || '',
-      chatwoot_contact_id: contact.value.id,
-    },
-  }, '*');
+  window.parent.postMessage(
+    buildCriarNegocioMessage({
+      contact: contact.value,
+      conversationId: props.conversationId,
+      inboxId: props.inboxId,
+    }),
+    '*'
+  );
 };
 
 onMounted(() => {
