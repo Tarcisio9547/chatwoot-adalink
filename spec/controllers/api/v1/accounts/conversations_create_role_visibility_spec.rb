@@ -73,15 +73,61 @@ describe 'POST /conversations on an existing conversation (role visibility)', ty
     expect(response).to have_http_status(:success)
   end
 
-  it 'keeps returning the existing conversation on other channels (current behaviour, unchanged)' do
-    other_inbox = create(:inbox, account: account, lock_to_single_conversation: true)
-    create(:inbox_member, user: setor_agent, inbox: other_inbox)
-    other_contact_inbox = create(:contact_inbox, contact: contact, inbox: other_inbox)
-    other = create(:conversation, account: account, inbox: other_inbox, contact: contact, contact_inbox: other_contact_inbox, assignee: owner)
+  # A regra vale em TODOS os canais: com "uma conversa por contato", quem tem visão restrita e não enxerga
+  # a conversa existente não a recebe nem posta mensagem nela (404, que não confirma que ela existe).
+  describe 'on a channel that is not WhatsApp (web widget, e-mail, API...)' do
+    let!(:other_inbox) { create(:inbox, account: account, lock_to_single_conversation: true) }
+    let!(:other_contact_inbox) { create(:contact_inbox, contact: contact, inbox: other_inbox) }
+    let!(:other) do
+      create(:conversation, account: account, inbox: other_inbox, contact: contact, contact_inbox: other_contact_inbox, assignee: owner)
+    end
 
-    create_conversation(setor_agent, source_id: other_contact_inbox.source_id)
+    before do
+      [setor_agent, owner].each { |user| create(:inbox_member, user: user, inbox: other_inbox) }
+    end
 
-    expect(response).to have_http_status(:success)
-    expect(response.parsed_body['id']).to eq(other.display_id)
+    it 'answers 404, does not return the colleague conversation and does not post the message' do
+      create_conversation(setor_agent, source_id: other_contact_inbox.source_id)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).not_to include(other.display_id.to_s)
+      expect(other.messages.where(content: 'mensagem do intruso')).to be_empty
+    end
+
+    it 'returns it to the assignee and posts the message' do
+      create_conversation(owner, source_id: other_contact_inbox.source_id)
+
+      expect(response).to have_http_status(:success)
+      expect(response.parsed_body['id']).to eq(other.display_id)
+      expect(other.messages.where(content: 'mensagem do intruso').count).to eq(1)
+    end
+
+    it 'returns it to a restricted agent who is an explicit participant' do
+      create(:conversation_participant, conversation: other, account: account, user: setor_agent)
+
+      create_conversation(setor_agent, source_id: other_contact_inbox.source_id)
+
+      expect(response).to have_http_status(:success)
+      expect(response.parsed_body['id']).to eq(other.display_id)
+    end
+
+    it 'keeps returning it to an administrator and to an agent without custom role (current behaviour, unchanged)' do
+      plain = create(:user, account: account, role: :agent)
+      create(:inbox_member, user: plain, inbox: other_inbox)
+
+      create_conversation(admin, source_id: other_contact_inbox.source_id)
+      expect(response).to have_http_status(:success)
+
+      create_conversation(plain, source_id: other_contact_inbox.source_id)
+      expect(response).to have_http_status(:success)
+      expect(response.parsed_body['id']).to eq(other.display_id)
+    end
+
+    it 'still creates a new conversation when the contact has none yet' do
+      other.destroy!
+
+      expect { create_conversation(setor_agent, source_id: other_contact_inbox.source_id) }.to change(Conversation, :count).by(1)
+      expect(response).to have_http_status(:success)
+    end
   end
 end

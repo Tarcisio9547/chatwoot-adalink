@@ -221,6 +221,43 @@ RSpec.describe 'Conversation Participants API', type: :request do
     end
   end
 
+  # Só usuário confirmado entra como participante (a lista de candidatos da tela também é só de confirmados).
+  describe 'unconfirmed users' do
+    let(:url) { api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id) }
+    let(:pending_user) { create(:user, account: account, role: :agent).tap { |user| user.update_columns(confirmed_at: nil) } } # rubocop:disable Rails/SkipsModelValidations
+    let(:confirmed_user) { create(:user, account: account, role: :agent) }
+
+    it 'does not add an unconfirmed user on POST, and still adds the confirmed one of the same call' do
+      post url, params: { user_ids: [pending_user.id, confirmed_user.id] }, headers: agent.create_new_auth_token, as: :json
+
+      expect(response).to have_http_status(:success)
+      expect(conversation.conversation_participants.pluck(:user_id)).to eq([confirmed_user.id])
+    end
+
+    it 'does not add an unconfirmed user on PUT' do
+      put url, params: { user_ids: [pending_user.id] }, headers: agent.create_new_auth_token, as: :json
+
+      expect(response).to have_http_status(:success)
+      expect(conversation.conversation_participants.count).to eq(0)
+    end
+
+    it 'keeps an unconfirmed user who already was a participant when the client sends the full list again' do
+      create(:conversation_participant, conversation: conversation, account: account, user: pending_user)
+
+      put url, params: { user_ids: [pending_user.id, confirmed_user.id] }, headers: agent.create_new_auth_token, as: :json
+
+      expect(conversation.conversation_participants.pluck(:user_id)).to contain_exactly(pending_user.id, confirmed_user.id)
+    end
+
+    it 'still lets someone remove an unconfirmed participant' do
+      create(:conversation_participant, conversation: conversation, account: account, user: pending_user)
+
+      delete url, params: { user_ids: [pending_user.id] }, headers: agent.create_new_auth_token, as: :json
+
+      expect(conversation.conversation_participants.count).to eq(0)
+    end
+  end
+
   # user_ids que não é lista de inteiros nunca pode virar 500 nem mexer em nada.
   describe 'user_ids validation' do
     let(:url) { api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id) }
