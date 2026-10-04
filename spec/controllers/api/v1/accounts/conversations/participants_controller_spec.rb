@@ -142,6 +142,30 @@ RSpec.describe 'Conversation Participants API', type: :request do
         expect(conversation.conversation_participants.count).to eq(2)
       end
 
+      it 'refuses a call without user_ids and keeps the current participants (it must not mean an empty list)' do
+        create(:conversation_participant, conversation: conversation, user: participant)
+
+        put api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id),
+            params: {},
+            headers: agent.create_new_auth_token,
+            as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(conversation.conversation_participants.pluck(:user_id)).to eq([participant.id])
+      end
+
+      it 'removes everybody when the list is sent explicitly empty' do
+        create(:conversation_participant, conversation: conversation, user: participant)
+
+        put api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id),
+            params: { user_ids: [] },
+            headers: agent.create_new_auth_token,
+            as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.conversation_participants.count).to eq(0)
+      end
+
       it 'does not add a user_id that belongs to another account, and still applies the rest of the update' do
         foreign_user = create(:user, account: create(:account), role: :agent)
         create(:conversation_participant, conversation: conversation, user: participant)

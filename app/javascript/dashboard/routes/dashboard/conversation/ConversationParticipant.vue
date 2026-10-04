@@ -2,7 +2,10 @@
 import Spinner from 'shared/components/Spinner.vue';
 import { useAlert } from 'dashboard/composables';
 import { mapGetters } from 'vuex';
-import { useAgentsList } from 'dashboard/composables/useAgentsList';
+import {
+  getAgentsByUpdatedPresence,
+  getSortedAgentsByAvailability,
+} from 'dashboard/helper/agentHelper';
 
 import ThumbnailGroup from 'dashboard/components/widgets/ThumbnailGroup.vue';
 import MultiselectDropdownItems from 'shared/components/ui/MultiselectDropdownItems.vue';
@@ -21,12 +24,6 @@ export default {
       required: true,
     },
   },
-  setup() {
-    const { agentsList } = useAgentsList(false);
-    return {
-      agentsList,
-    };
-  },
   data() {
     return {
       selectedWatchers: [],
@@ -37,7 +34,20 @@ export default {
     ...mapGetters({
       watchersUiFlas: 'conversationWatchers/getUIFlags',
       currentUser: 'getCurrentUser',
+      currentAccountId: 'getCurrentAccountId',
+      verifiedAgents: 'agents/getVerifiedAgents',
     }),
+    // Adalink: candidatos a participante = todos os agentes confirmados da
+    // conta, não só os membros da caixa (assignable_agents). Participante não
+    // precisa ser da caixa; o servidor só aceita usuários da conta.
+    agentsList() {
+      const agents = getAgentsByUpdatedPresence(
+        this.verifiedAgents,
+        this.currentUser,
+        this.currentAccountId
+      );
+      return getSortedAgentsByAvailability(agents);
+    },
     watchersFromStore() {
       return this.$store.getters['conversationWatchers/getByConversationId'](
         this.conversationId

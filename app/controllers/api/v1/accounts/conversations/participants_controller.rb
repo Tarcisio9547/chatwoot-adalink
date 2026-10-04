@@ -28,11 +28,20 @@ class Api::V1::Accounts::Conversations::ParticipantsController < Api::V1::Accoun
   private
 
   def participants_to_be_added_ids
-    params[:user_ids] - current_participant_ids
+    requested_user_ids - current_participant_ids
   end
 
   def participants_to_be_removed_ids
-    current_participant_ids - params[:user_ids]
+    current_participant_ids - requested_user_ids
+  end
+
+  # Adalink: qualquer agente da conta pode ser participante (a validação de acesso
+  # à caixa saiu em 89e95cd07), então o servidor só aceita usuários DESTA conta.
+  # Sem isso, um user_id de outra conta (ou inexistente) entraria direto na lista.
+  # `fetch` mantém o erro 422 quando a chamada vem sem user_ids: um PUT sem o campo
+  # não pode virar "lista vazia" e apagar todos os participantes.
+  def requested_user_ids
+    @requested_user_ids ||= Current.account.users.where(id: Array(params.fetch(:user_ids))).pluck(:id)
   end
 
   def current_participant_ids
