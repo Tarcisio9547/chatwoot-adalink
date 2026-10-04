@@ -22,23 +22,28 @@ class Webhooks::WhatsappController < ActionController::API
     token == whatsapp_webhook_verify_token if whatsapp_webhook_verify_token.present?
   end
 
+  # O segredo do canal (provider_config) tem prioridade; o global (WHATSAPP_APP_SECRET) vale para as caixas
+  # que não têm segredo próprio, como as caixas Cloud criadas manualmente.
   def meta_app_secrets
-    [
-      *channel_meta_app_secrets(whatsapp_channel),
-      GlobalConfigService.load('WHATSAPP_APP_SECRET', nil)
-    ]
+    meta_secrets_with_channel_priority(
+      channel_meta_app_secrets(whatsapp_channel),
+      [global_meta_app_secret('WHATSAPP_APP_SECRET')]
+    )
+  end
+
+  def meta_global_secret_config_names
+    ['WHATSAPP_APP_SECRET']
   end
 
   def whatsapp_channel
     @whatsapp_channel ||= whatsapp_business_payload_channel || Channel::Whatsapp.find_by(phone_number: params[:phone_number])
   end
 
+  # 360dialog (provider 'default') não assina os webhooks, então não há o que conferir.
+  # Para o WhatsApp Cloud a assinatura é sempre exigida quando existe algum segredo (canal ou global);
+  # sem nenhum segredo o concern aceita e avisa no log. Sem canal identificado, vale a mesma regra.
   def meta_signature_verification_required?
-    return true if whatsapp_channel.blank?
-    return false unless whatsapp_channel.provider == 'whatsapp_cloud'
-    return true if channel_meta_app_secrets(whatsapp_channel).present?
-
-    whatsapp_channel.provider_config['source'] == 'embedded_signup'
+    whatsapp_channel.blank? || whatsapp_channel.provider == 'whatsapp_cloud'
   end
 
   def whatsapp_business_payload_channel

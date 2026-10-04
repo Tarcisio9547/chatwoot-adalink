@@ -42,12 +42,17 @@ class Webhooks::InstagramController < ActionController::API
       token == GlobalConfigService.load('INSTAGRAM_VERIFY_TOKEN', '')
   end
 
+  # O segredo do canal tem prioridade. Sem segredo no canal, vale qualquer um dos globais:
+  # INSTAGRAM_APP_SECRET (login direto do Instagram) ou FB_APP_SECRET (Instagram via página do Facebook).
   def meta_app_secrets
-    [
-      *instagram_channel_meta_app_secrets,
-      GlobalConfigService.load('INSTAGRAM_APP_SECRET', nil),
-      GlobalConfigService.load('FB_APP_SECRET', nil)
-    ]
+    meta_secrets_with_channel_priority(
+      instagram_channel_meta_app_secrets,
+      meta_global_secret_config_names.map { |config_name| global_meta_app_secret(config_name) }
+    )
+  end
+
+  def meta_global_secret_config_names
+    %w[INSTAGRAM_APP_SECRET FB_APP_SECRET]
   end
 
   def instagram_channel_meta_app_secrets
