@@ -22,9 +22,11 @@ RSpec.describe ConversationPolicy, type: :policy do
     let(:unassigned) { create(:conversation, account: account, inbox: inbox, assignee: nil) }
     let(:assigned_to_other) { create(:conversation, account: account, inbox: inbox, assignee: other_agent) }
 
-    def restrict!(permissions)
-      role = create(:custom_role, account: account, permissions: permissions)
-      agent_account_user.update!(role: :agent, custom_role: role)
+    let(:restrict!) do
+      lambda do |permissions|
+        role = create(:custom_role, account: account, permissions: permissions)
+        agent_account_user.update!(role: :agent, custom_role: role)
+      end
     end
 
     it 'allows an administrator' do
@@ -39,7 +41,7 @@ RSpec.describe ConversationPolicy, type: :policy do
     end
 
     it 'allows a custom role with conversation_manage ("Todas")' do
-      restrict!(%w[conversation_manage])
+      restrict!.call(%w[conversation_manage])
 
       expect(subject).to permit(context, assigned_to_other)
       expect(subject).to permit(context, unassigned)
@@ -47,7 +49,7 @@ RSpec.describe ConversationPolicy, type: :policy do
 
     %w[conversation_participating_manage conversation_unassigned_manage].each do |permission|
       context "with the restricted visibility #{permission}" do
-        before { restrict!([permission]) }
+        before { restrict!.call([permission]) }
 
         it 'allows the current assignee' do
           conversation = create(:conversation, account: account, inbox: inbox, assignee: agent)
@@ -72,7 +74,7 @@ RSpec.describe ConversationPolicy, type: :policy do
     end
 
     it 'denies a custom role with no conversation permission at all' do
-      restrict!(%w[contact_manage])
+      restrict!.call(%w[contact_manage])
 
       expect(subject).not_to permit(context, assigned_to_other)
     end

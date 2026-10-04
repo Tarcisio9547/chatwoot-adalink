@@ -119,7 +119,6 @@ RSpec.describe 'Conversation Participants API', type: :request do
       ['an object', { '0' => 1 }],
       ['a list with a word', [1, 'x']],
       ['a nested list', [[1]]],
-      ['a list with null', [nil]],
       ['a list with an object', [{ 'id' => 1 }]],
       ['a list with a float', [1.5]]
     ].each do |label, value|

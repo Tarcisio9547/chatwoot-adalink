@@ -1,4 +1,11 @@
 class Api::V1::Accounts::Conversations::ParticipantsController < Api::V1::Accounts::Conversations::BaseController
+  # Adalink: ver a conversa (show?) não basta para mexer na lista. Quem só enxerga
+  # (participante, visão restrita) se adicionaria numa conversa sem responsável e
+  # ficaria com acesso mesmo depois de a roleta entregar o lead a outro corretor.
+  # A regra está em ConversationPolicy#manage_participants?.
+  before_action :authorize_manage_participants, only: [:create, :update, :destroy]
+  before_action :validate_user_ids, only: [:create, :update, :destroy]
+
   def show
     @participants = @conversation.conversation_participants
   end
@@ -20,12 +27,29 @@ class Api::V1::Accounts::Conversations::ParticipantsController < Api::V1::Accoun
 
   def destroy
     ActiveRecord::Base.transaction do
-      params[:user_ids].map { |user_id| @conversation.conversation_participants.find_by(user_id: user_id)&.destroy }
+      requested_user_ids.each { |user_id| @conversation.conversation_participants.find_by(user_id: user_id)&.destroy }
     end
     head :ok
   end
 
   private
+
+  def authorize_manage_participants
+    authorize @conversation, :manage_participants?
+  end
+
+  # user_ids tem que ser uma lista de inteiros (ou de números em texto). Qualquer outra
+  # coisa (texto, objeto, lista misturada, ausente) é 422, nunca 500 e nunca "lista vazia".
+  def validate_user_ids
+    return if valid_user_ids_param?
+
+    render_could_not_create_error('user_ids must be an array of integers')
+  end
+
+  def valid_user_ids_param?
+    ids = params[:user_ids]
+    ids.is_a?(Array) && ids.all? { |id| id.is_a?(Integer) || (id.is_a?(String) && id.match?(/\A\d+\z/)) }
+  end
 
   def participants_to_be_added_ids
     requested_user_ids - current_participant_ids
@@ -38,10 +62,8 @@ class Api::V1::Accounts::Conversations::ParticipantsController < Api::V1::Accoun
   # Adalink: qualquer agente da conta pode ser participante (a validação de acesso
   # à caixa saiu em 89e95cd07), então o servidor só aceita usuários DESTA conta.
   # Sem isso, um user_id de outra conta (ou inexistente) entraria direto na lista.
-  # `fetch` mantém o erro 422 quando a chamada vem sem user_ids: um PUT sem o campo
-  # não pode virar "lista vazia" e apagar todos os participantes.
   def requested_user_ids
-    @requested_user_ids ||= Current.account.users.where(id: Array(params.fetch(:user_ids))).pluck(:id)
+    @requested_user_ids ||= Current.account.users.where(id: params[:user_ids].map(&:to_i)).pluck(:id)
   end
 
   def current_participant_ids
