@@ -228,7 +228,7 @@ describe RemoveStaleConversationParticipantsOfAgents do
       run_migration
 
       saved = backed_up.index_by { |row| row['user_id'] }
-      expect(saved.keys).to contain_exactly(*removed.keys)
+      expect(saved.keys).to match_array(removed.keys)
       removed.each do |user_id, original|
         expect(saved[user_id].slice('id', 'account_id', 'conversation_id', 'user_id')).to eq(
           'id' => original.id, 'account_id' => original.account_id, 'conversation_id' => original.conversation_id, 'user_id' => user_id
