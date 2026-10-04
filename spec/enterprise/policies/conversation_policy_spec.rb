@@ -33,6 +33,30 @@ RSpec.describe ConversationPolicy, type: :policy do
 
         expect(subject).not_to permit(context, conversation)
       end
+
+      it 'allows access to a conversation assigned to someone else where the agent is a participant' do
+        other_agent = create(:user, account: account, role: :agent)
+        conversation = create(:conversation, account: account, inbox: inbox, assignee: other_agent)
+        create(:conversation_participant, conversation: conversation, account: account, user: agent)
+
+        expect(subject).to permit(context, conversation)
+      end
+
+      it 'allows access to an unassigned conversation where the agent is a participant' do
+        conversation = create(:conversation, account: account, inbox: inbox, assignee: nil)
+        create(:conversation_participant, conversation: conversation, account: account, user: agent)
+
+        expect(subject).to permit(context, conversation)
+      end
+
+      it 'does not open the conversation of someone else to a participant of ANOTHER conversation' do
+        other_agent = create(:user, account: account, role: :agent)
+        conversation = create(:conversation, account: account, inbox: inbox, assignee: other_agent)
+        another = create(:conversation, account: account, inbox: inbox, assignee: other_agent)
+        create(:conversation_participant, conversation: another, account: account, user: agent)
+
+        expect(subject).not_to permit(context, conversation)
+      end
     end
 
     context 'when role grants conversation_participating_manage' do

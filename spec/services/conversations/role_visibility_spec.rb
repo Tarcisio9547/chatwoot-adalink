@@ -5,6 +5,7 @@ RSpec.describe Conversations::RoleVisibility do
   let(:inbox) { create(:inbox, account: account) }
   let(:setor_role) { create(:custom_role, account: account, permissions: %w[conversation_participating_manage]) }
   let(:all_role) { create(:custom_role, account: account, permissions: %w[conversation_manage]) }
+  let(:sem_atendente_role) { create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage]) }
   let(:agent) { create(:user, account: account, role: :agent) }
   let(:colleague) { create(:user, account: account, role: :agent) }
   let(:admin) { create(:user, account: account, role: :administrator) }
@@ -39,6 +40,31 @@ RSpec.describe Conversations::RoleVisibility do
       it 'sees a conversation where it is an explicit participant' do
         create(:conversation_participant, conversation: colleague_conversation, account: account, user: agent)
         expect(visible?(agent, colleague_conversation)).to be true
+      end
+    end
+
+    context 'with the "Sem atendente" role (conversation_unassigned_manage only)' do
+      let!(:unassigned_conversation) { create(:conversation, account: account, inbox: inbox, assignee: nil) }
+
+      before { AccountUser.find_by(user: agent, account: account).update(custom_role: sem_atendente_role) }
+
+      it 'sees an unassigned conversation and its own conversation' do
+        expect(visible?(agent, unassigned_conversation)).to be true
+        expect(visible?(agent, mine)).to be true
+      end
+
+      it 'does not see a colleague conversation' do
+        expect(visible?(agent, colleague_conversation)).to be false
+      end
+
+      it 'sees a colleague conversation where it is an explicit participant' do
+        create(:conversation_participant, conversation: colleague_conversation, account: account, user: agent)
+        expect(visible?(agent, colleague_conversation)).to be true
+      end
+
+      it 'does not see a colleague conversation where ANOTHER user is the participant' do
+        create(:conversation_participant, conversation: colleague_conversation, account: account, user: colleague)
+        expect(visible?(agent, colleague_conversation)).to be false
       end
     end
 
@@ -123,8 +149,6 @@ RSpec.describe Conversations::RoleVisibility do
   # versão em lote unassigned_manage_only_members. Mesma regra, com lista de 1
   # elemento.
   describe '.unassigned_manage_only_members with a single-user list (replaces the removed .unassigned_manage_only?)' do
-    let(:sem_atendente_role) { create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage]) }
-
     it 'is true for a member whose only conversation permission is conversation_unassigned_manage' do
       AccountUser.find_by(user: agent, account: account).update(custom_role: sem_atendente_role)
       expect(described_class.unassigned_manage_only_members([agent], account.id)).to include(agent)
@@ -154,6 +178,24 @@ RSpec.describe Conversations::RoleVisibility do
         expect(result).to include(mine)
         expect(result).not_to include(colleague_conversation)
         expect(result).not_to include(unassigned_conversation)
+      end
+    end
+
+    context 'with the "Sem atendente" role' do
+      before { AccountUser.find_by(user: agent, account: account).update(custom_role: sem_atendente_role) }
+
+      it 'returns unassigned and own conversations, and the ones where the agent is a participant' do
+        create(:conversation_participant, conversation: colleague_conversation, account: account, user: agent)
+
+        result = described_class.filter(account.conversations, agent, account_user: AccountUser.find_by(user: agent, account: account))
+
+        expect(result).to contain_exactly(mine, unassigned_conversation, colleague_conversation)
+      end
+
+      it 'keeps hiding the colleague conversation when the agent is not a participant' do
+        result = described_class.filter(account.conversations, agent, account_user: AccountUser.find_by(user: agent, account: account))
+
+        expect(result).to contain_exactly(mine, unassigned_conversation)
       end
     end
 

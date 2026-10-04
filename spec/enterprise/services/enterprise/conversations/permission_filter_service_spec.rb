@@ -164,6 +164,62 @@ RSpec.describe Enterprise::Conversations::PermissionFilterService do
       end
     end
 
+    context 'when the user is an explicit participant of a conversation assigned to someone else' do
+      let(:test_account) { create(:account) }
+      let(:test_inbox) { create(:inbox, account: test_account) }
+      let(:test_agent) { create(:user, account: test_account, role: :agent) }
+      let(:colleague) { create(:user, account: test_account, role: :agent) }
+      let!(:colleague_conversation) { create(:conversation, account: test_account, inbox: test_inbox, assignee: colleague) }
+      let!(:unrelated_colleague_conversation) { create(:conversation, account: test_account, inbox: test_inbox, assignee: colleague) }
+      let!(:unassigned_conversation) { create(:conversation, account: test_account, inbox: test_inbox, assignee: nil) }
+      let!(:mine) { create(:conversation, account: test_account, inbox: test_inbox, assignee: test_agent) }
+
+      before do
+        create(:inbox_member, user: test_agent, inbox: test_inbox)
+        create(:conversation_participant, conversation: colleague_conversation, account: test_account, user: test_agent)
+      end
+
+      def result_for(permissions)
+        role = create(:custom_role, account: test_account, permissions: permissions)
+        AccountUser.find_by(user: test_agent, account: test_account).update!(role: :agent, custom_role: role)
+        Conversations::PermissionFilterService.new(test_account.conversations, test_agent, test_account).perform
+      end
+
+      it 'lists it for "Minhas" (conversation_participating_manage) next to the ones assigned to the user' do
+        result = result_for(%w[conversation_participating_manage])
+
+        expect(result).to contain_exactly(mine, colleague_conversation)
+      end
+
+      it 'lists it for "Nao atribuidas" (conversation_unassigned_manage) next to unassigned and mine' do
+        result = result_for(%w[conversation_unassigned_manage])
+
+        expect(result).to contain_exactly(mine, unassigned_conversation, colleague_conversation)
+      end
+
+      it 'keeps hiding the conversations of colleagues where the user is not a participant' do
+        expect(result_for(%w[conversation_participating_manage])).not_to include(unrelated_colleague_conversation)
+        expect(result_for(%w[conversation_unassigned_manage])).not_to include(unrelated_colleague_conversation)
+      end
+
+      it 'lists the conversation for a participant who is not a member of the inbox' do
+        outsider = create(:user, account: test_account, role: :agent)
+        create(:conversation_participant, conversation: colleague_conversation, account: test_account, user: outsider)
+        role = create(:custom_role, account: test_account, permissions: %w[conversation_participating_manage])
+        AccountUser.find_by(user: outsider, account: test_account).update!(role: :agent, custom_role: role)
+
+        result = Conversations::PermissionFilterService.new(test_account.conversations, outsider, test_account).perform
+
+        expect(result).to contain_exactly(colleague_conversation)
+      end
+
+      it 'does not widen anything for conversation_manage (already sees every conversation of its inboxes)' do
+        result = result_for(%w[conversation_manage])
+
+        expect(result).to contain_exactly(mine, unassigned_conversation, colleague_conversation, unrelated_colleague_conversation)
+      end
+    end
+
     context 'when user has both participating and unassigned permissions (hierarchical test)' do
       it 'gives higher priority to unassigned_manage over participating_manage' do
         # Create a new isolated test environment

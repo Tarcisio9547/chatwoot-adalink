@@ -125,6 +125,34 @@ describe 'Notification role visibility on WhatsApp conversations', type: :reques
     end
   end
 
+  context 'when a "Sem atendente" agent is an explicit participant of a conversation assigned to someone else' do
+    let!(:assigned_to_b) { create(:conversation, account: account, inbox: whatsapp_inbox, assignee: agent_b) }
+    let!(:notification) do
+      create(:notification, account: account, user: agent_a, primary_actor: assigned_to_b, notification_type: 'conversation_assignment')
+    end
+
+    before do
+      AccountUser.find_by(user: agent_a, account: account).update!(custom_role: sem_atendente_role)
+      create(:message, account: account, inbox: whatsapp_inbox, conversation: assigned_to_b, message_type: :incoming, content: secret)
+    end
+
+    it 'hides the content while the agent is NOT a participant' do
+      expect(leak_free?(notifications_for(agent_a).first)).to be true
+    end
+
+    it 'shows the content in GET /notifications once the agent is a participant' do
+      create(:conversation_participant, conversation: assigned_to_b, account: account, user: agent_a)
+
+      expect(notifications_for(agent_a).first['push_message_body']).to include(secret)
+    end
+
+    it 'shows the content in the notification.created broadcast payload once the agent is a participant' do
+      create(:conversation_participant, conversation: assigned_to_b, account: account, user: agent_a)
+
+      expect(notification.reload.push_event_data[:push_message_body]).to include(secret)
+    end
+  end
+
   context 'when the conversation is not on a WhatsApp inbox' do
     it 'keeps the content for A even after the reassignment (current behaviour, unchanged)' do
       other_inbox = create(:inbox, account: account)

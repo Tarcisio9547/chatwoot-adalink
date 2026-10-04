@@ -68,6 +68,41 @@ RSpec.describe 'Conversation Participants API', type: :request do
         expect(response.body).to include(participant.email)
         expect(conversation.conversation_participants.count).to eq(1)
       end
+
+      it 'adds an account agent who is not a member of the inbox' do
+        outsider = create(:user, account: account, role: :agent)
+
+        post api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id),
+             params: { user_ids: [outsider.id] },
+             headers: agent.create_new_auth_token,
+             as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.conversation_participants.pluck(:user_id)).to eq([outsider.id])
+      end
+
+      it 'ignores a user_id that belongs to another account' do
+        foreign_user = create(:user, account: create(:account), role: :agent)
+
+        post api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id),
+             params: { user_ids: [participant.id, foreign_user.id] },
+             headers: agent.create_new_auth_token,
+             as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.conversation_participants.pluck(:user_id)).to eq([participant.id])
+        expect(response.body).not_to include(foreign_user.email)
+      end
+
+      it 'ignores a user_id that does not exist' do
+        post api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id),
+             params: { user_ids: [0] },
+             headers: agent.create_new_auth_token,
+             as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.conversation_participants.count).to eq(0)
+      end
     end
   end
 
@@ -105,6 +140,20 @@ RSpec.describe 'Conversation Participants API', type: :request do
         expect(response.body).to include(participant.email)
         expect(response.body).to include(participant_to_be_added.email)
         expect(conversation.conversation_participants.count).to eq(2)
+      end
+
+      it 'does not add a user_id that belongs to another account, and still applies the rest of the update' do
+        foreign_user = create(:user, account: create(:account), role: :agent)
+        create(:conversation_participant, conversation: conversation, user: participant)
+        create(:conversation_participant, conversation: conversation, user: participant_to_be_removed)
+
+        put api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id),
+            params: { user_ids: [participant.id, participant_to_be_added.id, foreign_user.id] },
+            headers: agent.create_new_auth_token,
+            as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.conversation_participants.pluck(:user_id)).to contain_exactly(participant.id, participant_to_be_added.id)
       end
     end
   end
