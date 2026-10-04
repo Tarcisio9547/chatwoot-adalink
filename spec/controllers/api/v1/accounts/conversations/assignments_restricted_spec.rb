@@ -130,6 +130,91 @@ describe 'POST /api/v1/accounts/{account.id}/conversations/{id}/assignments (res
     end
   end
 
+  # Trocar o time pode trocar o responsável: o AssignmentHandler zera o dono que não é do time novo e o
+  # round-robin do time pode entregar a conversa a um colega. Para quem tem visão restrita, a troca
+  # de time que mudaria o responsável exige a mesma regra da atribuição (change_assignee?).
+  describe 'team changes that would change the owner' do
+    let!(:team_without_owner) { create(:team, account: account, allow_auto_assign: false) }
+    let!(:team_with_owner) { create(:team, account: account, allow_auto_assign: false) }
+    let!(:auto_assign_team) { create(:team, account: account, allow_auto_assign: true) }
+
+    before do
+      create(:team_member, team: team_with_owner, user: owner)
+      create(:team_member, team: team_without_owner, user: colleague)
+      create(:team_member, team: auto_assign_team, user: colleague)
+      restrict!(restricted, 'conversation_unassigned_manage')
+      [owned, ownerless].each { |conversation| create(:conversation_participant, conversation: conversation, account: account, user: restricted) }
+    end
+
+    it 'refuses (401) a team without the owner on a conversation owned by someone else, and changes nothing' do
+      assign(restricted, owned, team_id: team_without_owner.id)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(owned.reload.team_id).to be_nil
+      expect(owned.assignee_id).to eq(owner.id)
+    end
+
+    it 'allows a team that already has the owner (the owner does not change)' do
+      assign(restricted, owned, team_id: team_with_owner.id)
+
+      expect(response).to have_http_status(:success)
+      expect(owned.reload.team_id).to eq(team_with_owner.id)
+      expect(owned.assignee_id).to eq(owner.id)
+    end
+
+    it 'allows the owner himself to move the conversation to a team without him' do
+      owned.update!(assignee: restricted)
+
+      assign(restricted, owned, team_id: team_without_owner.id)
+
+      expect(response).to have_http_status(:success)
+      expect(owned.reload.team_id).to eq(team_without_owner.id)
+    end
+
+    it 'refuses (401) an auto-assign team on an ownerless conversation (the round-robin would hand it to a colleague)' do
+      assign(restricted, ownerless, team_id: auto_assign_team.id)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(ownerless.reload.team_id).to be_nil
+    end
+
+    it 'allows a team without auto assignment on an ownerless conversation' do
+      assign(restricted, ownerless, team_id: team_without_owner.id)
+
+      expect(response).to have_http_status(:success)
+      expect(ownerless.reload.team_id).to eq(team_without_owner.id)
+    end
+
+    it 'allows removing the team (nothing happens to the owner)' do
+      owned.update!(team: team_with_owner)
+
+      assign(restricted, owned, team_id: nil)
+
+      expect(response).to have_http_status(:success)
+      expect(owned.reload.team_id).to be_nil
+      expect(owned.assignee_id).to eq(owner.id)
+    end
+
+    it 'keeps the previous behaviour for an administrator and for an agent without custom role' do
+      assign(admin, owned, team_id: team_without_owner.id)
+      expect(response).to have_http_status(:success)
+      expect(owned.reload.assignee_id).to be_nil
+
+      owned.update!(assignee: owner, team: nil)
+      assign(colleague, owned, team_id: team_without_owner.id)
+      expect(response).to have_http_status(:success)
+    end
+
+    it 'keeps the previous behaviour for the "Todas" role' do
+      restrict!(restricted, 'conversation_manage')
+
+      assign(restricted, owned, team_id: team_without_owner.id)
+
+      expect(response).to have_http_status(:success)
+      expect(owned.reload.team_id).to eq(team_without_owner.id)
+    end
+  end
+
   context 'with the "Todas" role (conversation_manage)' do
     before { restrict!(restricted, 'conversation_manage') }
 

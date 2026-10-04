@@ -166,6 +166,140 @@ RSpec.describe ConversationPolicy, type: :policy do
 
       expect(bot_policy.change_assignee?(other_agent.id)).to be true
     end
+
+    it 'denies when there is no account_user (same as manage_participants?)' do
+      no_account_user = described_class.new({ user: agent, account: account, account_user: nil }, ownerless)
+
+      expect(no_account_user.change_assignee?(agent.id)).to be false
+      expect(no_account_user.manage_participants?).to be false
+    end
+
+    it 'also requires seeing the conversation (show?), whatever the role' do
+      hidden_inbox = create(:inbox, account: account)
+      hidden = create(:conversation, account: account, inbox: hidden_inbox, assignee: nil)
+
+      expect(allowed?(hidden, agent.id)).to be false # agente sem papel, fora da caixa
+      restrict!('conversation_unassigned_manage')
+      expect(allowed?(hidden, agent.id)).to be false # restrito, fora da caixa
+
+      create(:conversation_participant, conversation: hidden, account: account, user: agent)
+      expect(allowed?(hidden, agent.id)).to be true # participante enxerga
+    end
+
+    it 'still lets an administrator change the owner of a conversation of any inbox' do
+      hidden = create(:conversation, account: account, inbox: create(:inbox, account: account), assignee: other_agent)
+      agent_account_user.update!(role: :administrator)
+
+      expect(allowed?(hidden, agent.id)).to be true
+    end
+  end
+
+  # Trocar o time pode trocar o responsável (o AssignmentHandler zera o dono que não é do time novo e
+  # o round-robin pode entregar a conversa). Para visão restrita, só passa se a troca de responsável
+  # que ela causaria também passaria.
+  describe '#change_team?' do
+    let(:owner) { create(:user, account: account, role: :agent) }
+    let(:owned) { create(:conversation, account: account, inbox: inbox, assignee: owner) }
+    let(:mine) { create(:conversation, account: account, inbox: inbox, assignee: agent) }
+    let(:ownerless) { create(:conversation, account: account, inbox: inbox, assignee: nil) }
+    let(:team_with_owner) { create(:team, account: account, allow_auto_assign: false).tap { |team| create(:team_member, team: team, user: owner) } }
+    let(:team_without_owner) { create(:team, account: account, allow_auto_assign: false) }
+    let(:auto_team) { create(:team, account: account, allow_auto_assign: true) }
+
+    def team_allowed?(conversation, team)
+      described_class.new(context, conversation).change_team?(team)
+    end
+
+    context 'with a restricted visibility' do
+      before do
+        role = create(:custom_role, account: account, permissions: %w[conversation_participating_manage])
+        agent_account_user.update!(role: :agent, custom_role: role)
+        [owned, ownerless].each { |conversation| create(:conversation_participant, conversation: conversation, account: account, user: agent) }
+      end
+
+      it 'allows no team (removing it) and a team that keeps the owner' do
+        expect(team_allowed?(owned, nil)).to be true
+        expect(team_allowed?(owned, team_with_owner)).to be true
+      end
+
+      it 'denies a team that would clear the owner of someone else' do
+        expect(team_allowed?(owned, team_without_owner)).to be false
+      end
+
+      it 'allows the owner to move his own conversation to any team' do
+        expect(team_allowed?(mine, team_without_owner)).to be true
+      end
+
+      it 'denies an auto-assign team on an ownerless conversation, allows a plain team' do
+        expect(team_allowed?(ownerless, auto_team)).to be false
+        expect(team_allowed?(ownerless, team_without_owner)).to be true
+      end
+
+      it 'denies when he cannot even see the conversation' do
+        hidden = create(:conversation, account: account, inbox: create(:inbox, account: account), assignee: nil)
+
+        expect(team_allowed?(hidden, team_without_owner)).to be false
+      end
+    end
+
+    it 'allows everything to an agent without custom role and to the "Todas" role' do
+      expect(team_allowed?(owned, team_without_owner)).to be true
+
+      role = create(:custom_role, account: account, permissions: %w[conversation_manage])
+      agent_account_user.update!(role: :agent, custom_role: role)
+      expect(team_allowed?(owned, team_without_owner)).to be true
+    end
+  end
+
+  # Quem só é o responsável restrito pode ADICIONAR participantes, mas não REMOVER (senão o corretor
+  # tiraria o gestor que o mark-work do CRM adicionou). Remover: administrador, agente sem papel e
+  # "Todas".
+  describe '#remove_participants?' do
+    let(:other_agent) { create(:user, account: account, role: :agent) }
+    let(:mine) { create(:conversation, account: account, inbox: inbox, assignee: agent) }
+    let(:owned) { create(:conversation, account: account, inbox: inbox, assignee: other_agent) }
+
+    def restrict!(permission)
+      role = create(:custom_role, account: account, permissions: [permission])
+      agent_account_user.update!(role: :agent, custom_role: role)
+    end
+
+    def can_remove?(conversation)
+      described_class.new(context, conversation).remove_participants?
+    end
+
+    %w[conversation_participating_manage conversation_unassigned_manage].each do |permission|
+      it "denies the restricted (#{permission}) owner, who can still add" do
+        restrict!(permission)
+
+        expect(can_remove?(mine)).to be false
+        expect(described_class.new(context, mine).manage_participants?).to be true
+      end
+
+      it "denies the restricted (#{permission}) participant" do
+        restrict!(permission)
+        create(:conversation_participant, conversation: owned, account: account, user: agent)
+
+        expect(can_remove?(owned)).to be false
+      end
+    end
+
+    it 'allows an agent without custom role, the "Todas" role and an administrator' do
+      expect(can_remove?(owned)).to be true
+
+      restrict!('conversation_manage')
+      expect(can_remove?(owned)).to be true
+
+      agent_account_user.update!(role: :administrator)
+      expect(can_remove?(owned)).to be true
+    end
+
+    it 'denies an agent bot and a user without account_user' do
+      bot = create(:agent_bot)
+
+      expect(described_class.new({ user: bot, account: account, account_user: nil }, owned).remove_participants?).to be false
+      expect(described_class.new({ user: agent, account: account, account_user: nil }, owned).remove_participants?).to be false
+    end
   end
 
   permissions :show? do

@@ -86,6 +86,37 @@ RSpec.describe 'Conversation Participants API', type: :request do
           expect(response).to have_http_status(:success)
           expect(conversation.conversation_participants.pluck(:user_id)).to eq([colleague.id])
         end
+
+        # O corretor (responsável restrito) não pode tirar o gestor que o mark-work do CRM adicionou.
+        context 'when the restricted agent is the assignee and a manager is already a participant' do
+          let(:manager) { create(:user, account: account, role: :agent) }
+
+          before do
+            conversation.update!(assignee: restricted)
+            create(:conversation_participant, conversation: conversation, account: account, user: manager)
+          end
+
+          it 'cannot remove a participant (DELETE answers 401, nothing changes)' do
+            delete participants_url.call(conversation), params: { user_ids: [manager.id] }, headers: restricted.create_new_auth_token, as: :json
+
+            expect(response).to have_http_status(:unauthorized)
+            expect(conversation.conversation_participants.pluck(:user_id)).to eq([manager.id])
+          end
+
+          it 'cannot remove through PUT either (a list that drops the manager answers 401, nothing changes)' do
+            put participants_url.call(conversation), params: { user_ids: [colleague.id] }, headers: restricted.create_new_auth_token, as: :json
+
+            expect(response).to have_http_status(:unauthorized)
+            expect(conversation.conversation_participants.pluck(:user_id)).to eq([manager.id])
+          end
+
+          it 'can still add through PUT (the list keeps the manager and adds a colleague)' do
+            put participants_url.call(conversation), params: { user_ids: [manager.id, colleague.id] }, headers: restricted.create_new_auth_token, as: :json
+
+            expect(response).to have_http_status(:success)
+            expect(conversation.conversation_participants.pluck(:user_id)).to contain_exactly(manager.id, colleague.id)
+          end
+        end
       end
     end
 
@@ -96,6 +127,25 @@ RSpec.describe 'Conversation Participants API', type: :request do
 
       expect(response).to have_http_status(:success)
       expect(unassigned.conversation_participants.pluck(:user_id)).to eq([colleague.id])
+    end
+
+    it 'lets an administrator, an agent without custom role and the "Todas" role remove participants' do
+      create(:conversation_participant, conversation: unassigned, account: account, user: colleague)
+      admin = create(:user, account: account, role: :administrator)
+      delete participants_url.call(unassigned), params: { user_ids: [colleague.id] }, headers: admin.create_new_auth_token, as: :json
+      expect(response).to have_http_status(:success)
+      expect(unassigned.conversation_participants.count).to eq(0)
+
+      create(:inbox_member, inbox: conversation.inbox, user: restricted)
+      create(:conversation_participant, conversation: unassigned, account: account, user: colleague)
+      delete participants_url.call(unassigned), params: { user_ids: [colleague.id] }, headers: restricted.create_new_auth_token, as: :json
+      expect(response).to have_http_status(:success)
+
+      create(:conversation_participant, conversation: unassigned, account: account, user: colleague)
+      restrict(restricted, %w[conversation_manage])
+      delete participants_url.call(unassigned), params: { user_ids: [colleague.id] }, headers: restricted.create_new_auth_token, as: :json
+      expect(response).to have_http_status(:success)
+      expect(unassigned.conversation_participants.count).to eq(0)
     end
 
     it 'lets a custom role with conversation_manage ("Todas") change the participants' do

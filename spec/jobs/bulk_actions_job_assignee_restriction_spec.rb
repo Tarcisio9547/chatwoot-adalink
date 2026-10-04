@@ -84,6 +84,47 @@ describe 'BulkActionsJob assignee restriction' do
     expect(owned_by_other.status).to eq('resolved')
   end
 
+  describe 'team_id (a team change can change the owner)' do
+    let!(:team_without_owner) { create(:team, account: account, allow_auto_assign: false) }
+    let!(:team_with_owner) { create(:team, account: account, allow_auto_assign: false) }
+    let!(:auto_assign_team) { create(:team, account: account, allow_auto_assign: true) }
+
+    before do
+      create(:team_member, team: team_with_owner, user: owner)
+      create(:team_member, team: team_without_owner, user: colleague)
+      create(:team_member, team: auto_assign_team, user: colleague)
+    end
+
+    it 'skips a team that would take the owner away from a conversation owned by someone else' do
+      run_bulk(restricted, [owned_by_other], { team_id: team_without_owner.id, status: 'resolved' })
+
+      expect(owned_by_other.reload.team_id).to be_nil
+      expect(owned_by_other.assignee_id).to eq(owner.id)
+      expect(owned_by_other.status).to eq('resolved')
+    end
+
+    it 'applies a team that already has the owner' do
+      run_bulk(restricted, [owned_by_other], { team_id: team_with_owner.id })
+
+      expect(owned_by_other.reload.team_id).to eq(team_with_owner.id)
+      expect(owned_by_other.assignee_id).to eq(owner.id)
+    end
+
+    it 'skips an auto-assign team on an ownerless conversation, and lets the owner move his own conversation' do
+      run_bulk(restricted, [ownerless], { team_id: auto_assign_team.id })
+      expect(ownerless.reload.team_id).to be_nil
+
+      run_bulk(restricted, [mine], { team_id: team_without_owner.id })
+      expect(mine.reload.team_id).to eq(team_without_owner.id)
+    end
+
+    it 'keeps the previous behaviour for an administrator' do
+      run_bulk(admin, [owned_by_other], { team_id: team_without_owner.id })
+
+      expect(owned_by_other.reload.team_id).to eq(team_without_owner.id)
+    end
+  end
+
   it 'keeps the previous behaviour for an administrator' do
     run_bulk(admin, [owned_by_other, ownerless], { assignee_id: admin.id })
 

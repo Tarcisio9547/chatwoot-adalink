@@ -89,6 +89,51 @@ describe 'Macro assign_agent restriction' do
     expect(owned_by_other.reload.assignee_id).to eq(restricted.id)
   end
 
+  describe 'assign_team (a team change can change the owner)' do
+    let!(:team_without_owner) { create(:team, account: account, allow_auto_assign: false) }
+    let!(:team_with_owner) { create(:team, account: account, allow_auto_assign: false) }
+    let!(:auto_assign_team) { create(:team, account: account, allow_auto_assign: true) }
+
+    def assign_team(param)
+      { 'action_name' => 'assign_team', 'action_params' => [param] }
+    end
+
+    before do
+      create(:team_member, team: team_with_owner, user: owner)
+      create(:team_member, team: team_without_owner, user: colleague)
+      create(:team_member, team: auto_assign_team, user: colleague)
+    end
+
+    it 'skips a team that would take the owner away from a conversation owned by someone else, and runs the other actions' do
+      run_macro(restricted, [owned_by_other], assign_team(team_without_owner.id),
+                { 'action_name' => 'change_status', 'action_params' => ['resolved'] })
+
+      expect(owned_by_other.reload.team_id).to be_nil
+      expect(owned_by_other.assignee_id).to eq(owner.id)
+      expect(owned_by_other.status).to eq('resolved')
+    end
+
+    it 'applies a team that already has the owner' do
+      run_macro(restricted, [owned_by_other], assign_team(team_with_owner.id))
+
+      expect(owned_by_other.reload.team_id).to eq(team_with_owner.id)
+    end
+
+    it 'skips an auto-assign team on an ownerless conversation, and lets the owner move his own conversation' do
+      run_macro(restricted, [ownerless], assign_team(auto_assign_team.id))
+      expect(ownerless.reload.team_id).to be_nil
+
+      run_macro(restricted, [mine], assign_team(team_without_owner.id))
+      expect(mine.reload.team_id).to eq(team_without_owner.id)
+    end
+
+    it 'keeps the previous behaviour for an administrator' do
+      run_macro(admin, [owned_by_other], assign_team(team_without_owner.id))
+
+      expect(owned_by_other.reload.team_id).to eq(team_without_owner.id)
+    end
+  end
+
   it 'does not restrict automation rules (they run as the system, not as a user)' do
     service = ActionService.new(owned_by_other)
 

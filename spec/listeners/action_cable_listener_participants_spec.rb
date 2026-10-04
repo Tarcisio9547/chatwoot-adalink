@@ -87,6 +87,23 @@ describe ActionCableListener, 'participants as recipients' do
     end
   end
 
+  describe 'a participant who is no longer in the account' do
+    it 'does not receive the live events (the participation row outlives the account membership)' do
+      AccountUser.find_by(user: outsider, account: account).destroy!
+
+      listener.conversation_updated(event_for('conversation.updated', conversation: conversation))
+
+      expect(tokens_of('conversation.updated')).not_to include(outsider.pubsub_token)
+      expect(tokens_of('conversation.updated')).to include(member.pubsub_token, admin.pubsub_token)
+    end
+
+    it 'still reaches a participant who belongs to the account' do
+      listener.conversation_updated(event_for('conversation.updated', conversation: conversation))
+
+      expect(tokens_of('conversation.updated')).to include(outsider.pubsub_token)
+    end
+  end
+
   describe 'typing events' do
     it 'reach a participant who is not a member (and never carry participant_ids)' do
       listener.conversation_typing_on(event_for('conversation.typing_on', conversation: conversation, user: member, is_private: false))
