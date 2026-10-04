@@ -164,6 +164,87 @@ RSpec.describe Enterprise::Conversations::PermissionFilterService do
       end
     end
 
+    context 'when the user is an explicit participant of a conversation assigned to someone else' do
+      # Cenário isolado da conta de cima: agente na caixa, um colega com duas conversas
+      # (o agente participa de uma só), uma sem responsável e uma minha.
+      let!(:scene) do
+        test_account = create(:account)
+        test_inbox = create(:inbox, account: test_account)
+        agent_in_scene = create(:user, account: test_account, role: :agent)
+        colleague = create(:user, account: test_account, role: :agent)
+        create(:inbox_member, user: agent_in_scene, inbox: test_inbox)
+        shared = create(:conversation, account: test_account, inbox: test_inbox, assignee: colleague)
+        create(:conversation_participant, conversation: shared, account: test_account, user: agent_in_scene)
+        Struct.new(:account, :inbox, :agent, :mine, :unassigned, :shared, :unrelated).new(
+          test_account, test_inbox, agent_in_scene,
+          create(:conversation, account: test_account, inbox: test_inbox, assignee: agent_in_scene),
+          create(:conversation, account: test_account, inbox: test_inbox, assignee: nil),
+          shared,
+          create(:conversation, account: test_account, inbox: test_inbox, assignee: colleague)
+        )
+      end
+
+      def result_for(user, permissions)
+        role = create(:custom_role, account: scene.account, permissions: permissions)
+        AccountUser.find_by(user: user, account: scene.account).update!(role: :agent, custom_role: role)
+        Conversations::PermissionFilterService.new(scene.account.conversations, user, scene.account).perform
+      end
+
+      it 'lists it for "Minhas" (conversation_participating_manage) next to the ones assigned to the user' do
+        result = result_for(scene.agent, %w[conversation_participating_manage])
+
+        expect(result).to contain_exactly(scene.mine, scene.shared)
+      end
+
+      it 'lists it for "Nao atribuidas" (conversation_unassigned_manage) next to unassigned and mine' do
+        result = result_for(scene.agent, %w[conversation_unassigned_manage])
+
+        expect(result).to contain_exactly(scene.mine, scene.unassigned, scene.shared)
+      end
+
+      it 'keeps hiding the conversations of colleagues where the user is not a participant' do
+        expect(result_for(scene.agent, %w[conversation_participating_manage])).not_to include(scene.unrelated)
+        expect(result_for(scene.agent, %w[conversation_unassigned_manage])).not_to include(scene.unrelated)
+      end
+
+      it 'lists the conversation for a participant who is not a member of the inbox' do
+        outsider = create(:user, account: scene.account, role: :agent)
+        create(:conversation_participant, conversation: scene.shared, account: scene.account, user: outsider)
+
+        expect(result_for(outsider, %w[conversation_participating_manage])).to contain_exactly(scene.shared)
+      end
+
+      # O UNION de "Nao atribuidas" cria uma relation nova e descartava o includes que o
+      # FilterService/ConversationFinder mandaram (N+1 na lista e no /filter).
+      %w[conversation_unassigned_manage conversation_participating_manage conversation_manage].each do |permission|
+        it "keeps the eager loading it received (no N+1 after the filter) with #{permission}" do
+          role = create(:custom_role, account: scene.account, permissions: [permission])
+          AccountUser.find_by(user: scene.agent, account: scene.account).update!(role: :agent, custom_role: role)
+          relation = scene.account.conversations.includes(:inbox, :contact, :team)
+          loaded = Conversations::PermissionFilterService.new(relation, scene.agent, scene.account).perform.to_a
+          queries = 0
+          counter = ->(_name, _started, _finished, _id, payload) { queries += 1 unless payload[:name].in?(%w[SCHEMA CACHE]) }
+
+          ActiveSupport::Notifications.subscribed(counter, 'sql.active_record') do
+            loaded.each do |conversation|
+              conversation.inbox
+              conversation.contact
+              conversation.team
+            end
+          end
+
+          expect(loaded.size).to be >= 2
+          expect(queries).to eq(0)
+        end
+      end
+
+      it 'does not widen anything for conversation_manage (already sees every conversation of its inboxes)' do
+        result = result_for(scene.agent, %w[conversation_manage])
+
+        expect(result).to contain_exactly(scene.mine, scene.unassigned, scene.shared, scene.unrelated)
+      end
+    end
+
     context 'when user has both participating and unassigned permissions (hierarchical test)' do
       it 'gives higher priority to unassigned_manage over participating_manage' do
         # Create a new isolated test environment

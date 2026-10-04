@@ -12,7 +12,15 @@ class Api::V1::Accounts::Conversations::AssignmentsController < Api::V1::Account
 
   private
 
+  # Adalink: quem tem visão restrita só toma a conversa sem responsável e só reatribui ou tira o
+  # responsável se for o responsável atual (ConversationPolicy#change_assignee?). Bot: sem alvo.
+  def authorize_assignee_change!
+    target = agent_bot_assignment? ? nil : params[:assignee_id]
+    raise Pundit::NotAuthorizedError unless policy(@conversation).change_assignee?(target)
+  end
+
   def set_agent
+    authorize_assignee_change!
     resource = Conversations::AssignmentService.new(
       conversation: @conversation,
       assignee_id: params[:assignee_id],
@@ -35,6 +43,9 @@ class Api::V1::Accounts::Conversations::AssignmentsController < Api::V1::Account
 
   def set_team
     @team = Current.account.teams.find_by(id: params[:team_id])
+    # Adalink: a troca de time pode trocar o responsável (ver ConversationPolicy#change_team?).
+    raise Pundit::NotAuthorizedError unless policy(@conversation).change_team?(@team)
+
     @conversation.update!(team: @team)
     render json: @team
   end

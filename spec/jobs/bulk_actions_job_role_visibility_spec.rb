@@ -58,14 +58,40 @@ describe 'BulkActionsJob role visibility' do
     expect(colleague_conversation.reload.assignee_id).to eq(admin.id)
   end
 
-  it 'keeps updating other channels whatever the role (current behaviour, unchanged)' do
+  # Quem tem visão restrita só age no que enxerga em QUALQUER canal, em qualquer ação em massa (responsável,
+  # time, status, rótulos, soneca). Ver spec/jobs/bulk_actions_job_assignee_restriction_spec.rb e
+  # bulk_and_macro_invisible_conversations_spec.rb.
+  it 'does not change assignee, status or labels of a colleague conversation on other channels either' do
     other_inbox = create(:inbox, account: account)
     create(:inbox_member, user: setor_agent, inbox: other_inbox)
-    other = create(:conversation, account: account, inbox: other_inbox, assignee: colleague)
+    other = create(:conversation, account: account, inbox: other_inbox, assignee: colleague, status: :open)
+    create(:label, account: account, title: 'vendas')
 
-    run_bulk(setor_agent, [other], { assignee_id: setor_agent.id })
+    BulkActionsJob.perform_now(account: account, user: setor_agent,
+                               params: { type: 'Conversation', ids: [other.display_id],
+                                         fields: { assignee_id: setor_agent.id, status: 'resolved' } })
+    BulkActionsJob.perform_now(account: account, user: setor_agent,
+                               params: { type: 'Conversation', ids: [other.display_id], labels: { add: ['vendas'] } })
 
-    expect(other.reload.assignee_id).to eq(setor_agent.id)
+    expect(other.reload.status).to eq('open')
+    expect(other.assignee_id).to eq(colleague.id)
+    expect(other.label_list).to be_empty
+  end
+
+  it 'applies labels and status on another channel when the Setor agent participates in the conversation' do
+    other_inbox = create(:inbox, account: account)
+    create(:inbox_member, user: setor_agent, inbox: other_inbox)
+    other = create(:conversation, account: account, inbox: other_inbox, assignee: colleague, status: :open)
+    create(:conversation_participant, conversation: other, account: account, user: setor_agent)
+    create(:label, account: account, title: 'vendas')
+
+    BulkActionsJob.perform_now(account: account, user: setor_agent,
+                               params: { type: 'Conversation', ids: [other.display_id], fields: { status: 'resolved' },
+                                         labels: { add: ['vendas'] } })
+
+    expect(other.reload.status).to eq('resolved')
+    expect(other.label_list).to eq(['vendas'])
+    expect(other.assignee_id).to eq(colleague.id)
   end
 end
 # rubocop:enable RSpec/DescribeClass

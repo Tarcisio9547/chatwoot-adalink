@@ -272,5 +272,99 @@ describe('Conversation Helpers', () => {
         ).toBe(true);
       });
     });
+
+    // O participante explícito vê a conversa em qualquer visibilidade restrita.
+    // O servidor manda participant_ids em toda conversa (lista e eventos ao vivo).
+    describe('participante explícito (participant_ids)', () => {
+      const role = 'custom_role';
+      const currentUserId = 1;
+      const deOutro = participantIds => ({
+        participant_ids: participantIds,
+        meta: { assignee: { id: 2 } },
+      });
+      const semResponsavel = participantIds => ({
+        participant_ids: participantIds,
+        meta: { assignee: null },
+      });
+
+      describe.each([
+        [
+          'Minhas (conversation_participating_manage)',
+          ['conversation_participating_manage'],
+        ],
+        [
+          'Não atribuídas (conversation_unassigned_manage)',
+          ['conversation_unassigned_manage'],
+        ],
+      ])('com a visibilidade %s', (_nome, permissions) => {
+        it('mostra a conversa de outro responsável quando o usuário é participante', () => {
+          expect(
+            applyRoleFilter(deOutro([1, 5]), role, permissions, currentUserId)
+          ).toBe(true);
+        });
+
+        it('mostra a conversa sem responsável quando o usuário é participante', () => {
+          expect(
+            applyRoleFilter(
+              semResponsavel([1]),
+              role,
+              permissions,
+              currentUserId
+            )
+          ).toBe(true);
+        });
+
+        it('continua escondendo a conversa de outro responsável se o participante é OUTRA pessoa', () => {
+          expect(
+            applyRoleFilter(deOutro([5, 6]), role, permissions, currentUserId)
+          ).toBe(false);
+        });
+
+        it('continua escondendo quando participant_ids vem vazio', () => {
+          expect(
+            applyRoleFilter(deOutro([]), role, permissions, currentUserId)
+          ).toBe(false);
+        });
+
+        it('trata a ausência de participant_ids como "não participa" (payload antigo)', () => {
+          expect(
+            applyRoleFilter(
+              { meta: { assignee: { id: 2 } } },
+              role,
+              permissions,
+              currentUserId
+            )
+          ).toBe(false);
+        });
+      });
+
+      it('Não atribuídas: conversa sem responsável continua visível sem ser participante', () => {
+        expect(
+          applyRoleFilter(
+            semResponsavel([]),
+            role,
+            ['conversation_unassigned_manage'],
+            currentUserId
+          )
+        ).toBe(true);
+      });
+
+      it('Minhas: conversa sem responsável e sem participação continua escondida', () => {
+        expect(
+          applyRoleFilter(
+            semResponsavel([]),
+            role,
+            ['conversation_participating_manage'],
+            currentUserId
+          )
+        ).toBe(false);
+      });
+
+      it('papel sem nenhuma permissão de conversa não abre nada, nem para participante', () => {
+        expect(
+          applyRoleFilter(deOutro([1]), role, ['contact_manage'], currentUserId)
+        ).toBe(false);
+      });
+    });
   });
 });

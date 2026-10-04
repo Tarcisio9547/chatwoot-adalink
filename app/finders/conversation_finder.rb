@@ -141,7 +141,10 @@ class ConversationFinder
       conversation_ids = current_account.mentions.where(user: current_user).pluck(:conversation_id)
       @conversations = @conversations.where(id: conversation_ids)
     when 'participating'
-      @conversations = current_user.participating_conversations.where(account_id: current_account.id)
+      # Adalink: parte do que o PermissionFilterService já liberou (find_all_conversations) e só
+      # mantém onde o usuário participa. Antes esta visão ignorava o papel e listava tudo.
+      participating_ids = current_user.participating_conversations.where(account_id: current_account.id).select(:id)
+      @conversations = @conversations.where(id: participating_ids)
     when 'unattended'
       @conversations = @conversations.unattended
     end
@@ -202,7 +205,8 @@ class ConversationFinder
 
   def conversations_base_query
     @conversations.includes(
-      :taggings, :inbox, { assignee: { avatar_attachment: [:blob] } }, { contact: { avatar_attachment: [:blob] } }, :team, :contact_inbox
+      :taggings, :inbox, { assignee: { avatar_attachment: [:blob] } }, { contact: { avatar_attachment: [:blob] } }, :team, :contact_inbox,
+      :conversation_participants
     )
   end
 

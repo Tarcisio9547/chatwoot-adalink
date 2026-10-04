@@ -34,6 +34,12 @@ RSpec.describe 'Api::V1::Accounts::BulkActionsController', type: :request do
     context 'when it is an authenticated user' do
       let!(:agent) { create(:user, account: account, role: :agent) }
 
+      # Adalink: mudar responsável, time ou status em massa exige enxergar a conversa (membro da caixa,
+      # time ou participante). O spec original usava um agente fora de todas as caixas.
+      before do
+        Conversation.all.find_each { |conversation| create(:inbox_member, inbox: conversation.inbox, user: agent) }
+      end
+
       it 'Ignores bulk_actions for wrong type' do
         post "/api/v1/accounts/#{account.id}/bulk_actions",
              headers: agent.create_new_auth_token,

@@ -109,6 +109,7 @@ describe Messages::MentionService do
           :message,
           conversation: conversation,
           account: account,
+          sender: admin_user,
           content: "hi (mention://user/#{first_agent.id}/#{first_agent.name})",
           private: true
         )
@@ -125,6 +126,7 @@ describe Messages::MentionService do
           :message,
           conversation: conversation,
           account: account,
+          sender: admin_user,
           content: "hey (mention://user/#{second_agent.id}/#{second_agent.name}) " \
                    "and (mention://user/#{first_agent.id}/#{first_agent.name}), please look into this?",
           private: true
@@ -262,6 +264,7 @@ describe Messages::MentionService do
           :message,
           conversation: conversation,
           account: account,
+          sender: admin_user,
           content: "hey (mention://team/#{team.id}/#{team.name}) please help",
           private: true
         )
@@ -462,6 +465,93 @@ describe Messages::MentionService do
           secondary_actor: message
         ).once
       end
+    end
+  end
+
+  # Menção vira participação só se o AUTOR da nota puder gerenciar participantes
+  # (administrador, agente sem custom_role, "Todas" ou responsável atual). Senão um
+  # restrito se daria acesso com uma auto-menção numa conversa que não é dele.
+  describe 'who can turn a mention into a participation' do
+    let(:restricted) { create(:user, account: account, role: :agent) }
+
+    def note_by(author, mentioned)
+      build(:message, conversation: conversation, account: account, sender: author, private: true,
+                      content: "ping (mention://user/#{mentioned.id}/#{mentioned.name})")
+    end
+
+    def restrict!(user, permissions)
+      role = create(:custom_role, account: account, permissions: permissions)
+      AccountUser.find_by(user: user, account: account).update!(role: :agent, custom_role: role)
+    end
+
+    def participant_ids
+      conversation.conversation_participants.pluck(:user_id)
+    end
+
+    before { create(:inbox_member, user: restricted, inbox: inbox) }
+
+    %w[conversation_unassigned_manage conversation_participating_manage].each do |permission|
+      context "when the author has the restricted visibility #{permission}" do
+        before { restrict!(restricted, [permission]) }
+
+        it 'does not turn a self-mention into a participation when he is not the assignee' do
+          described_class.new(message: note_by(restricted, restricted)).perform
+
+          expect(participant_ids).not_to include(restricted.id)
+        end
+
+        it 'does not add a colleague either (the author cannot manage participants)' do
+          described_class.new(message: note_by(restricted, first_agent)).perform
+
+          expect(participant_ids).to be_empty
+        end
+
+        it 'still sends the mention notification (it is not an access grant)' do
+          described_class.new(message: note_by(restricted, restricted)).perform
+
+          expect(NotificationBuilder).to have_received(:new).with(hash_including(notification_type: 'conversation_mention', user: restricted))
+        end
+
+        it 'adds the mentioned colleague when the author is the current assignee' do
+          conversation.update!(assignee: restricted)
+
+          described_class.new(message: note_by(restricted, first_agent)).perform
+
+          expect(participant_ids).to contain_exactly(first_agent.id)
+        end
+      end
+    end
+
+    it 'adds the mentioned user when the author is an administrator' do
+      described_class.new(message: note_by(admin_user, first_agent)).perform
+
+      expect(participant_ids).to contain_exactly(first_agent.id)
+    end
+
+    it 'adds the mentioned user when the author is an agent without custom role' do
+      described_class.new(message: note_by(second_agent, first_agent)).perform
+
+      expect(participant_ids).to contain_exactly(first_agent.id)
+    end
+
+    it 'adds the mentioned user when the author has conversation_manage' do
+      restrict!(restricted, %w[conversation_manage])
+
+      described_class.new(message: note_by(restricted, first_agent)).perform
+
+      expect(participant_ids).to contain_exactly(first_agent.id)
+    end
+
+    it 'does not add anyone when the note has no user author (bot, automation)' do
+      described_class.new(message: note_by(nil, first_agent)).perform
+
+      expect(participant_ids).to be_empty
+    end
+
+    it 'does not add anyone when the author is an agent bot' do
+      described_class.new(message: note_by(create(:agent_bot), first_agent)).perform
+
+      expect(participant_ids).to be_empty
     end
   end
 

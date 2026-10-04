@@ -32,6 +32,8 @@ class ActionCableConnector extends BaseActionCableConnector {
       'notification.updated': this.onNotificationUpdated,
       'conversation.read': this.onConversationRead,
       'conversation.updated': this.onConversationUpdated,
+      'conversation.participants_changed':
+        this.onConversationParticipantsChanged,
       'account.cache_invalidated': this.onCacheInvalidate,
       'copilot.message.created': this.onCopilotMessageCreated,
     };
@@ -138,6 +140,21 @@ class ActionCableConnector extends BaseActionCableConnector {
       conversationId,
       user,
     });
+  };
+
+  // Adalink: participante adicionado/removido. O payload traz participant_ids; só guardamos a
+  // conversa se ela já está na lista ou se o usuário logado é participante (quem acabou de sair
+  // e não a tinha não deve vê-la reaparecer).
+  onConversationParticipantsChanged = data => {
+    const { id, participant_ids: participantIds = [] } = data;
+    const { getConversationById, getCurrentUser } = this.app.$store.getters;
+    const isKnown = !!getConversationById(id);
+    const isParticipant = participantIds.includes(getCurrentUser?.id);
+
+    if (isKnown || isParticipant) {
+      this.app.$store.dispatch('updateConversation', data);
+      this.fetchConversationStats();
+    }
   };
 
   onConversationMentioned = data => {

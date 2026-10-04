@@ -61,8 +61,21 @@ class Messages::MentionService
   end
 
   def add_mentioned_users_as_participants(validated_mentioned_ids)
+    return unless author_can_manage_participants?
+
     validated_mentioned_ids.each do |user_id|
       message.conversation.conversation_participants.find_or_create_by(user_id: user_id)
     end
+  end
+
+  # Adalink: menção só vira participação (acesso à conversa) se o AUTOR da nota puder
+  # gerenciar participantes pela mesma regra da tela (ConversationPolicy#manage_participants?).
+  # Sem isso, um agente de visão restrita se daria acesso com uma auto-menção. Nota sem autor
+  # usuário (bot, automação) não concede participação; a notificação da menção segue normal.
+  def author_can_manage_participants?
+    author = message.sender
+    return false unless author.is_a?(User)
+
+    ConversationPolicy.for_user(author, message.conversation).manage_participants?
   end
 end

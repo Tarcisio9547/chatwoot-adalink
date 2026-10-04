@@ -102,15 +102,22 @@ export const applyRoleFilter = (
   const conversationAssignee = conversation.meta.assignee;
   const isUnassigned = !conversationAssignee;
   const isAssignedToUser = conversationAssignee?.id === currentUserId;
+  // Adalink: quem foi adicionado como participante vê a conversa em qualquer
+  // visibilidade restrita ("Minhas" e "Não atribuídas"). O servidor manda
+  // participant_ids na lista e nos eventos ao vivo; sem o campo, ninguém é
+  // participante (mesmo comportamento de antes).
+  const isParticipant = (conversation.participant_ids || []).includes(
+    currentUserId
+  );
 
   // Check unassigned management permission
   if (permissions.includes('conversation_unassigned_manage')) {
-    return isUnassigned || isAssignedToUser;
+    return isUnassigned || isAssignedToUser || isParticipant;
   }
 
   // Check participating conversation management permission
   if (permissions.includes('conversation_participating_manage')) {
-    return isAssignedToUser;
+    return isAssignedToUser || isParticipant;
   }
 
   return false;

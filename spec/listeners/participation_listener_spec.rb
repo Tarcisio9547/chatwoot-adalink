@@ -18,7 +18,7 @@ describe ParticipationListener do
     it 'adds the assignee as a participant to the conversation' do
       expect(conversation.conversation_participants.map(&:user_id)).not_to include(admin.id)
       listener.assignee_changed(event)
-      expect(conversation.conversation_participants.map(&:user_id)).to include(agent.id)
+      expect(conversation.conversation_participants.reload.map(&:user_id)).to include(agent.id)
     end
 
     it 'does not fail if the conversation participant already exists' do
@@ -26,13 +26,13 @@ describe ParticipationListener do
       expect { listener.assignee_changed(event) }.not_to raise_error
     end
 
-    it 'logs a debug message if participant save fails due to a race condition' do
+    it 'logs a warning if participant save fails due to a race condition' do
       allow(Rails.logger).to receive(:warn)
-      allow(conversation).to receive(:conversation_participants).and_return(double)
-      allow(conversation.conversation_participants).to receive(:find_or_create_by!).and_raise(ActiveRecord::RecordNotUnique)
+      allow(Conversation).to receive(:lock).and_raise(ActiveRecord::RecordNotUnique)
       expect { listener.assignee_changed(event) }.not_to raise_error
-      expect(Rails.logger).to have_received(:warn).with('Failed to create conversation participant for account ' \
-                                                        "#{account.id} : user #{agent.id} : conversation #{conversation.id}")
+      expect(Rails.logger).to have_received(:warn).with(
+        "Failed to create conversation participant for account #{account.id} : conversation #{conversation.id}"
+      )
     end
   end
 end

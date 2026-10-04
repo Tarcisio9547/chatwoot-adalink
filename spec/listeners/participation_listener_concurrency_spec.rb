@@ -26,7 +26,6 @@ describe 'race between the participation listeners and a reassignment' do
   self.use_transactional_tests = false
 
   let(:participation_listener) { ParticipationListener.instance }
-  let(:whatsapp_channel) { Conversations::RoleVisibility::WHATSAPP_CHANNEL_TYPE }
   let!(:account) { create(:account) }
   let!(:agent_a) { create(:user, account: account, role: :agent) }
   let!(:agent_b) { create(:user, account: account, role: :agent) }
@@ -105,7 +104,7 @@ describe 'race between the participation listeners and a reassignment' do
     pause_old_job_when_inserting(paused: paused, resume: resume) do
       old_job = run_in_thread(old_job: true) do
         fresh = Conversation.find(conversation.id)
-        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: fresh, channel_type: whatsapp_channel)
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: fresh)
         participation_listener.assignee_changed(event)
       end
       paused.pop(timeout: 15) || raise('old job never reached the insert')
@@ -113,7 +112,7 @@ describe 'race between the participation listeners and a reassignment' do
       reassignment = run_in_thread do
         reassigned = Conversation.find(conversation.id)
         reassigned.update!(assignee: agent_b)
-        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: reassigned, channel_type: whatsapp_channel)
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: reassigned)
         participation_listener.assignee_changed(event)
       end
       # Com o lock, a troca fica bloqueada esperando o job; sem ele, termina já.
@@ -138,14 +137,14 @@ describe 'race between the participation listeners and a reassignment' do
       cleanup = run_in_thread(cleanup: true) do
         changed = { 'assignee_id' => [agent_a.id, agent_b.id] }
         event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: Conversation.find(conversation.id), changed_attributes: changed)
-        WhatsappParticipationCleanupListener.instance.assignee_changed(event)
+        ParticipationCleanupListener.instance.assignee_changed(event)
       end
       paused.pop(timeout: 15) || raise('cleanup never reached the destroy')
 
       back_to_a = run_in_thread do
         reassigned = Conversation.find(conversation.id)
         reassigned.update!(assignee: agent_a)
-        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: reassigned, channel_type: whatsapp_channel)
+        event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: reassigned)
         participation_listener.assignee_changed(event)
       end
       # Com o lock, a volta pra A fica bloqueada esperando a limpeza; sem ele, termina já.
@@ -170,7 +169,7 @@ describe 'race between the participation listeners and a reassignment' do
       cleanup = run_in_thread(cleanup: true) do
         changed = { 'assignee_id' => [agent_a.id, agent_b.id] }
         event = Events::Base.new(:assignee_changed, Time.zone.now, conversation: Conversation.find(conversation.id), changed_attributes: changed)
-        WhatsappParticipationCleanupListener.instance.assignee_changed(event)
+        ParticipationCleanupListener.instance.assignee_changed(event)
       end
       paused.pop(timeout: 15) || raise('cleanup never reached the destroy')
 

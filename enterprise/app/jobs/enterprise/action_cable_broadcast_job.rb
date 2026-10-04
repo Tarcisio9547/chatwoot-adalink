@@ -57,7 +57,7 @@ module Enterprise::ActionCableBroadcastJob
   def broadcast_filtered(partition, conversation, event_name, data)
     still_visible = partition[:still_visible]
     lost_access = partition[:lost_access]
-    full_data = conversation.push_event_data.merge(account_id: data[:account_id])
+    full_data = conversation_payload(conversation, data)
 
     broadcast_to_members(still_visible, event_name, full_data) if still_visible.any?
     return if lost_access.empty? || event_name != ASSIGNEE_CHANGED

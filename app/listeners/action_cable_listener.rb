@@ -41,7 +41,7 @@ class ActionCableListener < BaseListener
   def message_created(event)
     message, account = extract_message_and_account(event)
     conversation = message.conversation
-    tokens = user_tokens(account, conversation.inbox.members) + contact_tokens(conversation.contact_inbox, message)
+    tokens = user_tokens(account, conversation_agents(conversation)) + contact_tokens(conversation.contact_inbox, message)
 
     broadcast(account, tokens, MESSAGE_CREATED, message.push_event_data)
   end
@@ -49,7 +49,7 @@ class ActionCableListener < BaseListener
   def message_updated(event)
     message, account = extract_message_and_account(event)
     conversation = message.conversation
-    tokens = user_tokens(account, conversation.inbox.members) + contact_tokens(conversation.contact_inbox, message)
+    tokens = user_tokens(account, conversation_agents(conversation)) + contact_tokens(conversation.contact_inbox, message)
 
     broadcast(account, tokens, MESSAGE_UPDATED, message.push_event_data.merge(previous_changes: event.data[:previous_changes]))
   end
@@ -57,37 +57,37 @@ class ActionCableListener < BaseListener
   def first_reply_created(event)
     message, account = extract_message_and_account(event)
     conversation = message.conversation
-    tokens = user_tokens(account, conversation.inbox.members)
+    tokens = user_tokens(account, conversation_agents(conversation))
 
     broadcast(account, tokens, FIRST_REPLY_CREATED, message.push_event_data)
   end
 
   def conversation_created(event)
     conversation, account = extract_conversation_and_account(event)
-    tokens = user_tokens(account, conversation.inbox.members) + contact_inbox_tokens(conversation.contact_inbox)
+    tokens = user_tokens(account, conversation_agents(conversation)) + contact_inbox_tokens(conversation.contact_inbox)
 
-    broadcast(account, tokens, CONVERSATION_CREATED, conversation.push_event_data)
+    broadcast(account, tokens, CONVERSATION_CREATED, conversation.agent_push_event_data)
   end
 
   def conversation_read(event)
     conversation, account = extract_conversation_and_account(event)
-    tokens = user_tokens(account, conversation.inbox.members)
+    tokens = user_tokens(account, conversation_agents(conversation))
 
-    broadcast(account, tokens, CONVERSATION_READ, conversation.push_event_data)
+    broadcast(account, tokens, CONVERSATION_READ, conversation.agent_push_event_data)
   end
 
   def conversation_status_changed(event)
     conversation, account = extract_conversation_and_account(event)
-    tokens = user_tokens(account, conversation.inbox.members) + contact_inbox_tokens(conversation.contact_inbox)
+    tokens = user_tokens(account, conversation_agents(conversation)) + contact_inbox_tokens(conversation.contact_inbox)
 
-    broadcast(account, tokens, CONVERSATION_STATUS_CHANGED, conversation.push_event_data)
+    broadcast(account, tokens, CONVERSATION_STATUS_CHANGED, conversation.agent_push_event_data)
   end
 
   def conversation_updated(event)
     conversation, account = extract_conversation_and_account(event)
-    tokens = user_tokens(account, conversation.inbox.members) + contact_inbox_tokens(conversation.contact_inbox)
+    tokens = user_tokens(account, conversation_agents(conversation)) + contact_inbox_tokens(conversation.contact_inbox)
 
-    broadcast(account, tokens, CONVERSATION_UPDATED, conversation.push_event_data)
+    broadcast(account, tokens, CONVERSATION_UPDATED, conversation.agent_push_event_data)
   end
 
   def conversation_typing_on(event)
@@ -124,23 +124,23 @@ class ActionCableListener < BaseListener
 
   def assignee_changed(event)
     conversation, account = extract_conversation_and_account(event)
-    tokens = user_tokens(account, conversation.inbox.members)
+    tokens = user_tokens(account, conversation_agents(conversation))
 
-    broadcast(account, tokens, ASSIGNEE_CHANGED, conversation.push_event_data)
+    broadcast(account, tokens, ASSIGNEE_CHANGED, conversation.agent_push_event_data)
   end
 
   def team_changed(event)
     conversation, account = extract_conversation_and_account(event)
-    tokens = user_tokens(account, conversation.inbox.members)
+    tokens = user_tokens(account, conversation_agents(conversation))
 
-    broadcast(account, tokens, TEAM_CHANGED, conversation.push_event_data)
+    broadcast(account, tokens, TEAM_CHANGED, conversation.agent_push_event_data)
   end
 
   def conversation_contact_changed(event)
     conversation, account = extract_conversation_and_account(event)
-    tokens = user_tokens(account, conversation.inbox.members)
+    tokens = user_tokens(account, conversation_agents(conversation))
 
-    broadcast(account, tokens, CONVERSATION_CONTACT_CHANGED, conversation.push_event_data)
+    broadcast(account, tokens, CONVERSATION_CONTACT_CHANGED, conversation.agent_push_event_data)
   end
 
   def contact_created(event)
@@ -175,6 +175,16 @@ class ActionCableListener < BaseListener
 
   private
 
+  # Adalink: quem acompanha a conversa ao vivo = membros da caixa + participantes. Um participante
+  # pode não ser membro da caixa (ex.: gestor adicionado à mão), mas precisa ainda ser da conta (a
+  # linha de participação sobrevive a quem saiu). Uma consulta só (subselects), sem um acesso por
+  # participante; o token repetido some no uniq do user_tokens.
+  def conversation_agents(conversation)
+    participants = User.where(id: ConversationParticipant.where(conversation_id: conversation.id).select(:user_id))
+                       .where(id: AccountUser.where(account_id: conversation.account_id).select(:user_id))
+    User.where(id: conversation.inbox.members.select(:id)).or(participants)
+  end
+
   def account_token(account)
     "account_#{account.id}"
   end
@@ -186,7 +196,7 @@ class ActionCableListener < BaseListener
                            user.pubsub_token
                          end
 
-    tokens = user_tokens(account, conversation.inbox.members) + [conversation.contact_inbox.pubsub_token]
+    tokens = user_tokens(account, conversation_agents(conversation)) + [conversation.contact_inbox.pubsub_token]
     current_user_token.present? ? tokens - [current_user_token] : tokens
   end
 

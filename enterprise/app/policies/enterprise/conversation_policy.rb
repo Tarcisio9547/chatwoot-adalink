@@ -19,7 +19,7 @@ module Enterprise::ConversationPolicy
   def permits_unassigned_manage?(permissions)
     return false unless permissions.include?('conversation_unassigned_manage')
 
-    unassigned_conversation? || assigned_to_user?
+    unassigned_conversation? || assigned_to_user? || participant?
   end
 
   def permits_participating?(permissions)
@@ -34,6 +34,13 @@ module Enterprise::ConversationPolicy
 
   def custom_role_permissions?
     account_user&.custom_role_id.present?
+  end
+
+  # Custom role só conta como "sem restrição" com conversation_manage ("Todas").
+  def unrestricted_conversation_role?
+    return true unless custom_role_permissions?
+
+    manage_all_conversations?(custom_role_permissions)
   end
 
   def custom_role_permissions

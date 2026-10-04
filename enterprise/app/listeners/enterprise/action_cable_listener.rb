@@ -18,6 +18,7 @@
 module Enterprise::ActionCableListener
   include Events::Types
   include Enterprise::ActionCableListenerAssigneeChangeVisibility
+  include Enterprise::ActionCableListenerParticipants
 
   CURRENT_EVENT_CONVERSATION_KEY = :adalink_action_cable_listener_current_conversation
 
@@ -77,7 +78,7 @@ module Enterprise::ActionCableListener
     _conversation, account = extract_conversation_and_account(event)
     recipients = assignee_changed_recipients(conversation, event)
     tokens = user_tokens(account, recipients)
-    broadcast(account, tokens, ASSIGNEE_CHANGED, conversation.push_event_data)
+    broadcast(account, tokens, ASSIGNEE_CHANGED, conversation.agent_push_event_data)
   end
 
   def team_changed(event)

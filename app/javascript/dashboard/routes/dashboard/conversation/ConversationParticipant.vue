@@ -2,7 +2,18 @@
 import Spinner from 'shared/components/Spinner.vue';
 import { useAlert } from 'dashboard/composables';
 import { mapGetters } from 'vuex';
-import { useAgentsList } from 'dashboard/composables/useAgentsList';
+import {
+  getAgentsByUpdatedPresence,
+  getSortedAgentsByAvailability,
+} from 'dashboard/helper/agentHelper';
+import {
+  getUserPermissions,
+  getUserRole,
+} from 'dashboard/helper/permissionsHelper';
+import {
+  canManageParticipants,
+  canRemoveParticipants,
+} from 'dashboard/helper/participantsHelper';
 
 import ThumbnailGroup from 'dashboard/components/widgets/ThumbnailGroup.vue';
 import MultiselectDropdownItems from 'shared/components/ui/MultiselectDropdownItems.vue';
@@ -21,12 +32,6 @@ export default {
       required: true,
     },
   },
-  setup() {
-    const { agentsList } = useAgentsList(false);
-    return {
-      agentsList,
-    };
-  },
   data() {
     return {
       selectedWatchers: [],
@@ -37,7 +42,44 @@ export default {
     ...mapGetters({
       watchersUiFlas: 'conversationWatchers/getUIFlags',
       currentUser: 'getCurrentUser',
+      currentAccountId: 'getCurrentAccountId',
+      verifiedAgents: 'agents/getVerifiedAgents',
     }),
+    // Adalink: só administrador, agente sem custom_role, "Todas" ou o responsável atual
+    // mexem na lista (o servidor barra os demais com 401; aqui só escondemos o botão).
+    canManageParticipants() {
+      const chat = this.$store.getters.getConversationById(this.conversationId);
+      return canManageParticipants({
+        role: getUserRole(this.currentUser, this.currentAccountId),
+        permissions: getUserPermissions(
+          this.currentUser,
+          this.currentAccountId
+        ),
+        assigneeId: chat?.meta?.assignee?.id,
+        currentUserId: this.currentUser.id,
+      });
+    },
+    // Adalink: o responsável restrito adiciona mas não remove participante (o servidor barra com 401).
+    canRemoveParticipants() {
+      return canRemoveParticipants({
+        role: getUserRole(this.currentUser, this.currentAccountId),
+        permissions: getUserPermissions(
+          this.currentUser,
+          this.currentAccountId
+        ),
+      });
+    },
+    // Adalink: candidatos a participante = todos os agentes confirmados da
+    // conta, não só os membros da caixa (assignable_agents). Participante não
+    // precisa ser da caixa; o servidor só aceita usuários da conta.
+    agentsList() {
+      const agents = getAgentsByUpdatedPresence(
+        this.verifiedAgents,
+        this.currentUser,
+        this.currentAccountId
+      );
+      return getSortedAgentsByAvailability(agents);
+    },
     watchersFromStore() {
       return this.$store.getters['conversationWatchers/getByConversationId'](
         this.conversationId
@@ -138,6 +180,8 @@ export default {
       );
 
       if (isAgentSelected) {
+        if (!this.canRemoveParticipants) return;
+
         const updatedList = this.watchersList.filter(
           participant => participant.id !== agent.id
         );
@@ -168,6 +212,7 @@ export default {
           </p>
         </div>
         <NextButton
+          v-if="canManageParticipants"
           v-tooltip.left="$t('CONVERSATION_PARTICIPANTS.ADD_PARTICIPANTS')"
           slate
           ghost
@@ -189,7 +234,7 @@ export default {
         {{ $t('CONVERSATION_PARTICIPANTS.YOU_ARE_WATCHING') }}
       </p>
       <NextButton
-        v-else
+        v-else-if="canManageParticipants"
         link
         xs
         icon="i-lucide-arrow-right"
@@ -199,6 +244,7 @@ export default {
       />
     </div>
     <div
+      v-if="canManageParticipants"
       v-on-clickaway="
         () => {
           onCloseDropdown();

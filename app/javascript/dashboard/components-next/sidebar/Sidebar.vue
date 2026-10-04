@@ -257,6 +257,12 @@ const menuItems = computed(() => {
           to: accountScopedRoute('conversation_unattended'),
         },
         {
+          name: 'Participating',
+          activeOn: ['conversation_through_participating'],
+          label: 'Participando',
+          to: accountScopedRoute('conversation_participating'),
+        },
+        {
           name: 'Folders',
           label: 'Pastas',
           icon: 'i-lucide-folder',

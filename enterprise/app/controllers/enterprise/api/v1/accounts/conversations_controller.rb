@@ -20,8 +20,8 @@ module Enterprise::Api::V1::Accounts::ConversationsController
   end
 
   # Com lock_to_single_conversation o builder devolve a conversa que o contato já
-  # tem. Numa caixa WhatsApp, quem não enxerga essa conversa pelo papel recebe 404,
-  # sem a conversa e sem postar a mensagem.
+  # tem. Quem tem visão restrita e não enxerga essa conversa (em qualquer canal) recebe 404,
+  # sem a conversa e sem postar a mensagem; o 404 não confirma que ela existe.
   def create
     hidden = false
     ActiveRecord::Base.transaction do
@@ -35,9 +35,10 @@ module Enterprise::Api::V1::Accounts::ConversationsController
   private
 
   def existing_conversation_hidden?
-    return false if @conversation.previously_new_record? || !@contact_inbox.inbox.whatsapp?
+    return false if @conversation.previously_new_record? || !Current.user.is_a?(User)
 
-    Conversations::RoleVisibility.visible_members(@conversation, [Current.user]).exclude?(Current.user)
+    policy = ConversationPolicy.for_user(Current.user, @conversation)
+    policy.restricted_role? && !policy.show?
   end
 
   def copilot_params

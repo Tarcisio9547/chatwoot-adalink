@@ -5,7 +5,9 @@
 # Enterprise::Conversations::PermissionFilterService já aplica na lista de
 # conversas (conversation_manage > conversation_unassigned_manage >
 # conversation_participating_manage), mais o participant explícito que
-# ConversationPolicy#participant? já reconhece pra visão individual.
+# ConversationPolicy#participant? já reconhece pra visão individual. O
+# participant explícito vale nas duas visões restritas ("Minhas" e "Não
+# atribuídas"): quem é adicionado a uma conversa a vê e responde nela.
 #
 # Agente com custom_role SEM nenhuma das três permissões de conversa fica
 # sem ver nada (igual ao Enterprise::Conversations::PermissionFilterService
@@ -61,7 +63,9 @@ class Conversations::RoleVisibility
     # acesso à conversa vem de conversation_unassigned_manage - ou seja, só
     # vêem enquanto ela estiver sem atendente. Serve pra saber quem precisa
     # do evento assignee_changed quando a conversa deixa de estar sem
-    # atendente. Em lote (1 query pro conjunto inteiro de membros).
+    # atendente. Em lote (1 query pro conjunto inteiro de membros). Não olha
+    # participantes: quem participa e continua vendo recebe o evento por
+    # visible_members, e a lista de destinatários é deduplicada.
     def unassigned_manage_only_members(members, account_id)
       members = members.to_a.uniq
       return [] if members.empty?
@@ -84,13 +88,17 @@ class Conversations::RoleVisibility
       when :manage_all
         conversations
       when :unassigned
-        conversations.where(assignee_id: [nil, user.id])
+        conversations.where(assignee_id: [nil, user.id]).or(participating(conversations, user))
       when :participating
-        participant_ids = ConversationParticipant.where(user_id: user.id).select(:conversation_id)
-        conversations.where(assignee_id: user.id).or(conversations.where(id: participant_ids))
+        conversations.where(assignee_id: user.id).or(participating(conversations, user))
       else
         conversations.none
       end
+    end
+
+    # Participante explícito enxerga a conversa em qualquer visibilidade restrita.
+    def participating(conversations, user)
+      conversations.where(id: ConversationParticipant.where(user_id: user.id).select(:conversation_id))
     end
 
     def unassigned_manage_only_account_user?(account_user)
@@ -130,10 +138,14 @@ class Conversations::RoleVisibility
     def visible_by_tier?(tier, member, conversation, participant_user_ids)
       case tier
       when :manage_all then true
-      when :unassigned then conversation.assignee_id.nil? || conversation.assignee_id == member.id
+      when :unassigned then unassigned_or_mine?(conversation, member) || participant_user_ids.include?(member.id)
       when :participating then conversation.assignee_id == member.id || participant_user_ids.include?(member.id)
       else false
       end
+    end
+
+    def unassigned_or_mine?(conversation, member)
+      conversation.assignee_id.nil? || conversation.assignee_id == member.id
     end
 
     def account_users_for(members, account_id)

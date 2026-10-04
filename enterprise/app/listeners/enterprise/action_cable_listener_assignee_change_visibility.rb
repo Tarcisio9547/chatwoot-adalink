@@ -7,7 +7,7 @@ module Enterprise::ActionCableListenerAssigneeChangeVisibility
   # Quem PERDE a conversa numa reatribuição também precisa do evento
   # assignee.changed, pra tela dele tirar a conversa da lista — mesmo que a
   # regra de papel não deixe mais ele ver a conversa depois da troca (o
-  # WhatsappParticipationCleanupListener já removeu o participante antes
+  # ParticipationCleanupListener já removeu o participante antes
   # deste método rodar). Por isso a lista de destino soma o assignee
   # anterior (se ele ainda for membro da inbox) aos destinatários calculados
   # com o estado já atualizado. Também cobre quem tinha o papel "Sem
@@ -15,7 +15,7 @@ module Enterprise::ActionCableListenerAssigneeChangeVisibility
   # estar sem atendente, esse membro precisa do evento pra sumir da lista
   # dele, mesmo sem ter sido o assignee anterior.
   def assignee_changed_recipients(conversation, event)
-    members = Conversations::RoleVisibility.visible_members(conversation, conversation.inbox.members)
+    members = Conversations::RoleVisibility.visible_members(conversation, conversation_agents(conversation))
     previous_assignee = previous_assignee_for(conversation, event)
     losing_unassigned_view = members_losing_unassigned_view(conversation, event)
 
