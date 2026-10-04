@@ -7,6 +7,7 @@ class Agents::DestroyJob < ApplicationJob
       remove_user_from_teams(account, user)
       remove_user_from_inboxes(account, user)
       unassign_conversations(account, user)
+      remove_participations(account, user)
     end
   end
 
@@ -27,6 +28,11 @@ class Agents::DestroyJob < ApplicationJob
   def destroy_notification_setting(account, user)
     setting = user.notification_settings.find_by(account_id: account.id)
     setting&.destroy!
+  end
+
+  # Adalink: a participação dá acesso à conversa, então sai junto com o agente (só nesta conta).
+  def remove_participations(account, user)
+    ConversationParticipant.where(account_id: account.id, user_id: user.id).delete_all
   end
 
   def unassign_conversations(account, user)
