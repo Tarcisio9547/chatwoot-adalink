@@ -33,8 +33,11 @@ module Enterprise::Conversations::PermissionFilterService
     mine = accessible_conversations.assigned_to(user)
     unassigned = accessible_conversations.unassigned
 
+    # O UNION cria uma relation nova e perderia o includes de quem chamou (N+1 na lista e no
+    # /filter); por isso o eager loading recebido é reaplicado depois do UNION.
     Conversation.from("(#{mine.to_sql} UNION #{unassigned.to_sql} UNION #{participating_conversations.to_sql}) as conversations")
                 .where(account_id: account.id)
+                .includes(conversations.includes_values)
   end
 
   def filter_mine_and_participating
