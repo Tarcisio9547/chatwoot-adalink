@@ -165,58 +165,59 @@ RSpec.describe Enterprise::Conversations::PermissionFilterService do
     end
 
     context 'when the user is an explicit participant of a conversation assigned to someone else' do
-      let(:test_account) { create(:account) }
-      let(:test_inbox) { create(:inbox, account: test_account) }
-      let(:test_agent) { create(:user, account: test_account, role: :agent) }
-      let(:colleague) { create(:user, account: test_account, role: :agent) }
-      let!(:colleague_conversation) { create(:conversation, account: test_account, inbox: test_inbox, assignee: colleague) }
-      let!(:unrelated_colleague_conversation) { create(:conversation, account: test_account, inbox: test_inbox, assignee: colleague) }
-      let!(:unassigned_conversation) { create(:conversation, account: test_account, inbox: test_inbox, assignee: nil) }
-      let!(:mine) { create(:conversation, account: test_account, inbox: test_inbox, assignee: test_agent) }
-
-      before do
-        create(:inbox_member, user: test_agent, inbox: test_inbox)
-        create(:conversation_participant, conversation: colleague_conversation, account: test_account, user: test_agent)
+      # Cenário isolado da conta de cima: agente na caixa, um colega com duas conversas
+      # (o agente participa de uma só), uma sem responsável e uma minha.
+      let!(:scene) do
+        test_account = create(:account)
+        test_inbox = create(:inbox, account: test_account)
+        agent_in_scene = create(:user, account: test_account, role: :agent)
+        colleague = create(:user, account: test_account, role: :agent)
+        create(:inbox_member, user: agent_in_scene, inbox: test_inbox)
+        shared = create(:conversation, account: test_account, inbox: test_inbox, assignee: colleague)
+        create(:conversation_participant, conversation: shared, account: test_account, user: agent_in_scene)
+        Struct.new(:account, :inbox, :agent, :mine, :unassigned, :shared, :unrelated).new(
+          test_account, test_inbox, agent_in_scene,
+          create(:conversation, account: test_account, inbox: test_inbox, assignee: agent_in_scene),
+          create(:conversation, account: test_account, inbox: test_inbox, assignee: nil),
+          shared,
+          create(:conversation, account: test_account, inbox: test_inbox, assignee: colleague)
+        )
       end
 
-      def result_for(permissions)
-        role = create(:custom_role, account: test_account, permissions: permissions)
-        AccountUser.find_by(user: test_agent, account: test_account).update!(role: :agent, custom_role: role)
-        Conversations::PermissionFilterService.new(test_account.conversations, test_agent, test_account).perform
+      def result_for(user, permissions)
+        role = create(:custom_role, account: scene.account, permissions: permissions)
+        AccountUser.find_by(user: user, account: scene.account).update!(role: :agent, custom_role: role)
+        Conversations::PermissionFilterService.new(scene.account.conversations, user, scene.account).perform
       end
 
       it 'lists it for "Minhas" (conversation_participating_manage) next to the ones assigned to the user' do
-        result = result_for(%w[conversation_participating_manage])
+        result = result_for(scene.agent, %w[conversation_participating_manage])
 
-        expect(result).to contain_exactly(mine, colleague_conversation)
+        expect(result).to contain_exactly(scene.mine, scene.shared)
       end
 
       it 'lists it for "Nao atribuidas" (conversation_unassigned_manage) next to unassigned and mine' do
-        result = result_for(%w[conversation_unassigned_manage])
+        result = result_for(scene.agent, %w[conversation_unassigned_manage])
 
-        expect(result).to contain_exactly(mine, unassigned_conversation, colleague_conversation)
+        expect(result).to contain_exactly(scene.mine, scene.unassigned, scene.shared)
       end
 
       it 'keeps hiding the conversations of colleagues where the user is not a participant' do
-        expect(result_for(%w[conversation_participating_manage])).not_to include(unrelated_colleague_conversation)
-        expect(result_for(%w[conversation_unassigned_manage])).not_to include(unrelated_colleague_conversation)
+        expect(result_for(scene.agent, %w[conversation_participating_manage])).not_to include(scene.unrelated)
+        expect(result_for(scene.agent, %w[conversation_unassigned_manage])).not_to include(scene.unrelated)
       end
 
       it 'lists the conversation for a participant who is not a member of the inbox' do
-        outsider = create(:user, account: test_account, role: :agent)
-        create(:conversation_participant, conversation: colleague_conversation, account: test_account, user: outsider)
-        role = create(:custom_role, account: test_account, permissions: %w[conversation_participating_manage])
-        AccountUser.find_by(user: outsider, account: test_account).update!(role: :agent, custom_role: role)
+        outsider = create(:user, account: scene.account, role: :agent)
+        create(:conversation_participant, conversation: scene.shared, account: scene.account, user: outsider)
 
-        result = Conversations::PermissionFilterService.new(test_account.conversations, outsider, test_account).perform
-
-        expect(result).to contain_exactly(colleague_conversation)
+        expect(result_for(outsider, %w[conversation_participating_manage])).to contain_exactly(scene.shared)
       end
 
       it 'does not widen anything for conversation_manage (already sees every conversation of its inboxes)' do
-        result = result_for(%w[conversation_manage])
+        result = result_for(scene.agent, %w[conversation_manage])
 
-        expect(result).to contain_exactly(mine, unassigned_conversation, colleague_conversation, unrelated_colleague_conversation)
+        expect(result).to contain_exactly(scene.mine, scene.unassigned, scene.shared, scene.unrelated)
       end
     end
 

@@ -19,7 +19,7 @@ module Enterprise::ConversationPolicy
   def permits_unassigned_manage?(permissions)
     return false unless permissions.include?('conversation_unassigned_manage')
 
-    unassigned_conversation? || assigned_to_user?
+    unassigned_conversation? || assigned_to_user? || participant?
   end
 
   def permits_participating?(permissions)

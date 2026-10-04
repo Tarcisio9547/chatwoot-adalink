@@ -629,4 +629,60 @@ describe('#getters', () => {
       ]);
     });
   });
+
+  // Participante explícito: a lista "Todas" do navegador não pode esconder a
+  // conversa em que o usuário foi adicionado, nas visões restritas.
+  describe('#getAllStatusChats (participante com visibilidade restrita)', () => {
+    const conversas = [
+      {
+        id: 1,
+        status: 'open',
+        meta: { assignee: { id: 1 } },
+        participant_ids: [1],
+      },
+      {
+        id: 2,
+        status: 'open',
+        meta: { assignee: { id: 2 } },
+        participant_ids: [1, 2],
+      },
+      {
+        id: 3,
+        status: 'open',
+        meta: { assignee: { id: 2 } },
+        participant_ids: [7],
+      },
+      { id: 4, status: 'open', meta: { assignee: null }, participant_ids: [] },
+    ];
+
+    const rootGettersFor = permissions => ({
+      getCurrentUser: {
+        id: 1,
+        accounts: [{ id: 1, custom_role_id: 5, permissions }],
+      },
+      getCurrentAccountId: 1,
+    });
+
+    const idsFor = permissions =>
+      getters
+        .getAllStatusChats(
+          { allConversations: conversas },
+          {},
+          {},
+          rootGettersFor(permissions)
+        )({ status: 'open' })
+        .map(conversa => conversa.id);
+
+    it('"Minhas": mostra as minhas e as que participo, esconde as de outros', () => {
+      expect(idsFor(['conversation_participating_manage'])).toEqual([1, 2]);
+    });
+
+    it('"Não atribuídas": soma as sem responsável às minhas e às que participo', () => {
+      expect(idsFor(['conversation_unassigned_manage'])).toEqual([1, 2, 4]);
+    });
+
+    it('"Todas": continua vendo todas', () => {
+      expect(idsFor(['conversation_manage'])).toEqual([1, 2, 3, 4]);
+    });
+  });
 });

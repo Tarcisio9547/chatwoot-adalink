@@ -128,6 +128,17 @@ describe 'Conversations API: acesso do participante', type: :request do
       expect(item['participant_ids']).to contain_exactly(participant.id)
     end
 
+    it 'comes in the advanced filter response' do
+      post "/api/v1/accounts/#{account.id}/conversations/filter",
+           headers: admin.create_new_auth_token,
+           params: { payload: [{ attribute_key: 'status', filter_operator: 'equal_to', values: ['open'], query_operator: nil }] },
+           as: :json
+
+      expect(response).to have_http_status(:ok)
+      item = response.parsed_body['payload'].find { |entry| entry['id'] == conversation.display_id }
+      expect(item['participant_ids']).to contain_exactly(participant.id)
+    end
+
     it 'comes in the single conversation response' do
       get "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}", headers: admin.create_new_auth_token, as: :json
 
