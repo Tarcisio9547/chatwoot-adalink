@@ -95,8 +95,15 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
   end
 
   def set_random_password_if_oauth_user
+    return unless @resource.persisted?
+
     # Password must satisfy secure_password requirements (uppercase, lowercase, number, special char)
-    @resource.update(password: "#{SecureRandom.hex(16)}aA1!") if @resource.persisted?
+    return if @resource.update(password: "#{SecureRandom.hex(16)}aA1!")
+
+    # Se a troca falhar, quem se cadastrou com o e-mail alheio ainda tem a senha antiga: precisa aparecer no log.
+    Rails.logger.error(
+      "[oauth] falha ao trocar a senha do usuario nao confirmado (user_id=#{@resource.id}): #{@resource.errors.full_messages.to_sentence}"
+    )
   end
 
   def default_devise_mapping

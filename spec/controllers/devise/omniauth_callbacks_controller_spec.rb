@@ -180,5 +180,35 @@ RSpec.describe 'DeviseOverrides::OmniauthCallbacksController', type: :request do
         expect(user.encrypted_password).not_to eq(original_password_digest)
       end
     end
+
+    it 'keeps the password of an already confirmed user on OAuth login' do
+      with_modified_env FRONTEND_URL: 'http://www.example.com' do
+        user = create(:user, email: 'confirmed-oauth@example.com')
+        expect(user).to be_confirmed
+        original_password_digest = user.encrypted_password
+        set_omniauth_config('confirmed-oauth@example.com')
+
+        get '/omniauth/google_oauth2/callback'
+        expect(response).to redirect_to('http://www.example.com/auth/google_oauth2/callback')
+        follow_redirect!
+
+        expect(user.reload.encrypted_password).to eq(original_password_digest)
+      end
+    end
+
+    it 'logs an error when the password of an unconfirmed user cannot be rotated' do
+      allow(Rails.logger).to receive(:error)
+
+      with_modified_env FRONTEND_URL: 'http://www.example.com' do
+        user = create(:user, email: 'unconfirmed-fail@example.com', skip_confirmation: false)
+        set_omniauth_config('unconfirmed-fail@example.com')
+        allow_any_instance_of(User).to receive(:update).with(hash_including(:password)).and_return(false) # rubocop:disable RSpec/AnyInstance
+
+        get '/omniauth/google_oauth2/callback'
+        follow_redirect!
+
+        expect(Rails.logger).to have_received(:error).with(/falha ao trocar a senha.*user_id=#{user.id}/).once
+      end
+    end
   end
 end
