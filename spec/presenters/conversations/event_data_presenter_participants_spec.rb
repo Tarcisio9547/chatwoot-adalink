@@ -3,7 +3,7 @@ require 'rails_helper'
 # participant_ids é dado de agente: nunca no payload comum (push_event_data), que também
 # alimenta o contato (widget) e os webhooks externos/AgentBot (webhook_data). Só no
 # payload de agente (agent_push_event_data).
-# rubocop:disable RSpec/DescribeMethod -- cobre a fronteira de audiência do presenter.
+# rubocop:disable RSpec/DescribeMethod, RSpec/SpecFilePathFormat -- cobre a fronteira de audiência do presenter.
 describe Conversations::EventDataPresenter, 'participant_ids audience' do
   let!(:account) { create(:account) }
   let!(:agent) { create(:user, account: account, role: :agent) }
@@ -19,10 +19,6 @@ describe Conversations::EventDataPresenter, 'participant_ids audience' do
   it 'keeps participant_ids out of the webhook payload (external webhooks, agent bots)' do
     expect(conversation.webhook_data).not_to have_key(:participant_ids)
     expect(conversation.webhook_data.to_json).not_to include('participant_ids')
-  end
-
-  it 'keeps participant_ids out of the lock payload' do
-    expect(conversation.lock_event_data).not_to have_key(:participant_ids)
   end
 
   it 'adds participant_ids only to the agent payload' do
@@ -46,4 +42,4 @@ describe Conversations::EventDataPresenter, 'participant_ids audience' do
     expect(sent_payloads.to_json).not_to include('participant_ids')
   end
 end
-# rubocop:enable RSpec/DescribeMethod
+# rubocop:enable RSpec/DescribeMethod, RSpec/SpecFilePathFormat

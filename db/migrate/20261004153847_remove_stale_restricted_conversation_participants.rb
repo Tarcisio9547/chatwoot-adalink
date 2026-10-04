@@ -39,7 +39,8 @@ class RemoveStaleRestrictedConversationParticipants < ActiveRecord::Migration[7.
       end
       total += account_rows.size
       log("account #{account_id}: removed #{account_rows.size} stale participant row(s) of restricted users")
-      log("account #{account_id}: removed rows [id, conversation_id, user_id] #{account_rows.map { |row| row.values_at('id', 'conversation_id', 'user_id') }.to_json}")
+      removed = account_rows.map { |row| row.values_at('id', 'conversation_id', 'user_id') }
+      log("account #{account_id}: removed rows [id, conversation_id, user_id] #{removed.to_json}")
     end
 
     log("total removed: #{total}")

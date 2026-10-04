@@ -215,7 +215,7 @@ describe ActionCableListener do
       expect(ActionCableBroadcastJob).to receive(:perform_later).with(
         [agent.pubsub_token, admin.pubsub_token, conversation.contact_inbox.pubsub_token],
         'conversation.updated',
-        conversation.push_event_data.merge(account_id: account.id)
+        conversation.agent_push_event_data.merge(account_id: account.id)
       )
       listener.conversation_updated(event)
     end
@@ -226,7 +226,7 @@ describe ActionCableListener do
       expect(ActionCableBroadcastJob).to receive(:perform_later).with(
         [agent.pubsub_token, admin.pubsub_token, conversation.contact_inbox.pubsub_token],
         'conversation.updated',
-        conversation.push_event_data.merge(account_id: account.id)
+        conversation.agent_push_event_data.merge(account_id: account.id)
       )
       listener.conversation_updated(event)
     end

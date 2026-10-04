@@ -4,7 +4,7 @@ require 'rails_helper'
 # (mensagem nova, atualização, troca de responsável, adição/remoção de participante), sem
 # duplicar token e sem consulta por participante. O payload com participant_ids só vai aos
 # agentes: o contato (widget) e os webhooks externos nunca o recebem.
-# rubocop:disable RSpec/DescribeMethod, RSpec/MultipleMemoizedHelpers -- cobre vários eventos do listener.
+# rubocop:disable RSpec/DescribeMethod, RSpec/SpecFilePathFormat -- cobre vários eventos do listener.
 describe ActionCableListener, 'participants as recipients' do
   let(:listener) { described_class.instance }
   let!(:account) { create(:account) }
@@ -58,6 +58,7 @@ describe ActionCableListener, 'participants as recipients' do
     describe "##{method_name}" do
       def fire(method_name)
         event_name, data = events.fetch(method_name)
+        sent.clear # criar a mensagem/conversa do cenário já disparou eventos reais
         listener.public_send(method_name, event_for(event_name, **data))
         event_name
       end
@@ -101,6 +102,7 @@ describe ActionCableListener, 'participants as recipients' do
        conversation_contact_changed].each do |method_name|
       it "is included in ##{method_name} (agent audience; the job strips it for the contact)" do
         event_name, data = events.fetch(method_name)
+        sent.clear
         listener.public_send(method_name, event_for(event_name, **data))
 
         payload = sent.find { |entry| entry[:name] == event_name }[:data]
@@ -109,7 +111,9 @@ describe ActionCableListener, 'participants as recipients' do
     end
 
     it 'is not added to message events (their payload has no conversation snapshot)' do
-      listener.message_created(event_for('message.created', message: message))
+      event = event_for('message.created', message: message)
+      sent.clear
+      listener.message_created(event)
 
       expect(sent.find { |entry| entry[:name] == 'message.created' }[:data]).not_to have_key(:participant_ids)
     end
@@ -144,8 +148,9 @@ describe ActionCableListener, 'participants as recipients' do
     it 'reaches the current participants, members and admins, and the user who was removed' do
       listener.conversation_participants_changed(event)
 
-      expect(tokens_of('conversation.participants_changed')).to include(outsider.pubsub_token, member.pubsub_token, admin.pubsub_token,
-                                                                         removed.pubsub_token)
+      expect(tokens_of('conversation.participants_changed')).to include(
+        outsider.pubsub_token, member.pubsub_token, admin.pubsub_token, removed.pubsub_token
+      )
     end
 
     it 'carries the fresh participant_ids' do
@@ -217,4 +222,4 @@ describe ActionCableListener, 'participants as recipients' do
     end
   end
 end
-# rubocop:enable RSpec/DescribeMethod, RSpec/MultipleMemoizedHelpers
+# rubocop:enable RSpec/DescribeMethod, RSpec/SpecFilePathFormat

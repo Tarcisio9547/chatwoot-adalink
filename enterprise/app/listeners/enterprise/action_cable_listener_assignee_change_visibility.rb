@@ -15,7 +15,7 @@ module Enterprise::ActionCableListenerAssigneeChangeVisibility
   # estar sem atendente, esse membro precisa do evento pra sumir da lista
   # dele, mesmo sem ter sido o assignee anterior.
   def assignee_changed_recipients(conversation, event)
-    members = Conversations::RoleVisibility.visible_members(conversation, conversation.inbox.members)
+    members = Conversations::RoleVisibility.visible_members(conversation, conversation_agents(conversation))
     previous_assignee = previous_assignee_for(conversation, event)
     losing_unassigned_view = members_losing_unassigned_view(conversation, event)
 

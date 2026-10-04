@@ -11,28 +11,43 @@ class Api::V1::Accounts::Conversations::ParticipantsController < Api::V1::Accoun
   end
 
   def create
+    added_ids = participants_to_be_added_ids
     ActiveRecord::Base.transaction do
-      @participants = participants_to_be_added_ids.map { |user_id| @conversation.conversation_participants.find_or_create_by(user_id: user_id) }
+      @participants = added_ids.map { |user_id| @conversation.conversation_participants.find_or_create_by(user_id: user_id) }
     end
+    dispatch_participants_changed(added_ids: added_ids, removed_ids: [])
   end
 
   def update
+    added_ids = participants_to_be_added_ids
+    removed_ids = participants_to_be_removed_ids
     ActiveRecord::Base.transaction do
-      participants_to_be_added_ids.each { |user_id| @conversation.conversation_participants.find_or_create_by(user_id: user_id) }
-      participants_to_be_removed_ids.each { |user_id| @conversation.conversation_participants.find_by(user_id: user_id)&.destroy }
+      added_ids.each { |user_id| @conversation.conversation_participants.find_or_create_by(user_id: user_id) }
+      removed_ids.each { |user_id| @conversation.conversation_participants.find_by(user_id: user_id)&.destroy }
     end
+    dispatch_participants_changed(added_ids: added_ids, removed_ids: removed_ids)
     @participants = @conversation.conversation_participants
     render action: 'show'
   end
 
   def destroy
+    removed_ids = requested_user_ids & current_participant_ids
     ActiveRecord::Base.transaction do
-      requested_user_ids.each { |user_id| @conversation.conversation_participants.find_by(user_id: user_id)&.destroy }
+      removed_ids.each { |user_id| @conversation.conversation_participants.find_by(user_id: user_id)&.destroy }
     end
+    dispatch_participants_changed(added_ids: [], removed_ids: removed_ids)
     head :ok
   end
 
   private
+
+  # Avisa a tela ao vivo (ActionCable) de quem entrou e de quem saiu. Sem mudança real, não avisa.
+  def dispatch_participants_changed(added_ids:, removed_ids:)
+    return if added_ids.empty? && removed_ids.empty?
+
+    Rails.configuration.dispatcher.dispatch(Events::Types::CONVERSATION_PARTICIPANTS_CHANGED, Time.zone.now,
+                                            conversation: @conversation, added_user_ids: added_ids, removed_user_ids: removed_ids)
+  end
 
   def authorize_manage_participants
     authorize @conversation, :manage_participants?

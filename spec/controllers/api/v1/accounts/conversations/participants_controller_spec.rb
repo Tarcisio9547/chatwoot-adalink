@@ -43,10 +43,11 @@ RSpec.describe 'Conversation Participants API', type: :request do
         it 'answers 401 on PUT and DELETE for the same conversation' do
           create(:conversation_participant, conversation: unassigned, account: account, user: colleague)
 
-          put participants_url.call(unassigned), params: { user_ids: [colleague.id, restricted.id] }, headers: restricted.create_new_auth_token, as: :json
+          headers = restricted.create_new_auth_token
+          put participants_url.call(unassigned), params: { user_ids: [colleague.id, restricted.id] }, headers: headers, as: :json
           expect(response).to have_http_status(:unauthorized)
 
-          delete participants_url.call(unassigned), params: { user_ids: [colleague.id] }, headers: restricted.create_new_auth_token, as: :json
+          delete participants_url.call(unassigned), params: { user_ids: [colleague.id] }, headers: headers, as: :json
           expect(response).to have_http_status(:unauthorized)
           expect(unassigned.conversation_participants.pluck(:user_id)).to eq([colleague.id])
         end
@@ -173,6 +174,7 @@ RSpec.describe 'Conversation Participants API', type: :request do
   describe 'user_ids validation' do
     let(:url) { api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id) }
     let(:existing) { create(:user, account: account, role: :agent) }
+    let(:verbs) { %i[post put delete] }
 
     before { create(:conversation_participant, conversation: conversation, account: account, user: existing) }
 
@@ -185,7 +187,7 @@ RSpec.describe 'Conversation Participants API', type: :request do
       ['a list with a float', [1.5]]
     ].each do |label, value|
       it "answers 422 (never 500) on POST, PUT and DELETE when user_ids is #{label}, and changes nothing" do
-        [:post, :put, :delete].each do |verb|
+        verbs.each do |verb|
           public_send(verb, url, params: { user_ids: value }, headers: agent.create_new_auth_token, as: :json)
 
           expect(response).to have_http_status(:unprocessable_entity)

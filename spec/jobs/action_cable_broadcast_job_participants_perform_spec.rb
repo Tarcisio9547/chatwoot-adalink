@@ -4,8 +4,7 @@ require 'rails_helper'
 # o tira dos tokens que não são de usuário (contato/widget). Vale para o payload recebido e
 # para os eventos de conversa que o job remonta (CONVERSATION_UPDATE_EVENTS), na caixa
 # WhatsApp (que refiltra por papel) e nas demais.
-# rubocop:disable RSpec/MultipleMemoizedHelpers -- um token por tipo de destinatário.
-describe ActionCableBroadcastJob, 'participant_ids audience' do
+describe ActionCableBroadcastJob, '#perform' do
   let!(:account) { create(:account) }
   let!(:agent) { create(:user, account: account, role: :agent) }
   let!(:participant) { create(:user, account: account, role: :agent) }
@@ -112,4 +111,3 @@ describe ActionCableBroadcastJob, 'participant_ids audience' do
     end
   end
 end
-# rubocop:enable RSpec/MultipleMemoizedHelpers

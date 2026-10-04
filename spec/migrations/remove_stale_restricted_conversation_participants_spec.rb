@@ -6,7 +6,6 @@ require Rails.root.join('db/migrate/20261004153847_remove_stale_restricted_conve
 # conversation_manage), a linha que sobra de um ex-responsável viraria acesso na lista. A
 # migração apaga essas linhas, exceto as do responsável ATUAL, e deixa intactas as de
 # administrador, agente sem custom_role e custom_role com conversation_manage.
-# rubocop:disable RSpec/MultipleMemoizedHelpers -- o cenário precisa de um usuário por papel.
 describe RemoveStaleRestrictedConversationParticipants do
   let(:migration) { described_class.new }
   let!(:account) { create(:account) }
@@ -103,7 +102,8 @@ describe RemoveStaleRestrictedConversationParticipants do
 
   it 'removes a row whose custom_role has no permissions at all' do
     empty_role_user = create(:user, account: account, role: :agent)
-    AccountUser.find_by(user: empty_role_user, account: account).update!(role: :agent, custom_role: create(:custom_role, account: account, permissions: []))
+    empty_role = create(:custom_role, account: account, permissions: [])
+    AccountUser.find_by(user: empty_role_user, account: account).update!(role: :agent, custom_role: empty_role)
     participate(empty_role_user)
 
     run_migration
@@ -148,4 +148,3 @@ describe RemoveStaleRestrictedConversationParticipants do
     expect { migration.suppress_messages { migration.down } }.not_to change(ConversationParticipant, :count)
   end
 end
-# rubocop:enable RSpec/MultipleMemoizedHelpers
