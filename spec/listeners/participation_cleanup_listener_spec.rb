@@ -170,6 +170,19 @@ describe ParticipationCleanupListener do
         expect(conversation.conversation_participants.map(&:user_id)).to include(agent_a.id)
       end
 
+      # O CRM adiciona o gestor do corretor como participante de uma conversa do WhatsApp Pessoal
+      # (caixa Channel::Api). Ele não é membro nem responsável: o acesso vem SÓ da participação.
+      # A limpeza remove apenas o responsável anterior, então o gestor nunca sai.
+      it 'never removes a manager who is only a participant (not a member, not the assignee) when the conversation changes hands' do
+        manager = create(:user, account: account, role: :agent)
+        conversation.conversation_participants.create!(user: manager)
+
+        listener.assignee_changed(reassign_event(from: agent_a, to: agent_b))
+
+        expect(conversation.conversation_participants.map(&:user_id)).to include(manager.id)
+        expect(conversation.conversation_participants.map(&:user_id)).not_to include(agent_a.id)
+      end
+
       it 'removes a previous assignee that has a restricted role (the access it would otherwise keep forever)' do
         role = create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage])
         AccountUser.find_by(user: agent_a, account: account).update!(role: :agent, custom_role: role)

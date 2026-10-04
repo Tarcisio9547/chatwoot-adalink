@@ -21,6 +21,23 @@ RSpec.describe Agents::DestroyJob do
   end
 
   describe '#perform' do
+    it 'removes the participations of the agent in that account (they would still give access to conversations)' do
+      other_account = create(:account)
+      create(:account_user, account: other_account, user: user, role: :agent)
+      other_conversation = create(:conversation, account: other_account)
+      mine = create(:conversation, account: account, inbox: inbox)
+      other_participant = create(:user, account: account)
+      create(:conversation_participant, conversation: mine, account: account, user: user)
+      create(:conversation_participant, conversation: mine, account: account, user: other_participant)
+      create(:conversation_participant, conversation: other_conversation, account: other_account, user: user)
+
+      described_class.perform_now(account, user)
+
+      expect(ConversationParticipant.where(account_id: account.id, user_id: user.id)).to be_empty
+      expect(ConversationParticipant.where(conversation_id: mine.id).pluck(:user_id)).to eq([other_participant.id])
+      expect(ConversationParticipant.where(account_id: other_account.id, user_id: user.id).count).to eq(1)
+    end
+
     it 'remove inboxes, teams, and conversations when removed from account' do
       described_class.perform_now(account, user)
 

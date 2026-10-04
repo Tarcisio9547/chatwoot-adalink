@@ -95,6 +95,79 @@ RSpec.describe ConversationPolicy, type: :policy do
     end
   end
 
+  # Atribuição: quem tem visão restrita (custom_role sem conversation_manage) só se atribui a uma
+  # conversa SEM responsável e só reatribui/tira o responsável se ele mesmo for o responsável atual.
+  describe '#change_assignee?' do
+    let(:other_agent) { create(:user, account: account, role: :agent) }
+    let(:owned) { create(:conversation, account: account, inbox: inbox, assignee: other_agent) }
+    let(:ownerless) { create(:conversation, account: account, inbox: inbox, assignee: nil) }
+    let(:mine) { create(:conversation, account: account, inbox: inbox, assignee: agent) }
+
+    def allowed?(conversation, target)
+      described_class.new(context, conversation).change_assignee?(target)
+    end
+
+    def restrict!(permission)
+      role = create(:custom_role, account: account, permissions: [permission])
+      agent_account_user.update!(role: :agent, custom_role: role)
+    end
+
+    %w[conversation_participating_manage conversation_unassigned_manage].each do |permission|
+      context "with the restricted visibility #{permission}" do
+        before { restrict!(permission) }
+
+        it 'takes an ownerless conversation for himself (id as number or text)' do
+          expect(allowed?(ownerless, agent.id)).to be true
+          expect(allowed?(ownerless, agent.id.to_s)).to be true
+        end
+
+        it 'does not give an ownerless conversation to someone else, nor to nobody' do
+          expect(allowed?(ownerless, other_agent.id)).to be false
+          expect(allowed?(ownerless, nil)).to be false
+        end
+
+        it 'does not take, hand over or drop a conversation that has another owner' do
+          expect(allowed?(owned, agent.id)).to be false
+          expect(allowed?(owned, other_agent.id)).to be false
+          expect(allowed?(owned, nil)).to be false
+        end
+
+        it 'hands over or drops a conversation he owns' do
+          expect(allowed?(mine, other_agent.id)).to be true
+          expect(allowed?(mine, nil)).to be true
+          expect(allowed?(mine, agent.id)).to be true
+        end
+      end
+    end
+
+    it 'allows everything to an administrator, even with a leftover custom_role' do
+      role = create(:custom_role, account: account, permissions: %w[conversation_unassigned_manage])
+      agent_account_user.update_columns(role: AccountUser.roles[:administrator], custom_role_id: role.id) # rubocop:disable Rails/SkipsModelValidations
+
+      expect(allowed?(owned, agent.id)).to be true
+      expect(allowed?(owned, nil)).to be true
+    end
+
+    it 'allows everything to an agent without custom role' do
+      expect(allowed?(owned, agent.id)).to be true
+      expect(allowed?(owned, nil)).to be true
+    end
+
+    it 'allows everything to the "Todas" role (conversation_manage)' do
+      restrict!('conversation_manage')
+
+      expect(allowed?(owned, agent.id)).to be true
+      expect(allowed?(owned, nil)).to be true
+    end
+
+    it 'does not restrict an agent bot' do
+      bot = create(:agent_bot)
+      bot_policy = described_class.new({ user: bot, account: account, account_user: nil }, owned)
+
+      expect(bot_policy.change_assignee?(other_agent.id)).to be true
+    end
+  end
+
   permissions :show? do
     context 'when role grants conversation_unassigned_manage' do
       let(:custom_role) { create(:custom_role, account: account, permissions: ['conversation_unassigned_manage']) }
