@@ -9,6 +9,164 @@ RSpec.describe 'Conversation Participants API', type: :request do
     create(:inbox_member, inbox: conversation.inbox, user: agent)
   end
 
+  # Quem pode mexer na lista: administrador, agente sem custom_role, custom_role com
+  # conversation_manage ou o RESPONSÁVEL atual. Quem só enxerga a conversa (participante
+  # ou restrito) não pode, senão se adicionaria numa conversa sem responsável e ficaria
+  # com acesso mesmo depois de a roleta entregar o lead a outro corretor.
+  describe 'who can change the participants' do
+    let(:unassigned) { create(:conversation, account: account, inbox: conversation.inbox, assignee: nil) }
+    let(:colleague) { create(:user, account: account, role: :agent) }
+    let(:restricted) { create(:user, account: account, role: :agent) }
+    let(:participants_url) do
+      ->(target) { api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: target.display_id) }
+    end
+
+    def restrict(user, permissions)
+      role = create(:custom_role, account: account, permissions: permissions)
+      AccountUser.find_by(user: user, account: account).update!(role: :agent, custom_role: role)
+    end
+
+    %w[conversation_participating_manage conversation_unassigned_manage].each do |permission|
+      context "with the restricted visibility #{permission}" do
+        before do
+          create(:inbox_member, inbox: conversation.inbox, user: restricted)
+          restrict(restricted, [permission])
+        end
+
+        it 'answers 401 when the restricted agent adds himself to an unassigned conversation, and adds nothing' do
+          post participants_url.call(unassigned), params: { user_ids: [restricted.id] }, headers: restricted.create_new_auth_token, as: :json
+
+          expect(response).to have_http_status(:unauthorized)
+          expect(unassigned.conversation_participants.count).to eq(0)
+        end
+
+        it 'answers 401 on PUT and DELETE for the same conversation' do
+          create(:conversation_participant, conversation: unassigned, account: account, user: colleague)
+
+          put participants_url.call(unassigned), params: { user_ids: [colleague.id, restricted.id] }, headers: restricted.create_new_auth_token, as: :json
+          expect(response).to have_http_status(:unauthorized)
+
+          delete participants_url.call(unassigned), params: { user_ids: [colleague.id] }, headers: restricted.create_new_auth_token, as: :json
+          expect(response).to have_http_status(:unauthorized)
+          expect(unassigned.conversation_participants.pluck(:user_id)).to eq([colleague.id])
+        end
+
+        it 'answers 401 when the restricted agent cannot even see the conversation (POST)' do
+          hidden = create(:conversation, account: account, inbox: create(:inbox, account: account), assignee: nil)
+
+          post participants_url.call(hidden), params: { user_ids: [restricted.id] }, headers: restricted.create_new_auth_token, as: :json
+
+          expect(response).to have_http_status(:unauthorized)
+          expect(hidden.conversation_participants.count).to eq(0)
+        end
+
+        it 'answers 401 when a restricted PARTICIPANT tries to add other people' do
+          create(:conversation_participant, conversation: conversation, account: account, user: restricted)
+
+          post participants_url.call(conversation), params: { user_ids: [colleague.id] }, headers: restricted.create_new_auth_token, as: :json
+
+          expect(response).to have_http_status(:unauthorized)
+          expect(conversation.conversation_participants.pluck(:user_id)).to eq([restricted.id])
+        end
+
+        it 'still lets the restricted participant LIST the participants (read-only)' do
+          create(:conversation_participant, conversation: conversation, account: account, user: restricted)
+
+          get participants_url.call(conversation), headers: restricted.create_new_auth_token, as: :json
+
+          expect(response).to have_http_status(:success)
+        end
+
+        it 'lets the restricted CURRENT ASSIGNEE add a colleague' do
+          conversation.update!(assignee: restricted)
+
+          post participants_url.call(conversation), params: { user_ids: [colleague.id] }, headers: restricted.create_new_auth_token, as: :json
+
+          expect(response).to have_http_status(:success)
+          expect(conversation.conversation_participants.pluck(:user_id)).to eq([colleague.id])
+        end
+      end
+    end
+
+    it 'lets an administrator change the participants of any conversation' do
+      admin = create(:user, account: account, role: :administrator)
+
+      post participants_url.call(unassigned), params: { user_ids: [colleague.id] }, headers: admin.create_new_auth_token, as: :json
+
+      expect(response).to have_http_status(:success)
+      expect(unassigned.conversation_participants.pluck(:user_id)).to eq([colleague.id])
+    end
+
+    it 'lets a custom role with conversation_manage ("Todas") change the participants' do
+      create(:inbox_member, inbox: conversation.inbox, user: restricted)
+      restrict(restricted, %w[conversation_manage])
+
+      post participants_url.call(unassigned), params: { user_ids: [colleague.id] }, headers: restricted.create_new_auth_token, as: :json
+
+      expect(response).to have_http_status(:success)
+    end
+  end
+
+  # user_ids que não é lista de inteiros nunca pode virar 500 nem mexer em nada.
+  describe 'user_ids validation' do
+    let(:url) { api_v1_account_conversation_participants_url(account_id: account.id, conversation_id: conversation.display_id) }
+    let(:existing) { create(:user, account: account, role: :agent) }
+
+    before { create(:conversation_participant, conversation: conversation, account: account, user: existing) }
+
+    [
+      ['a string', 'abc'],
+      ['an object', { '0' => 1 }],
+      ['a list with a word', [1, 'x']],
+      ['a nested list', [[1]]],
+      ['a list with null', [nil]],
+      ['a list with an object', [{ 'id' => 1 }]],
+      ['a list with a float', [1.5]]
+    ].each do |label, value|
+      it "answers 422 (never 500) on POST, PUT and DELETE when user_ids is #{label}, and changes nothing" do
+        [:post, :put, :delete].each do |verb|
+          public_send(verb, url, params: { user_ids: value }, headers: agent.create_new_auth_token, as: :json)
+
+          expect(response).to have_http_status(:unprocessable_entity)
+        end
+        expect(conversation.conversation_participants.pluck(:user_id)).to eq([existing.id])
+      end
+    end
+
+    it 'answers 422 when user_ids is missing on POST and DELETE too' do
+      post url, params: {}, headers: agent.create_new_auth_token, as: :json
+      expect(response).to have_http_status(:unprocessable_entity)
+
+      delete url, params: {}, headers: agent.create_new_auth_token, as: :json
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it 'does not blow up with an integer far beyond the id range (just ignores it)' do
+      post url, params: { user_ids: [99_999_999_999_999_999_999] }, headers: agent.create_new_auth_token, as: :json
+
+      expect(response).to have_http_status(:success)
+      expect(conversation.conversation_participants.pluck(:user_id)).to eq([existing.id])
+    end
+
+    it 'accepts ids sent as digit strings (form-encoded clients)' do
+      other = create(:user, account: account, role: :agent)
+
+      post url, params: { user_ids: [other.id.to_s] }, headers: agent.create_new_auth_token, as: :json
+
+      expect(response).to have_http_status(:success)
+      expect(conversation.conversation_participants.pluck(:user_id)).to contain_exactly(existing.id, other.id)
+    end
+
+    it 'DELETE only removes participants that belong to the account (ignores foreign ids)' do
+      foreign = create(:user, account: create(:account), role: :agent)
+
+      delete url, params: { user_ids: [foreign.id, existing.id] }, headers: agent.create_new_auth_token, as: :json
+
+      expect(response).to have_http_status(:success)
+      expect(conversation.conversation_participants.count).to eq(0)
+    end
+  end
+
   describe 'GET /api/v1/accounts/{account.id}/conversations/<id>/paricipants' do
     context 'when it is an unauthenticated user' do
       it 'returns unauthorized' do
