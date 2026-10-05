@@ -262,6 +262,61 @@ RSpec.describe 'Webhooks::WhatsappController', type: :request do
           expect(response).to have_http_status(:success)
         end
       end
+
+      it 'reads the ENV secret without side effects when the installation config row is blank' do
+        row = InstallationConfig.create!(name: 'WHATSAPP_APP_SECRET', value: nil, locked: false)
+        GlobalConfig.clear_cache
+        updated_at = row.reload.updated_at
+        allow(GlobalConfig).to receive(:clear_cache).and_call_original
+
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          3.times { post_webhook('/webhooks/whatsapp/123221321', body, secret: global_secret) }
+        end
+
+        expect(response).to have_http_status(:success)
+        expect(Webhooks::WhatsappEventsJob).to have_received(:perform_later).exactly(3).times
+        expect(GlobalConfig).not_to have_received(:clear_cache)
+        expect(InstallationConfig.where(name: 'WHATSAPP_APP_SECRET').count).to eq(1)
+        expect(row.reload.value).to be_nil
+        expect(row.updated_at).to eq(updated_at)
+      end
+
+      it 'reads the ENV secret without creating the installation config row or clearing the cache when there is no row' do
+        allow(GlobalConfig).to receive(:clear_cache).and_call_original
+
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          3.times { post_webhook('/webhooks/whatsapp/123221321', body, secret: global_secret) }
+        end
+
+        expect(response).to have_http_status(:success)
+        expect(Webhooks::WhatsappEventsJob).to have_received(:perform_later).exactly(3).times
+        expect(GlobalConfig).not_to have_received(:clear_cache)
+        expect(InstallationConfig.where(name: 'WHATSAPP_APP_SECRET')).to be_empty
+      end
+
+      it 'does not clear the config cache on rejected requests either' do
+        allow(GlobalConfig).to receive(:clear_cache).and_call_original
+
+        with_modified_env WHATSAPP_APP_SECRET: global_secret do
+          3.times { post_webhook('/webhooks/whatsapp/123221321', body) }
+        end
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(GlobalConfig).not_to have_received(:clear_cache)
+      end
+
+      it 'keeps the Super Admin value ahead of the ENV one' do
+        InstallationConfig.create!(name: 'WHATSAPP_APP_SECRET', value: global_secret, locked: false)
+        GlobalConfig.clear_cache
+
+        with_modified_env WHATSAPP_APP_SECRET: 'valor-do-env' do
+          post_webhook('/webhooks/whatsapp/123221321', body, secret: 'valor-do-env')
+          expect(response).to have_http_status(:unauthorized)
+
+          post_webhook('/webhooks/whatsapp/123221321', body, secret: global_secret)
+          expect(response).to have_http_status(:success)
+        end
+      end
     end
 
     context 'when the channel has its own app secret' do
@@ -642,6 +697,7 @@ RSpec.describe 'Webhooks::WhatsappController', type: :request do
 
     context 'when phone number is in inactive list' do
       before do
+        allow(GlobalConfig).to receive(:get_value).and_call_original
         allow(GlobalConfig).to receive(:get_value).with('INACTIVE_WHATSAPP_NUMBERS').and_return('+1234567890,+9876543210')
       end
 
@@ -659,6 +715,7 @@ RSpec.describe 'Webhooks::WhatsappController', type: :request do
 
     context 'when INACTIVE_WHATSAPP_NUMBERS config is not set' do
       before do
+        allow(GlobalConfig).to receive(:get_value).and_call_original
         allow(GlobalConfig).to receive(:get_value).with('INACTIVE_WHATSAPP_NUMBERS').and_return(nil)
       end
 

@@ -93,11 +93,13 @@ module MetaTokenVerifyConcern
     channel_secrets.compact_blank.presence || global_secrets.compact_blank
   end
 
-  # O GlobalConfigService só lê o ENV quando NÃO existe linha em installation_configs. O ConfigLoader semeia
-  # uma linha sem valor para as chaves *_APP_SECRET, então o ENV (ex.: variável do Railway) é lido direto como
-  # fallback. O valor salvo no InstallationConfig (Super Admin) continua com precedência sobre o ENV.
+  # Leitura SEM efeito colateral: o GlobalConfigService.load faz first_or_create e GlobalConfig.clear_cache
+  # (um KEYS no Redis que expira a configuração da aplicação inteira) quando o segredo vem só do ENV, e isso
+  # aconteceria a cada webhook. Aqui só se lê o valor (com cache de leitura) e, se estiver vazio, o ENV
+  # (variável do Railway): o ConfigLoader semeia a linha *_APP_SECRET sem valor, então o ENV precisa valer.
+  # O valor salvo no InstallationConfig (Super Admin) continua com precedência sobre o ENV.
   def global_meta_app_secret(config_name)
-    clean_meta_secret(GlobalConfigService.load(config_name, nil)) || clean_meta_secret(ENV.fetch(config_name, nil))
+    clean_meta_secret(GlobalConfig.get_value(config_name)) || clean_meta_secret(ENV.fetch(config_name, nil))
   end
 
   def clean_meta_secret(value)

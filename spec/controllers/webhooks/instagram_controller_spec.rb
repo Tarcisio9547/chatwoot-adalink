@@ -223,6 +223,49 @@ RSpec.describe 'Webhooks::InstagramController', type: :request do
           expect(response).to have_http_status(:success)
         end
       end
+
+      it 'reads the ENV secrets without side effects when the installation config rows are blank' do
+        rows = %w[INSTAGRAM_APP_SECRET FB_APP_SECRET].map { |name| InstallationConfig.create!(name: name, value: nil, locked: false) }
+        GlobalConfig.clear_cache
+        updated_ats = rows.map { |row| row.reload.updated_at }
+        allow(GlobalConfig).to receive(:clear_cache).and_call_original
+
+        with_modified_env INSTAGRAM_APP_SECRET: instagram_secret, FB_APP_SECRET: facebook_secret do
+          3.times { post_instagram_webhook(body, secret: facebook_secret) }
+        end
+
+        expect(response).to have_http_status(:success)
+        expect(Webhooks::InstagramEventsJob).to have_received(:perform_later).exactly(3).times
+        expect(GlobalConfig).not_to have_received(:clear_cache)
+        expect(InstallationConfig.where(name: %w[INSTAGRAM_APP_SECRET FB_APP_SECRET]).count).to eq(2)
+        expect(rows.map { |row| row.reload.value }).to all(be_nil)
+        expect(rows.map { |row| row.reload.updated_at }).to eq(updated_ats)
+      end
+
+      it 'reads the ENV secrets without creating installation config rows or clearing the cache when there are none' do
+        allow(GlobalConfig).to receive(:clear_cache).and_call_original
+
+        with_modified_env INSTAGRAM_APP_SECRET: instagram_secret do
+          3.times { post_instagram_webhook(body, secret: instagram_secret) }
+        end
+
+        expect(response).to have_http_status(:success)
+        expect(GlobalConfig).not_to have_received(:clear_cache)
+        expect(InstallationConfig.where(name: %w[INSTAGRAM_APP_SECRET FB_APP_SECRET])).to be_empty
+      end
+
+      it 'keeps the Super Admin value ahead of the ENV one' do
+        InstallationConfig.create!(name: 'INSTAGRAM_APP_SECRET', value: instagram_secret, locked: false)
+        GlobalConfig.clear_cache
+
+        with_modified_env INSTAGRAM_APP_SECRET: 'valor-do-env' do
+          post_instagram_webhook(body, secret: 'valor-do-env')
+          expect(response).to have_http_status(:unauthorized)
+
+          post_instagram_webhook(body, secret: instagram_secret)
+          expect(response).to have_http_status(:success)
+        end
+      end
     end
 
     context 'when checking the signature before doing any work' do
