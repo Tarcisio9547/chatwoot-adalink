@@ -196,18 +196,43 @@ RSpec.describe 'DeviseOverrides::OmniauthCallbacksController', type: :request do
       end
     end
 
-    it 'logs an error when the password of an unconfirmed user cannot be rotated' do
-      allow(Rails.logger).to receive(:error)
+    context 'when the password of an unconfirmed user cannot be rotated' do
+      before { allow(Rails.logger).to receive(:error) }
 
-      with_modified_env FRONTEND_URL: 'http://www.example.com' do
-        user = create(:user, email: 'unconfirmed-fail@example.com', skip_confirmation: false)
-        set_omniauth_config('unconfirmed-fail@example.com')
-        allow_any_instance_of(User).to receive(:update).with(hash_including(:password)).and_return(false) # rubocop:disable RSpec/AnyInstance
+      it 'logs the error and aborts the login without issuing an SSO token' do
+        with_modified_env FRONTEND_URL: 'http://www.example.com' do
+          user = create(:user, email: 'unconfirmed-fail@example.com', skip_confirmation: false)
+          set_omniauth_config('unconfirmed-fail@example.com')
+          allow_any_instance_of(User).to receive(:update).with(hash_including(:password)).and_return(false) # rubocop:disable RSpec/AnyInstance
 
-        get '/omniauth/google_oauth2/callback'
-        follow_redirect!
+          get '/omniauth/google_oauth2/callback'
+          expect(response).to redirect_to('http://www.example.com/auth/google_oauth2/callback')
+          follow_redirect!
 
-        expect(Rails.logger).to have_received(:error).with(/falha ao trocar a senha.*user_id=#{user.id}/).once
+          expect(Rails.logger).to have_received(:error).with(/falha ao trocar a senha.*user_id=#{user.id}/).once
+          expect(response).to redirect_to('http://www.example.com/app/login?error=oauth-authentication-failed')
+          expect(response.location).not_to include('sso_auth_token')
+          expect(user.reload).not_to be_confirmed
+        end
+      end
+
+      it 'aborts the signup flow without handing out a reset password token' do
+        with_modified_env ENABLE_ACCOUNT_SIGNUP: 'true', FRONTEND_URL: 'http://www.example.com' do
+          created_user = create(:user, email: 'created-by-builder@example.com', skip_confirmation: false)
+          set_omniauth_config('test_not_preset@example.com')
+          allow(AccountBuilder).to receive(:new).and_return(account_builder)
+          allow(account_builder).to receive(:perform).and_return([created_user, nil])
+          allow(Avatar::AvatarFromUrlJob).to receive(:perform_later).and_return(true)
+          allow(email_validation_service).to receive(:perform).and_return(true)
+          allow(created_user).to receive(:update).with(hash_including(:password)).and_return(false)
+
+          get '/omniauth/google_oauth2/callback'
+          follow_redirect!
+
+          expect(Rails.logger).to have_received(:error).with(/falha ao trocar a senha.*user_id=#{created_user.id}/).once
+          expect(response).to redirect_to('http://www.example.com/app/login?error=oauth-authentication-failed')
+          expect(response.location).not_to include('reset_password_token')
+        end
       end
     end
   end

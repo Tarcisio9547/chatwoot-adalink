@@ -1,6 +1,10 @@
 class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCallbacksController
   include EmailHelper
 
+  # Código de erro enviado à tela de login quando o login OAuth é abortado. A tela não tem mensagem própria
+  # para ele e mostra a mensagem genérica de falha de autenticação.
+  OAUTH_AUTHENTICATION_FAILED = 'oauth-authentication-failed'.freeze
+
   def omniauth_success
     get_resource_from_auth_hash
 
@@ -15,7 +19,8 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
     # password reset for persisted unconfirmed users.
     needs_password_reset = oauth_user_needs_password_reset?
     @resource.skip_confirmation! if confirmable_enabled?
-    set_random_password_if_oauth_user if needs_password_reset
+    # Se a senha não puder ser trocada, o login é abortado antes de emitir o token SSO.
+    return redirect_to login_page_url(error: OAUTH_AUTHENTICATION_FAILED) if needs_password_reset && !set_random_password_if_oauth_user
 
     # once the resource is found and verified
     # we can just send them to the login page again with the SSO params
@@ -28,7 +33,7 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
     # See comment in sign_in_user for why this is captured before skip_confirmation!
     needs_password_reset = oauth_user_needs_password_reset?
     @resource.skip_confirmation! if confirmable_enabled?
-    set_random_password_if_oauth_user if needs_password_reset
+    return redirect_to_mobile_error(OAUTH_AUTHENTICATION_FAILED) if needs_password_reset && !set_random_password_if_oauth_user
 
     # once the resource is found and verified
     # we can just send them to the login page again with the SSO params
@@ -45,7 +50,8 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
     return redirect_to login_page_url(error: 'business-account-only') unless validate_signup_email_is_business_domain?
 
     create_account_for_user
-    set_random_password_if_oauth_user
+    return redirect_to login_page_url(error: OAUTH_AUTHENTICATION_FAILED) unless set_random_password_if_oauth_user
+
     token = @resource.send(:set_reset_password_token)
     frontend_url = ENV.fetch('FRONTEND_URL', nil)
     redirect_to "#{frontend_url}/app/auth/password/edit?config=default&reset_password_token=#{token}"
@@ -94,16 +100,19 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
     @resource.present? && (@resource.new_record? || !@resource.confirmed?)
   end
 
+  # Devolve true quando a senha foi trocada (ou não há o que trocar) e false quando a troca falhou.
+  # Em caso de falha quem se cadastrou com o e-mail alheio ainda tem a senha antiga, então o chamador
+  # precisa abortar o login, e o erro vai para o log.
   def set_random_password_if_oauth_user
-    return unless @resource.persisted?
+    return true unless @resource.persisted?
 
     # Password must satisfy secure_password requirements (uppercase, lowercase, number, special char)
-    return if @resource.update(password: "#{SecureRandom.hex(16)}aA1!")
+    return true if @resource.update(password: "#{SecureRandom.hex(16)}aA1!")
 
-    # Se a troca falhar, quem se cadastrou com o e-mail alheio ainda tem a senha antiga: precisa aparecer no log.
     Rails.logger.error(
       "[oauth] falha ao trocar a senha do usuario nao confirmado (user_id=#{@resource.id}): #{@resource.errors.full_messages.to_sentence}"
     )
+    false
   end
 
   def default_devise_mapping
