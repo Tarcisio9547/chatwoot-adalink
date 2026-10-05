@@ -164,5 +164,76 @@ RSpec.describe 'DeviseOverrides::OmniauthCallbacksController', type: :request do
         expect(response).to have_http_status(:ok)
       end
     end
+
+    it 'resets password for an unconfirmed persisted user on OAuth login' do
+      with_modified_env FRONTEND_URL: 'http://www.example.com' do
+        user = create(:user, email: 'unconfirmed-oauth@example.com', skip_confirmation: false)
+        original_password_digest = user.encrypted_password
+        set_omniauth_config('unconfirmed-oauth@example.com')
+
+        get '/omniauth/google_oauth2/callback'
+        expect(response).to redirect_to('http://www.example.com/auth/google_oauth2/callback')
+        follow_redirect!
+
+        user.reload
+        expect(user).to be_confirmed
+        expect(user.encrypted_password).not_to eq(original_password_digest)
+      end
+    end
+
+    it 'keeps the password of an already confirmed user on OAuth login' do
+      with_modified_env FRONTEND_URL: 'http://www.example.com' do
+        user = create(:user, email: 'confirmed-oauth@example.com')
+        expect(user).to be_confirmed
+        original_password_digest = user.encrypted_password
+        set_omniauth_config('confirmed-oauth@example.com')
+
+        get '/omniauth/google_oauth2/callback'
+        expect(response).to redirect_to('http://www.example.com/auth/google_oauth2/callback')
+        follow_redirect!
+
+        expect(user.reload.encrypted_password).to eq(original_password_digest)
+      end
+    end
+
+    context 'when the password of an unconfirmed user cannot be rotated' do
+      before { allow(Rails.logger).to receive(:error) }
+
+      it 'logs the error and aborts the login without issuing an SSO token' do
+        with_modified_env FRONTEND_URL: 'http://www.example.com' do
+          user = create(:user, email: 'unconfirmed-fail@example.com', skip_confirmation: false)
+          set_omniauth_config('unconfirmed-fail@example.com')
+          allow_any_instance_of(User).to receive(:update).with(hash_including(:password)).and_return(false) # rubocop:disable RSpec/AnyInstance
+
+          get '/omniauth/google_oauth2/callback'
+          expect(response).to redirect_to('http://www.example.com/auth/google_oauth2/callback')
+          follow_redirect!
+
+          expect(Rails.logger).to have_received(:error).with(/falha ao trocar a senha.*user_id=#{user.id}/).once
+          expect(response).to redirect_to('http://www.example.com/app/login?error=oauth-authentication-failed')
+          expect(response.location).not_to include('sso_auth_token')
+          expect(user.reload).not_to be_confirmed
+        end
+      end
+
+      it 'aborts the signup flow without handing out a reset password token' do
+        with_modified_env ENABLE_ACCOUNT_SIGNUP: 'true', FRONTEND_URL: 'http://www.example.com' do
+          created_user = create(:user, email: 'created-by-builder@example.com', skip_confirmation: false)
+          set_omniauth_config('test_not_preset@example.com')
+          allow(AccountBuilder).to receive(:new).and_return(account_builder)
+          allow(account_builder).to receive(:perform).and_return([created_user, nil])
+          allow(Avatar::AvatarFromUrlJob).to receive(:perform_later).and_return(true)
+          allow(email_validation_service).to receive(:perform).and_return(true)
+          allow(created_user).to receive(:update).with(hash_including(:password)).and_return(false)
+
+          get '/omniauth/google_oauth2/callback'
+          follow_redirect!
+
+          expect(Rails.logger).to have_received(:error).with(/falha ao trocar a senha.*user_id=#{created_user.id}/).once
+          expect(response).to redirect_to('http://www.example.com/app/login?error=oauth-authentication-failed')
+          expect(response.location).not_to include('reset_password_token')
+        end
+      end
+    end
   end
 end
