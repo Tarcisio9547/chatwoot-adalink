@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch, onMounted, ref } from 'vue';
+import { computed, watch, onMounted, onBeforeUnmount, ref } from 'vue';
 import {
   useMapGetter,
   useFunctionGetter,
@@ -24,6 +24,11 @@ import SidebarActionsHeader from 'dashboard/components-next/SidebarActionsHeader
 import LinearIssuesList from 'dashboard/components/widgets/conversation/linear/IssuesList.vue';
 import LinearSetupCTA from 'dashboard/components/widgets/conversation/linear/LinearSetupCTA.vue';
 import { buildCriarNegocioMessage } from './helpers/criarNegocioMessage';
+import {
+  buildNaoReceberCampanhasMessage,
+  lerRespostaNaoReceberCampanhas,
+  podeNaoReceberCampanhas,
+} from './helpers/naoReceberCampanhasMessage';
 
 const props = defineProps({
   conversationId: {
@@ -137,12 +142,66 @@ const criarNegocio = () => {
   );
 };
 
+// Adalink: "Não receber campanhas". O CRM (Atendimento.tsx) descadastra o telefone
+// das campanhas de WhatsApp e responde 'trama-nao-receber-campanhas-done'.
+// Etapas: null (botão) -> 'confirmando' -> 'enviando' -> 'feito' | 'erro'.
+const naoReceberEtapa = ref(null);
+const naoReceberMensagem = ref('');
+const podeNaoReceber = computed(() => podeNaoReceberCampanhas(contact.value));
+
+const pedirNaoReceber = () => {
+  naoReceberMensagem.value = '';
+  naoReceberEtapa.value = 'confirmando';
+};
+
+const cancelarNaoReceber = () => {
+  naoReceberEtapa.value = null;
+};
+
+const confirmarNaoReceber = () => {
+  if (!podeNaoReceber.value || naoReceberEtapa.value !== 'confirmando') return;
+  naoReceberEtapa.value = 'enviando';
+  window.parent.postMessage(
+    buildNaoReceberCampanhasMessage({ contact: contact.value }),
+    window.location.origin
+  );
+};
+
+const aoReceberResposta = event => {
+  // Só a janela do CRM (pai), no mesmo origin, e só enquanto esperamos.
+  if (event.origin !== window.location.origin) return;
+  if (event.source !== window.parent) return;
+  if (naoReceberEtapa.value !== 'enviando') return;
+  const resposta = lerRespostaNaoReceberCampanhas(event.data);
+  if (!resposta) return;
+  if (resposta.ok) {
+    naoReceberMensagem.value = resposta.novo
+      ? 'Pronto: este número não recebe mais campanhas.'
+      : 'Este número já estava fora das campanhas.';
+    naoReceberEtapa.value = 'feito';
+  } else {
+    naoReceberMensagem.value = resposta.error;
+    naoReceberEtapa.value = 'erro';
+  }
+};
+
+// Trocou de contato: o estado do botão não pode vazar para a pessoa seguinte.
+watch(contactId, () => {
+  naoReceberEtapa.value = null;
+  naoReceberMensagem.value = '';
+});
+
 onMounted(() => {
+  window.addEventListener('message', aoReceberResposta);
   conversationSidebarItems.value = conversationSidebarItemsOrder.value;
   getContactDetails();
   store.dispatch('attributes/get', 0);
   // Load integrations to ensure linear integration state is available
   store.dispatch('integrations/get', 'linear');
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('message', aoReceberResposta);
 });
 </script>
 
@@ -163,6 +222,60 @@ onMounted(() => {
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         Criar Negócio
       </button>
+    </div>
+
+    <!-- Adalink: Não receber campanhas (WhatsApp) -->
+    <div v-if="podeNaoReceber" class="px-4 pb-2" data-testid="nao-receber-campanhas">
+      <button
+        v-if="!naoReceberEtapa || naoReceberEtapa === 'erro'"
+        class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-n-weak text-n-slate-12 hover:bg-n-alpha-2 transition-all"
+        @click="pedirNaoReceber"
+      >
+        Não receber campanhas
+      </button>
+      <div
+        v-else-if="naoReceberEtapa === 'confirmando'"
+        class="rounded-lg border border-n-weak p-3 text-sm text-n-slate-12"
+      >
+        <p class="m-0 mb-2">
+          Este número deixa de receber campanhas de WhatsApp. Só um
+          administrador consegue reativar. Confirmar?
+        </p>
+        <div class="flex gap-2">
+          <button
+            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-[rgb(124,58,237)] text-white hover:bg-[rgb(109,40,217)]"
+            @click="confirmarNaoReceber"
+          >
+            Sim, tirar
+          </button>
+          <button
+            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium border border-n-weak hover:bg-n-alpha-2"
+            @click="cancelarNaoReceber"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+      <p
+        v-else-if="naoReceberEtapa === 'enviando'"
+        class="m-0 text-sm text-n-slate-11 text-center"
+      >
+        Tirando o número das campanhas...
+      </p>
+      <p
+        v-else-if="naoReceberEtapa === 'feito'"
+        class="m-0 text-sm text-n-slate-12 text-center"
+        role="status"
+      >
+        {{ naoReceberMensagem }}
+      </p>
+      <p
+        v-if="naoReceberEtapa === 'erro'"
+        class="m-0 mt-2 text-sm text-n-ruby-11 text-center"
+        role="alert"
+      >
+        {{ naoReceberMensagem }}
+      </p>
     </div>
 
     <div class="px-2 pb-8 list-group">
