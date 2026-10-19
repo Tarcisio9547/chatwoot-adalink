@@ -57,3 +57,51 @@ export const lerRespostaNaoReceberCampanhas = data => {
       : TEXTO_ERRO_PADRAO;
   return { requestId, ok: false, novo: false, error };
 };
+
+// Faz o pedido ao CRM e espera a resposta DO MESMO pedido (requestId). Serve ao
+// botão do painel do contato e ao item do menu de clique direito da lista, para
+// os dois terem as mesmas travas: só a janela do CRM (pai), no mesmo origin, com
+// timeout. Nunca rejeita: devolve { ok, novo, error } (ok=false em qualquer falha).
+// `cancelar()` solta o listener e o timer; a promessa então resolve com null.
+export const solicitarNaoReceberCampanhas = ({
+  telefone,
+  timeoutMs = NAO_RECEBER_TIMEOUT_MS,
+}) => {
+  const requestId = novoRequestId();
+  let cancelar = () => {};
+  const promessa = new Promise(resolve => {
+    const estado = { timer: null, ouvir: null };
+    const encerrar = resultado => {
+      clearTimeout(estado.timer);
+      window.removeEventListener('message', estado.ouvir);
+      resolve(resultado);
+    };
+    estado.ouvir = event => {
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== window.parent) return;
+      const resposta = lerRespostaNaoReceberCampanhas(event.data);
+      if (!resposta || resposta.requestId !== requestId) return;
+      encerrar(resposta);
+    };
+    estado.timer = setTimeout(
+      () =>
+        encerrar({
+          requestId,
+          ok: false,
+          novo: false,
+          error: TEXTO_SEM_RESPOSTA,
+        }),
+      timeoutMs
+    );
+    cancelar = () => encerrar(null);
+    window.addEventListener('message', estado.ouvir);
+    window.parent.postMessage(
+      buildNaoReceberCampanhasMessage({
+        contact: { phone_number: telefone },
+        requestId,
+      }),
+      window.location.origin
+    );
+  });
+  return { requestId, promessa, cancelar: () => cancelar() };
+};

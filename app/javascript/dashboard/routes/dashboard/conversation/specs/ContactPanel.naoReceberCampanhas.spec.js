@@ -274,12 +274,16 @@ describe('ContactPanel: botão Não receber campanhas de WhatsApp', () => {
     expect(painel.find('[role="alert"]').exists()).toBe(false);
   });
 
-  it('depois de desmontar, o painel não escuta mais o CRM', async () => {
+  it('desmontar com pedido em andamento solta o ouvinte (sem vazamento)', async () => {
+    const adicionar = vi.spyOn(window, 'addEventListener');
     const remover = vi.spyOn(window, 'removeEventListener');
     const painel = montar({ conversationId: 321 });
-    painel.unmount();
+    await pedirEConfirmar(painel);
+    expect(adicionar.mock.calls.some(c => c[0] === 'message')).toBe(true);
 
+    painel.unmount();
     expect(remover.mock.calls.some(c => c[0] === 'message')).toBe(true);
+    adicionar.mockRestore();
     remover.mockRestore();
   });
 });
