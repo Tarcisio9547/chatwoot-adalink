@@ -25,12 +25,8 @@ import LinearIssuesList from 'dashboard/components/widgets/conversation/linear/I
 import LinearSetupCTA from 'dashboard/components/widgets/conversation/linear/LinearSetupCTA.vue';
 import { buildCriarNegocioMessage } from './helpers/criarNegocioMessage';
 import {
-  buildNaoReceberCampanhasMessage,
-  lerRespostaNaoReceberCampanhas,
-  NAO_RECEBER_TIMEOUT_MS,
-  novoRequestId,
   podeNaoReceberCampanhas,
-  TEXTO_SEM_RESPOSTA,
+  solicitarNaoReceberCampanhas,
 } from './helpers/naoReceberCampanhasMessage';
 
 const props = defineProps({
@@ -146,19 +142,18 @@ const criarNegocio = () => {
 };
 
 // Adalink: "Não receber campanhas de WhatsApp". O CRM (Atendimento.tsx) descadastra o telefone
-// das campanhas de WhatsApp e responde 'trama-nao-receber-campanhas-done'.
+// das campanhas de WhatsApp. O pedido, a resposta pareada (requestId) e o timeout ficam em
+// solicitarNaoReceberCampanhas, a mesma função do item do menu de clique direito.
 // Etapas: null (botão) -> 'confirmando' -> 'enviando' -> 'feito' | 'erro'.
 const naoReceberEtapa = ref(null);
 const naoReceberMensagem = ref('');
 const podeNaoReceber = computed(() => podeNaoReceberCampanhas(contact.value));
-// Pedido em andamento: a resposta só vale se trouxer este mesmo requestId.
-let naoReceberPedidoId = null;
-let naoReceberTimer = null;
+// Pedido em andamento (para cancelar ao trocar de contato ou desmontar).
+let naoReceberPedido = null;
 
 const limparNaoReceberPedido = () => {
-  naoReceberPedidoId = null;
-  clearTimeout(naoReceberTimer);
-  naoReceberTimer = null;
+  naoReceberPedido?.cancelar();
+  naoReceberPedido = null;
 };
 
 const pedirNaoReceber = () => {
@@ -171,33 +166,17 @@ const cancelarNaoReceber = () => {
   naoReceberEtapa.value = null;
 };
 
-const confirmarNaoReceber = () => {
+const confirmarNaoReceber = async () => {
   if (!podeNaoReceber.value || naoReceberEtapa.value !== 'confirmando') return;
   naoReceberEtapa.value = 'enviando';
-  const requestId = novoRequestId();
-  naoReceberPedidoId = requestId;
-  naoReceberTimer = setTimeout(() => {
-    if (naoReceberPedidoId !== requestId) return;
-    limparNaoReceberPedido();
-    naoReceberMensagem.value = TEXTO_SEM_RESPOSTA;
-    naoReceberEtapa.value = 'erro';
-  }, NAO_RECEBER_TIMEOUT_MS);
-  window.parent.postMessage(
-    buildNaoReceberCampanhasMessage({ contact: contact.value, requestId }),
-    window.location.origin
-  );
-};
-
-const aoReceberResposta = event => {
-  // Só a janela do CRM (pai), no mesmo origin, e só enquanto esperamos.
-  if (event.origin !== window.location.origin) return;
-  if (event.source !== window.parent) return;
-  if (naoReceberEtapa.value !== 'enviando') return;
-  const resposta = lerRespostaNaoReceberCampanhas(event.data);
-  if (!resposta) return;
-  // Resposta de outro pedido (contato anterior, clique antigo) não vale.
-  if (!naoReceberPedidoId || resposta.requestId !== naoReceberPedidoId) return;
-  limparNaoReceberPedido();
+  const pedido = solicitarNaoReceberCampanhas({
+    telefone: contact.value.phone_number,
+  });
+  naoReceberPedido = pedido;
+  const resposta = await pedido.promessa;
+  // Cancelado (trocou de contato, desmontou) ou já existe um pedido mais novo.
+  if (!resposta || naoReceberPedido !== pedido) return;
+  naoReceberPedido = null;
   if (resposta.ok) {
     naoReceberMensagem.value = resposta.novo
       ? 'Pronto: este número não recebe mais campanhas.'
@@ -217,7 +196,6 @@ watch(contactId, () => {
 });
 
 onMounted(() => {
-  window.addEventListener('message', aoReceberResposta);
   conversationSidebarItems.value = conversationSidebarItemsOrder.value;
   getContactDetails();
   store.dispatch('attributes/get', 0);
@@ -227,7 +205,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   limparNaoReceberPedido();
-  window.removeEventListener('message', aoReceberResposta);
 });
 </script>
 
@@ -270,14 +247,14 @@ onBeforeUnmount(() => {
     >
       <button
         v-if="!naoReceberEtapa || naoReceberEtapa === 'erro'"
-        class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-n-weak text-n-slate-12 hover:bg-n-alpha-2 transition-all"
+        class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-[rgb(124,58,237)] text-[rgb(124,58,237)] bg-transparent hover:bg-[rgba(124,58,237,0.1)] transition-all"
         @click="pedirNaoReceber"
       >
         Não receber campanhas de WhatsApp
       </button>
       <div
         v-else-if="naoReceberEtapa === 'confirmando'"
-        class="rounded-lg border border-n-weak p-3 text-sm text-n-slate-12"
+        class="rounded-lg border border-[rgb(203,213,225)] p-3 text-sm text-[rgb(51,65,85)]"
       >
         <p class="m-0 mb-2">
           Este número deixa de receber campanhas de WhatsApp (a fila de ligação
@@ -292,7 +269,7 @@ onBeforeUnmount(() => {
             Sim, tirar
           </button>
           <button
-            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium border border-n-weak hover:bg-n-alpha-2"
+            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium border border-[rgb(203,213,225)] text-[rgb(51,65,85)] hover:bg-[rgb(241,245,249)]"
             @click="cancelarNaoReceber"
           >
             Cancelar
@@ -301,20 +278,20 @@ onBeforeUnmount(() => {
       </div>
       <p
         v-else-if="naoReceberEtapa === 'enviando'"
-        class="m-0 text-sm text-n-slate-11 text-center"
+        class="m-0 text-sm text-[rgb(100,116,139)] text-center"
       >
         Tirando o número das campanhas...
       </p>
       <p
         v-else-if="naoReceberEtapa === 'feito'"
-        class="m-0 text-sm text-n-slate-12 text-center"
+        class="m-0 text-sm text-[rgb(21,128,61)] text-center"
         role="status"
       >
         {{ naoReceberMensagem }}
       </p>
       <p
         v-if="naoReceberEtapa === 'erro'"
-        class="m-0 mt-2 text-sm text-n-ruby-11 text-center"
+        class="m-0 mt-2 text-sm text-[rgb(185,28,28)] text-center"
         role="alert"
       >
         {{ naoReceberMensagem }}

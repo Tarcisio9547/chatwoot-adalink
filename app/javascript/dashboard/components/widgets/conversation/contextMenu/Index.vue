@@ -11,6 +11,7 @@ import MenuItem from './menuItem.vue';
 import MenuItemWithSubmenu from './menuItemWithSubmenu.vue';
 import wootConstants from 'dashboard/constants/globals';
 import AgentLoadingPlaceholder from './agentLoadingPlaceholder.vue';
+import { solicitarNaoReceberCampanhas } from 'dashboard/routes/dashboard/conversation/helpers/naoReceberCampanhasMessage';
 
 const MENU = {
   MARK_AS_READ: 'mark-as-read',
@@ -24,6 +25,7 @@ const MENU = {
   DELETE: 'delete',
   OPEN_NEW_TAB: 'open-new-tab',
   COPY_LINK: 'copy-link',
+  NAO_RECEBER_CAMPANHAS: 'nao-receber-campanhas',
 };
 
 export default {
@@ -64,6 +66,11 @@ export default {
     allowedOptions: {
       type: Array,
       default: () => [],
+    },
+    // Adalink: telefone do contato da conversa (item "Não receber campanhas").
+    phoneNumber: {
+      type: String,
+      default: '',
     },
   },
   emits: [
@@ -175,6 +182,9 @@ export default {
         icon: 'copy',
         label: this.$t('CONVERSATION.CARD_CONTEXT_MENU.COPY_LINK'),
       },
+      // Adalink: tirar o telefone das campanhas de WhatsApp. Dois cliques (o 1º pede confirmação).
+      confirmandoNaoReceber: false,
+      enviandoNaoReceber: false,
     };
   },
   computed: {
@@ -212,6 +222,13 @@ export default {
         ...this.filteredAgentOnAvailability,
       ];
     },
+    naoReceberOption() {
+      let label = 'Não receber campanhas de WhatsApp';
+      if (this.enviandoNaoReceber) label = 'Tirando das campanhas...';
+      else if (this.confirmandoNaoReceber)
+        label = 'Clique de novo para confirmar';
+      return { key: MENU.NAO_RECEBER_CAMPANHAS, icon: 'speaker-mute', label };
+    },
     showSnooze() {
       // Don't show snooze if the conversation is already snoozed/resolved/pending
       return this.status === wootConstants.STATUS_TYPE.OPEN;
@@ -244,6 +261,29 @@ export default {
 
       const url = `${window.chatwootConfig.hostURL}${this.conversationUrl}`;
       window.open(url, '_blank', 'noopener,noreferrer');
+      this.$emit('close');
+    },
+    textoResultadoNaoReceber(resposta) {
+      if (!resposta.ok) return resposta.error;
+      if (resposta.novo) {
+        return 'Pronto: este número não recebe mais campanhas de WhatsApp.';
+      }
+      return 'Este número já estava fora das campanhas.';
+    },
+    async naoReceberCampanhas() {
+      if (this.enviandoNaoReceber) return;
+      if (!this.confirmandoNaoReceber) {
+        this.confirmandoNaoReceber = true;
+        return;
+      }
+      this.enviandoNaoReceber = true;
+      const { promessa } = solicitarNaoReceberCampanhas({
+        telefone: this.phoneNumber,
+      });
+      const resposta = await promessa;
+      this.enviandoNaoReceber = false;
+      if (!resposta) return;
+      useAlert(this.textoResultadoNaoReceber(resposta));
       this.$emit('close');
     },
     async copyConversationLink() {
@@ -393,6 +433,14 @@ export default {
         :option="copyLinkOption"
         variant="icon"
         @click.stop="copyConversationLink"
+      />
+    </template>
+    <template v-if="phoneNumber && isAllowed([MENU.NAO_RECEBER_CAMPANHAS])">
+      <hr class="m-1 rounded border-b border-n-weak dark:border-n-weak" />
+      <MenuItem
+        :option="naoReceberOption"
+        variant="icon"
+        @click.stop="naoReceberCampanhas"
       />
     </template>
     <template v-if="isAdmin && isAllowed([MENU.DELETE])">

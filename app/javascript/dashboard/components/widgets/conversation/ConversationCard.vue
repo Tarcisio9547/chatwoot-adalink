@@ -401,6 +401,7 @@ const deleteConversation = () => {
         :conversation-labels="chat.labels"
         :conversation-url="conversationPath"
         :allowed-options="allowedContextMenuOptions"
+        :phone-number="chat.meta?.sender?.phone_number || ''"
         @update-conversation="onUpdateConversation"
         @assign-agent="onAssignAgent"
         @assign-label="onAssignLabel"

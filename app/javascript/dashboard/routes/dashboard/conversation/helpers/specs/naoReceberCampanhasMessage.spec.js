@@ -3,7 +3,9 @@ import {
   lerRespostaNaoReceberCampanhas,
   novoRequestId,
   podeNaoReceberCampanhas,
+  solicitarNaoReceberCampanhas,
   TEXTO_ERRO_PADRAO,
+  TEXTO_SEM_RESPOSTA,
 } from '../naoReceberCampanhasMessage';
 
 describe('#buildNaoReceberCampanhasMessage', () => {
@@ -124,5 +126,111 @@ describe('#lerRespostaNaoReceberCampanhas', () => {
       {},
       { type: 'trama-ignorar-contato-done', ok: true },
     ].forEach(data => expect(lerRespostaNaoReceberCampanhas(data)).toBeNull());
+  });
+});
+
+describe('#solicitarNaoReceberCampanhas', () => {
+  let postMessage;
+  const RESPOSTA = 'trama-nao-receber-campanhas-done';
+  const enviar = (data, extra = {}) =>
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data,
+        origin: window.location.origin,
+        source: window.parent,
+        ...extra,
+      })
+    );
+
+  beforeEach(() => {
+    postMessage = vi
+      .spyOn(window.parent, 'postMessage')
+      .mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    postMessage.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it('manda telefone e requestId ao CRM, só para o mesmo origin', () => {
+    const { requestId } = solicitarNaoReceberCampanhas({
+      telefone: '+5547991140001',
+    });
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        type: 'trama-nao-receber-campanhas',
+        telefone: '+5547991140001',
+        requestId,
+      },
+      window.location.origin
+    );
+  });
+
+  it('resolve com a resposta do MESMO pedido', async () => {
+    const { requestId, promessa } = solicitarNaoReceberCampanhas({
+      telefone: '+5547991140001',
+    });
+    enviar({ type: RESPOSTA, requestId, ok: true, novo: true });
+    expect(await promessa).toEqual({
+      requestId,
+      ok: true,
+      novo: true,
+      error: '',
+    });
+  });
+
+  it('ignora resposta de outro pedido, outro origin ou outra janela', async () => {
+    vi.useFakeTimers();
+    const { requestId, promessa } = solicitarNaoReceberCampanhas({
+      telefone: '+5547991140001',
+    });
+    const ok = { type: RESPOSTA, requestId, ok: true, novo: true };
+    enviar({ ...ok, requestId: 'de-outro' });
+    enviar(ok, { origin: 'https://site-malicioso.example' });
+    enviar(ok, { source: null });
+    // nenhuma valeu: só o timeout encerra
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(await promessa).toMatchObject({
+      ok: false,
+      error: TEXTO_SEM_RESPOSTA,
+    });
+  });
+
+  it('sem resposta no prazo: ok=false com o texto de "CRM não respondeu"', async () => {
+    vi.useFakeTimers();
+    const { promessa } = solicitarNaoReceberCampanhas({
+      telefone: '+55',
+      timeoutMs: 500,
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await promessa).toMatchObject({
+      ok: false,
+      novo: false,
+      error: TEXTO_SEM_RESPOSTA,
+    });
+  });
+
+  it('cancelar solta o ouvinte e resolve com null; resposta tardia não faz nada', async () => {
+    const remover = vi.spyOn(window, 'removeEventListener');
+    const { requestId, promessa, cancelar } = solicitarNaoReceberCampanhas({
+      telefone: '+5547991140001',
+    });
+    cancelar();
+    expect(await promessa).toBeNull();
+    expect(remover.mock.calls.some(c => c[0] === 'message')).toBe(true);
+    enviar({ type: RESPOSTA, requestId, ok: true, novo: true });
+    remover.mockRestore();
+  });
+
+  it('depois de resolvida, solta o ouvinte (não acumula ouvintes a cada clique)', async () => {
+    const remover = vi.spyOn(window, 'removeEventListener');
+    const { requestId, promessa } = solicitarNaoReceberCampanhas({
+      telefone: '+5547991140001',
+    });
+    enviar({ type: RESPOSTA, requestId, ok: true });
+    await promessa;
+    expect(remover.mock.calls.filter(c => c[0] === 'message')).toHaveLength(1);
+    remover.mockRestore();
   });
 });
