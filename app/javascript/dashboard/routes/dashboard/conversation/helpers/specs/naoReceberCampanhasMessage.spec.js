@@ -1,20 +1,31 @@
 import {
   buildNaoReceberCampanhasMessage,
   lerRespostaNaoReceberCampanhas,
+  novoRequestId,
   podeNaoReceberCampanhas,
   TEXTO_ERRO_PADRAO,
 } from '../naoReceberCampanhasMessage';
 
 describe('#buildNaoReceberCampanhasMessage', () => {
-  it('monta o pedido com o telefone do contato, sem espaços nas pontas', () => {
+  it('monta o pedido com telefone (sem espaços nas pontas) e requestId', () => {
     expect(
       buildNaoReceberCampanhasMessage({
         contact: { id: 1, phone_number: ' +5547991140001 ' },
+        requestId: 'r-1',
       })
     ).toEqual({
       type: 'trama-nao-receber-campanhas',
       telefone: '+5547991140001',
+      requestId: 'r-1',
     });
+  });
+});
+
+describe('#novoRequestId', () => {
+  it('gera ids diferentes a cada chamada', () => {
+    const ids = new Set(Array.from({ length: 50 }, novoRequestId));
+    expect(ids.size).toBe(50);
+    ids.forEach(id => expect(id.length).toBeGreaterThan(8));
   });
 });
 
@@ -36,34 +47,47 @@ describe('#podeNaoReceberCampanhas', () => {
 });
 
 describe('#lerRespostaNaoReceberCampanhas', () => {
-  it('ok com novo=true: entrou agora na lista', () => {
+  it('ok com novo=true: entrou agora na lista, com o requestId do pedido', () => {
     expect(
       lerRespostaNaoReceberCampanhas({
         type: 'trama-nao-receber-campanhas-done',
+        requestId: 'r-1',
         ok: true,
         novo: true,
       })
-    ).toEqual({ ok: true, novo: true, error: '' });
+    ).toEqual({ requestId: 'r-1', ok: true, novo: true, error: '' });
   });
 
   it('ok com novo=false: já estava na lista', () => {
     expect(
       lerRespostaNaoReceberCampanhas({
         type: 'trama-nao-receber-campanhas-done',
+        requestId: 'r-1',
         ok: true,
         novo: false,
       })
-    ).toEqual({ ok: true, novo: false, error: '' });
+    ).toEqual({ requestId: 'r-1', ok: true, novo: false, error: '' });
+  });
+
+  it('resposta sem requestId volta com requestId vazio (o painel a descarta)', () => {
+    expect(
+      lerRespostaNaoReceberCampanhas({
+        type: 'trama-nao-receber-campanhas-done',
+        ok: true,
+      }).requestId
+    ).toBe('');
   });
 
   it('erro mostra o texto do CRM; sem texto, usa o padrão (nunca vazio)', () => {
     expect(
       lerRespostaNaoReceberCampanhas({
         type: 'trama-nao-receber-campanhas-done',
+        requestId: 'r-1',
         ok: false,
         error: 'Você não tem permissão para tirar este número das campanhas.',
       })
     ).toEqual({
+      requestId: 'r-1',
       ok: false,
       novo: false,
       error: 'Você não tem permissão para tirar este número das campanhas.',
