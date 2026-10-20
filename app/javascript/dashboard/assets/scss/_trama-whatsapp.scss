@@ -112,3 +112,169 @@
 .trama-lido {
   color: var(--trama-wa-lido);
 }
+
+/* lista */
+// Lista de conversas com cara de WhatsApp (protótipo aprovado em 19/10):
+// linhas de 74px, avatar 48px, hora/contagem verdes quando não lida, abas
+// sublinhadas e campo de busca cinza. Só aparência.
+
+:root {
+  --trama-wa-lista-fundo: #ffffff;
+  --trama-wa-lista-hover: #f5f6f6;
+  --trama-wa-lista-selecionada: #f0f2f5;
+  --trama-wa-lista-divisoria: #e9edef;
+  --trama-wa-lista-campo: #f0f2f5;
+  --trama-wa-lista-texto: #111b21;
+  --trama-wa-lista-texto2: #667781;
+  --trama-wa-lista-acento: #00a884;
+  --trama-wa-lista-acento-texto: #008069;
+}
+
+.dark {
+  --trama-wa-lista-fundo: #111b21;
+  --trama-wa-lista-hover: #202c33;
+  --trama-wa-lista-selecionada: #2a3942;
+  --trama-wa-lista-divisoria: #222d34;
+  --trama-wa-lista-campo: #202c33;
+  --trama-wa-lista-texto: #e9edef;
+  --trama-wa-lista-texto2: #8696a0;
+  --trama-wa-lista-acento: #00a884;
+  --trama-wa-lista-acento-texto: #00a884;
+}
+
+.trama-lista {
+  background-color: var(--trama-wa-lista-fundo);
+  color: var(--trama-wa-lista-texto);
+}
+
+// Cabeçalho: título "Conversas" + status ("Abertas ⌄") como texto
+.trama-lista-topo--com-filtro {
+  border-bottom: 1px solid var(--trama-wa-lista-divisoria);
+}
+
+.trama-lista-titulo {
+  color: var(--trama-wa-lista-texto);
+}
+
+.trama-lista-contagem {
+  color: var(--trama-wa-lista-texto2);
+}
+
+.trama-lista-status {
+  color: var(--trama-wa-lista-texto2);
+
+  &:hover {
+    background-color: var(--trama-wa-lista-hover);
+  }
+}
+
+// Campo de busca
+.trama-lista-busca-campo {
+  background-color: var(--trama-wa-lista-campo);
+  color: var(--trama-wa-lista-texto);
+  outline: none;
+  box-shadow: none;
+
+  &::placeholder {
+    color: var(--trama-wa-lista-texto2);
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--trama-wa-lista-acento);
+    outline-offset: 0;
+  }
+}
+
+.trama-lista-busca-icone {
+  color: var(--trama-wa-lista-texto2);
+}
+
+// Abas sublinhadas (Minhas / Sem responsável / Todas)
+.trama-lista-abas {
+  border-bottom: 1px solid var(--trama-wa-lista-divisoria);
+  scrollbar-width: none;
+}
+
+.trama-lista-aba {
+  color: var(--trama-wa-lista-texto2);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+
+  &:hover {
+    color: var(--trama-wa-lista-texto);
+  }
+
+  &.trama-lista-aba--ativa {
+    color: var(--trama-wa-lista-acento-texto);
+    border-bottom-color: var(--trama-wa-lista-acento);
+  }
+}
+
+// Linha da conversa
+.trama-lista-linha {
+  min-height: 74px;
+
+  &:hover {
+    background-color: var(--trama-wa-lista-hover);
+  }
+
+  &.trama-lista-linha--ativa,
+  &.trama-lista-linha--selecionada {
+    background-color: var(--trama-wa-lista-selecionada);
+  }
+
+  // Divisória fina começando depois do avatar; some no hover e na selecionada
+  .trama-lista-corpo {
+    border-bottom: 1px solid var(--trama-wa-lista-divisoria);
+  }
+
+  &:hover .trama-lista-corpo,
+  &.trama-lista-linha--ativa .trama-lista-corpo {
+    border-bottom-color: transparent;
+  }
+
+  &.trama-lista-linha--compacta {
+    min-height: 0;
+  }
+}
+
+.trama-lista-nome {
+  font-size: 16px;
+  line-height: 21px;
+  color: var(--trama-wa-lista-texto);
+}
+
+.trama-lista-hora > div,
+.trama-lista-hora > div:hover {
+  margin-left: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--trama-wa-lista-texto2);
+}
+
+.trama-lista-linha--nao-lida .trama-lista-hora > div {
+  color: var(--trama-wa-lista-acento-texto);
+  font-weight: 600;
+}
+
+.trama-lista-previa {
+  font-size: 14px;
+  line-height: 20px;
+  height: 20px;
+  color: var(--trama-wa-lista-texto2);
+}
+
+.trama-lista-contador {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background-color: var(--trama-wa-lista-acento);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+}

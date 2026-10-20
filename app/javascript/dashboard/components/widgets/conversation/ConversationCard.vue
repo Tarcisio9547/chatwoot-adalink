@@ -22,7 +22,6 @@ const props = defineProps({
   hideThumbnail: { type: Boolean, default: false },
   teamId: { type: [String, Number], default: 0 },
   foldersId: { type: [String, Number], default: 0 },
-  showAssignee: { type: Boolean, default: false },
   conversationType: { type: String, default: '' },
   selected: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
@@ -73,8 +72,6 @@ const accountId = useMapGetter('getCurrentAccountId');
 
 const chatMetadata = computed(() => props.chat.meta || {});
 
-const assignee = computed(() => chatMetadata.value.assignee || {});
-
 const senderId = computed(() => chatMetadata.value.sender?.id);
 
 const currentContact = computed(() => {
@@ -114,26 +111,18 @@ const showInboxName = computed(() => {
   );
 });
 
-const showMetaSection = computed(() => {
-  return (
-    showInboxName.value ||
-    (props.showAssignee && assignee.value.name) ||
-    props.chat.priority
-  );
+// Trama (lista com cara de WhatsApp): o nome da caixa e o responsável saíram
+// do cartão da lista principal (aparecem no cabeçalho da conversa). No modo
+// compacto (conversas anteriores no painel do contato) a caixa continua
+// aparecendo, porque lá não há outro lugar que diga de qual caixa ela é.
+const showCompactInboxName = computed(() => {
+  return props.compact && showInboxName.value;
 });
 
 const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
 
 const showLabelsSection = computed(() => {
   return props.chat.labels?.length > 0 || hasSlaPolicyId.value;
-});
-
-const messagePreviewClass = computed(() => {
-  return [
-    hasUnread.value ? 'font-medium text-n-slate-12' : 'text-n-slate-11',
-    !props.compact && hasUnread.value ? 'ltr:pr-4 rtl:pl-4' : '',
-    props.compact && hasUnread.value ? 'ltr:pr-6 rtl:pl-6' : '',
-  ];
 });
 
 const conversationPath = computed(() => {
@@ -249,28 +238,29 @@ const deleteConversation = () => {
 
 <template>
   <div
-    class="relative flex items-start flex-grow-0 flex-shrink-0 w-auto max-w-full py-0 border-t-0 border-b-0 border-l-0 border-r-0 border-transparent border-solid cursor-pointer conversation hover:bg-n-alpha-1 dark:hover:bg-n-alpha-3 group"
+    class="trama-lista-linha relative flex items-center w-full max-w-full cursor-pointer conversation group"
     :class="{
-      'active animate-card-select bg-n-background border-n-weak': isActiveChat,
-      'bg-n-slate-2': selected,
-      'px-0': compact,
-      'px-3': !compact,
+      'active animate-card-select trama-lista-linha--ativa': isActiveChat,
+      'trama-lista-linha--selecionada': selected,
+      'trama-lista-linha--nao-lida': hasUnread,
+      'trama-lista-linha--compacta': compact,
+      'ltr:pl-3.5 rtl:pr-3.5': !hideThumbnail,
+      'ltr:pl-2 rtl:pr-2': hideThumbnail,
     }"
     @click="onCardClick"
     @contextmenu="openContextMenu($event)"
   >
     <div
-      class="relative"
+      v-if="!hideThumbnail"
+      class="relative flex-shrink-0"
       @mouseenter="onThumbnailHover"
       @mouseleave="onThumbnailLeave"
     >
       <Avatar
-        v-if="!hideThumbnail"
         :name="currentContact.name"
         :src="currentContact.thumbnail"
-        :size="32"
+        :size="48"
         :status="currentContact.availability_status"
-        :class="!showInboxName ? 'mt-4' : 'mt-8'"
         hide-offline-status
         rounded-full
       >
@@ -293,93 +283,70 @@ const deleteConversation = () => {
       </Avatar>
     </div>
     <div
-      class="px-0 py-3 border-b group-hover:border-transparent flex-1 border-n-slate-3 min-w-0"
+      class="trama-lista-corpo flex flex-col justify-center flex-1 min-w-0 self-stretch py-3 ltr:pr-4 rtl:pl-4"
+      :class="{ 'ltr:ml-3.5 rtl:mr-3.5': !hideThumbnail }"
     >
-      <div
-        v-if="showMetaSection"
-        class="flex items-center min-w-0 gap-1"
-        :class="{
-          'ltr:ml-2 rtl:mr-2': !compact,
-          'mx-2': compact,
-        }"
-      >
-        <InboxName v-if="showInboxName" :inbox="inbox" class="flex-1 min-w-0" />
-        <div
-          class="flex items-baseline gap-2 flex-shrink-0"
-          :class="{
-            'flex-1 justify-between': !showInboxName,
-          }"
+      <InboxName
+        v-if="showCompactInboxName"
+        :inbox="inbox"
+        class="min-w-0 mb-0.5"
+      />
+      <div class="flex items-center min-w-0 gap-1.5">
+        <h4
+          class="conversation--user trama-lista-nome flex-1 min-w-0 my-0 capitalize text-ellipsis overflow-hidden whitespace-nowrap"
+          :class="hasUnread ? 'font-semibold' : 'font-normal'"
         >
-          <span
-            v-if="showAssignee && assignee.name"
-            class="text-n-slate-11 text-xs font-medium leading-3 py-0.5 px-0 inline-flex items-center truncate"
-          >
-            <fluent-icon icon="person" size="12" class="text-n-slate-11" />
-            {{ assignee.name }}
-          </span>
-          <CardPriorityIcon
-            :priority="chat.priority"
-            class="flex-shrink-0 !size-3.5"
-          />
-        </div>
-      </div>
-      <h4
-        class="conversation--user text-sm my-0 mx-2 capitalize pt-0.5 text-ellipsis overflow-hidden whitespace-nowrap flex-1 min-w-0 ltr:pr-16 rtl:pl-16 text-n-slate-12"
-        :class="hasUnread ? 'font-semibold' : 'font-medium'"
-      >
-        {{ currentContact.name }}
-      </h4>
-      <VoiceCallStatus
-        v-if="voiceCallData.status"
-        key="voice-status-row"
-        :status="voiceCallData.status"
-        :direction="voiceCallData.direction"
-        :message-preview-class="messagePreviewClass"
-      />
-      <MessagePreview
-        v-else-if="lastMessageInChat"
-        key="message-preview"
-        :message="lastMessageInChat"
-        class="my-0 mx-2 leading-6 h-6 flex-1 min-w-0 text-sm"
-        :class="messagePreviewClass"
-      />
-      <p
-        v-else
-        key="no-messages"
-        class="text-n-slate-11 text-sm my-0 mx-2 leading-6 h-6 flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
-        :class="messagePreviewClass"
-      >
-        <fluent-icon
-          size="16"
-          class="-mt-0.5 align-middle inline-block text-n-slate-10"
-          icon="info"
+          {{ currentContact.name }}
+        </h4>
+        <CardPriorityIcon
+          :priority="chat.priority"
+          class="flex-shrink-0 !size-3.5"
         />
-        <span class="mx-0.5">
-          {{ $t(`CHAT_LIST.NO_MESSAGES`) }}
-        </span>
-      </p>
-      <div
-        class="absolute flex flex-col ltr:right-3 rtl:left-3"
-        :class="showMetaSection ? 'top-8' : 'top-4'"
-      >
-        <span class="ml-auto font-normal leading-4 text-xxs">
+        <span class="trama-lista-hora flex-shrink-0">
           <TimeAgo
             :last-activity-timestamp="chat.timestamp"
             :created-at-timestamp="chat.created_at"
             :conversation-id="chat.id"
+            :show-created-at="false"
           />
         </span>
-        <span
-          class="shadow-lg rounded-full text-xxs font-semibold h-4 leading-4 ltr:ml-auto rtl:mr-auto mt-1 min-w-[1rem] px-1 py-0 text-center text-white bg-n-teal-9"
-          :class="hasUnread ? 'block' : 'hidden'"
+      </div>
+      <div class="flex items-center min-w-0 gap-1.5 mt-0.5">
+        <VoiceCallStatus
+          v-if="voiceCallData.status"
+          key="voice-status-row"
+          :status="voiceCallData.status"
+          :direction="voiceCallData.direction"
+          message-preview-class="trama-lista-previa !m-0"
+        />
+        <MessagePreview
+          v-else-if="lastMessageInChat"
+          key="message-preview"
+          :message="lastMessageInChat"
+          class="trama-lista-previa flex-1 min-w-0 my-0"
+        />
+        <p
+          v-else
+          key="no-messages"
+          class="trama-lista-previa flex-1 min-w-0 my-0 overflow-hidden text-ellipsis whitespace-nowrap"
         >
-          {{ unreadCount > 9 ? '9+' : unreadCount }}
+          <fluent-icon
+            size="16"
+            class="-mt-0.5 align-middle inline-block"
+            icon="info"
+          />
+          <span class="mx-0.5">
+            {{ $t(`CHAT_LIST.NO_MESSAGES`) }}
+          </span>
+        </p>
+        <span v-if="hasUnread" class="trama-lista-contador flex-shrink-0">
+          {{ unreadCount > 99 ? '99+' : unreadCount }}
         </span>
       </div>
       <CardLabels
         v-if="showLabelsSection"
         :conversation-labels="chat.labels"
-        class="mt-0.5 mx-2 mb-0"
+        class="trama-lista-etiquetas mt-1 mb-0"
       >
         <template v-if="hasSlaPolicyId" #before>
           <SLACardLabel :chat="chat" class="ltr:mr-1 rtl:ml-1" />

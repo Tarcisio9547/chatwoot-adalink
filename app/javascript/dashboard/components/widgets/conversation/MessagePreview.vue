@@ -2,9 +2,12 @@
 import { MESSAGE_TYPE } from 'widget/helpers/constants';
 import { useMessageFormatter } from 'shared/composables/useMessageFormatter';
 import { ATTACHMENT_ICONS } from 'shared/constants/messages';
+import { MESSAGE_STATUS } from 'dashboard/components-next/message/constants';
+import Icon from 'dashboard/components-next/icon/Icon.vue';
 
 export default {
   name: 'MessagePreview',
+  components: { Icon },
   props: {
     message: {
       type: Object,
@@ -53,6 +56,22 @@ export default {
     attachmentMessageContent() {
       return `CHAT_LIST.ATTACHMENTS.${this.lastMessageFileType}.CONTENT`;
     },
+    // Trama: na lista, a última mensagem enviada por nós mostra ✓ (enviada),
+    // ✓✓ (entregue) ou ✓✓ azul (lida), como no WhatsApp. Sem status conhecido
+    // (ex.: e-mail, falha), fica a seta de resposta de antes.
+    deliveryStatusIcon() {
+      const icons = {
+        [MESSAGE_STATUS.SENT]: 'i-lucide-check',
+        [MESSAGE_STATUS.DELIVERED]: 'i-lucide-check-check',
+        [MESSAGE_STATUS.READ]: 'i-lucide-check-check',
+      };
+      return icons[this.message.status] || '';
+    },
+    deliveryStatusClass() {
+      return this.message.status === MESSAGE_STATUS.READ
+        ? 'trama-lido'
+        : 'text-n-slate-11';
+    },
     isMessageSticker() {
       return this.message && this.message.content_type === 'sticker';
     },
@@ -68,6 +87,12 @@ export default {
         size="16"
         class="-mt-0.5 align-middle text-n-slate-11 inline-block"
         icon="lock-closed"
+      />
+      <Icon
+        v-else-if="messageByAgent && deliveryStatusIcon"
+        :icon="deliveryStatusIcon"
+        class="inline-block -mt-0.5 align-middle size-4 ltr:mr-0.5 rtl:ml-0.5"
+        :class="deliveryStatusClass"
       />
       <fluent-icon
         v-else-if="messageByAgent"

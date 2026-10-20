@@ -19,6 +19,7 @@ import {
 
 import { Virtualizer } from 'virtua/vue';
 import ChatListHeader from './ChatListHeader.vue';
+import ChatListSearch from './ChatListSearch.vue';
 import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import ConversationFilter from 'next/filter/ConversationFilter.vue';
 import SaveCustomView from 'next/filter/SaveCustomView.vue';
@@ -202,13 +203,6 @@ const assigneeTabItems = computed(() => {
     name: t(`CHAT_LIST.ASSIGNEE_TYPE_TABS.${key}`),
     count: conversationStats.value[countKey] || 0,
   }));
-});
-
-const showAssigneeInConversationCard = computed(() => {
-  return (
-    hasAppliedFiltersOrActiveFolders.value ||
-    activeAssigneeTab.value === wootConstants.ASSIGNEE_TYPE.ALL
-  );
 });
 
 const currentPageFilterKey = computed(() => {
@@ -878,7 +872,7 @@ watch(conversationFilters, (newVal, oldVal) => {
 
 <template>
   <div
-    class="flex flex-col flex-shrink-0 conversations-list-wrap bg-n-surface-1"
+    class="flex flex-col flex-shrink-0 conversations-list-wrap trama-lista"
     :class="[
       { hidden: !showConversationList },
       isOnExpandedLayout ? 'basis-full' : 'w-[340px] 2xl:w-[412px]',
@@ -889,7 +883,6 @@ watch(conversationFilters, (newVal, oldVal) => {
       :page-title="pageTitle"
       :has-applied-filters="hasAppliedFilters"
       :has-active-folders="hasActiveFolders"
-      :active-status="activeStatus"
       :is-on-expanded-layout="isOnExpandedLayout"
       :conversation-stats="conversationStats"
       :is-list-loading="chatListLoading && !conversationList.length"
@@ -921,11 +914,12 @@ watch(conversationFilters, (newVal, oldVal) => {
       @close="onCloseDeleteFoldersModal"
     />
 
+    <ChatListSearch />
+
     <ChatTypeTabs
       v-if="!hasAppliedFiltersOrActiveFolders"
       :items="assigneeTabItems"
       :active-tab="activeAssigneeTab"
-      is-compact
       @chat-tab-change="updateAssigneeTab"
     />
 
@@ -965,7 +959,6 @@ watch(conversationFilters, (newVal, oldVal) => {
           :team-id="teamId"
           :folders-id="foldersId"
           :conversation-type="conversationType"
-          :show-assignee="showAssigneeInConversationCard"
           :data-index="index"
           @select-conversation="selectConversation"
           @de-select-conversation="deSelectConversation"

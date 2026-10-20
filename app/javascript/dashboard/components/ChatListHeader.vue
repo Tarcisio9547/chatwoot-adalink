@@ -12,7 +12,6 @@ const props = defineProps({
   pageTitle: { type: String, required: true },
   hasAppliedFilters: { type: Boolean, required: true },
   hasActiveFolders: { type: Boolean, required: true },
-  activeStatus: { type: String, required: true },
   isOnExpandedLayout: { type: Boolean, required: true },
   conversationStats: { type: Object, required: true },
   isListLoading: { type: Boolean, required: true },
@@ -57,14 +56,14 @@ const toggleConversationLayout = () => {
 
 <template>
   <div
-    class="flex items-center justify-between gap-2 px-3 h-[3.25rem]"
+    class="trama-lista-topo flex items-center justify-between gap-2 h-[60px] ltr:pl-[18px] ltr:pr-3 rtl:pr-[18px] rtl:pl-3"
     :class="{
-      'border-b border-n-strong': hasAppliedFiltersOrActiveFolders,
+      'trama-lista-topo--com-filtro': hasAppliedFiltersOrActiveFolders,
     }"
   >
-    <div class="flex items-center justify-center min-w-0">
+    <div class="flex items-baseline min-w-0 gap-2">
       <h1
-        class="text-base font-medium truncate text-n-slate-12"
+        class="trama-lista-titulo my-0 font-sora text-[21px] font-bold tracking-[-0.01em] truncate"
         :title="pageTitle"
       >
         {{ pageTitle }}
@@ -73,16 +72,10 @@ const toggleConversationLayout = () => {
         v-if="
           allCount > 0 && hasAppliedFiltersOrActiveFolders && !isListLoading
         "
-        class="px-2 py-1 my-0.5 mx-1 rounded-md capitalize bg-n-slate-3 text-xxs text-n-slate-12 shrink-0"
+        class="trama-lista-contagem text-[12.5px] font-medium shrink-0"
         :title="allCount"
       >
         {{ formattedAllCount }}
-      </span>
-      <span
-        v-if="!hasAppliedFiltersOrActiveFolders"
-        class="px-2 py-1 my-0.5 mx-1 rounded-md capitalize bg-n-slate-3 text-xxs text-n-slate-12 shrink-0"
-      >
-        {{ $t(`CHAT_LIST.CHAT_STATUS_FILTER_ITEMS.${activeStatus}.TEXT`) }}
       </span>
     </div>
     <div class="flex items-center gap-1">
@@ -154,14 +147,15 @@ const toggleConversationLayout = () => {
           :class="{ 'ltr:right-0 rtl:left-0': isOnExpandedLayout }"
         />
       </div>
-      <ConversationBasicFilter
-        v-if="!hasAppliedFiltersOrActiveFolders"
-        :is-on-expanded-layout="isOnExpandedLayout"
-        @change-filter="onBasicFilterChange"
-      />
       <SwitchLayout
         :is-on-expanded-layout="isOnExpandedLayout"
         @toggle="toggleConversationLayout"
+      />
+      <ConversationBasicFilter
+        v-if="!hasAppliedFiltersOrActiveFolders"
+        :is-on-expanded-layout="isOnExpandedLayout"
+        show-status-trigger
+        @change-filter="onBasicFilterChange"
       />
     </div>
   </div>
