@@ -30,6 +30,11 @@ export default {
     },
     // Trama: a lista com cara de WhatsApp mostra só a última atividade; a data
     // de criação continua no tooltip.
+    // Trama: hora do relógio como no WhatsApp ("18:10", "Ontem", "19/10").
+    relogio: {
+      type: Boolean,
+      default: false,
+    },
     showCreatedAt: {
       type: Boolean,
       default: true,
@@ -73,6 +78,17 @@ export default {
           )} ${dateFormat(this.lastActivityTimestamp)}`;
     },
     displayText() {
+      if (this.relogio && this.lastActivityTimestamp) {
+        const d = new Date(this.lastActivityTimestamp * 1000);
+        const hoje = new Date();
+        const ontem = new Date();
+        ontem.setDate(hoje.getDate() - 1);
+        const mesmoDia = (x, y) => x.toDateString() === y.toDateString();
+        const p = n => String(n).padStart(2, '0');
+        if (mesmoDia(d, hoje)) return `${p(d.getHours())}:${p(d.getMinutes())}`;
+        if (mesmoDia(d, ontem)) return 'Ontem';
+        return `${p(d.getDate())}/${p(d.getMonth() + 1)}`;
+      }
       if (!this.showCreatedAt) return this.lastActivityTime;
       return `${this.createdAtTime} • ${this.lastActivityTime}`;
     },

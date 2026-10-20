@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import { messageTimestamp } from 'shared/helpers/timeHelper';
+import { fromUnixTime, isToday, isYesterday, format } from 'date-fns';
 
 import MessageStatus from './MessageStatus.vue';
 import Icon from 'next/icon/Icon.vue';
@@ -35,6 +36,16 @@ const {
 const readableTime = computed(() =>
   messageTimestamp(createdAt.value, 'LLL d, h:mm a')
 );
+
+// Trama: hora curta como no WhatsApp ("13:09"; "ontem 13:09"; "19/10 13:09").
+const horaCurta = computed(() => {
+  if (!createdAt.value) return '';
+  const data = fromUnixTime(createdAt.value);
+  const hora = format(data, 'HH:mm');
+  if (isToday(data)) return hora;
+  if (isYesterday(data)) return `ontem ${hora}`;
+  return `${format(data, 'dd/MM')} ${hora}`;
+});
 
 const showStatusIndicator = computed(() => {
   if (isPrivate.value) return false;
@@ -132,9 +143,9 @@ const statusToShow = computed(() => {
 </script>
 
 <template>
-  <div class="text-xs flex items-center gap-1.5">
+  <div class="trama-meta flex items-center gap-1">
     <div class="inline">
-      <time class="inline">{{ readableTime }}</time>
+      <time class="inline" :title="readableTime">{{ horaCurta }}</time>
     </div>
     <Icon v-if="isPrivate" icon="i-lucide-lock-keyhole" class="size-3" />
     <MessageStatus v-if="showStatusIndicator" :status="statusToShow" />

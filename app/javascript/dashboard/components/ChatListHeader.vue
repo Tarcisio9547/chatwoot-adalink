@@ -7,6 +7,9 @@ import wootConstants from 'dashboard/constants/globals';
 import ConversationBasicFilter from './widgets/conversation/ConversationBasicFilter.vue';
 import SwitchLayout from 'dashboard/routes/dashboard/conversation/search/SwitchLayout.vue';
 import NextButton from 'dashboard/components-next/button/Button.vue';
+import ComposeConversation from 'dashboard/components-next/NewConversation/ComposeConversation.vue';
+import { emitter } from 'shared/helpers/mitt';
+import { BUS_EVENTS } from 'shared/constants/busEvents';
 
 const props = defineProps({
   pageTitle: { type: String, required: true },
@@ -26,6 +29,23 @@ const emit = defineEmits([
 ]);
 
 const { uiSettings, updateUISettings } = useUISettings();
+
+// Trama: dentro do CRM o menu lateral do Chatwoot fica escondido (Dashboard.vue);
+// "nova conversa" e configurações passam para o topo da lista.
+const tramaEmbutido = (() => {
+  try {
+    return window.self !== window.top;
+  } catch (e) {
+    return true;
+  }
+})();
+const abrirNovaConversa = toggle => {
+  toggle();
+  emitter.emit(BUS_EVENTS.NEW_CONVERSATION_MODAL, true);
+};
+const fecharNovaConversa = () => {
+  emitter.emit(BUS_EVENTS.NEW_CONVERSATION_MODAL, false);
+};
 
 const onBasicFilterChange = (value, type) => {
   emit('basicFilterChange', value, type);
@@ -147,6 +167,27 @@ const toggleConversationLayout = () => {
           :class="{ 'ltr:right-0 rtl:left-0': isOnExpandedLayout }"
         />
       </div>
+      <template v-if="tramaEmbutido">
+        <ComposeConversation align-position="left" @close="fecharNovaConversa">
+          <template #trigger="{ toggle }">
+            <NextButton
+              v-tooltip.top-end="$t('CONVERSATION.TRAMA_LISTA.NOVA_CONVERSA')"
+              icon="i-lucide-pen-line"
+              slate
+              xs
+              faded
+              @click="abrirNovaConversa(toggle)"
+            />
+          </template>
+        </ComposeConversation>
+        <RouterLink
+          v-tooltip.top-end="$t('CONVERSATION.TRAMA_LISTA.CONFIGURACOES')"
+          :to="{ name: 'settings_home', params: $route.params }"
+          class="inline-flex items-center justify-center size-7 rounded-lg text-n-slate-11 hover:bg-n-alpha-2"
+        >
+          <span class="i-lucide-settings size-4" />
+        </RouterLink>
+      </template>
       <SwitchLayout
         :is-on-expanded-layout="isOnExpandedLayout"
         @toggle="toggleConversationLayout"

@@ -193,6 +193,7 @@ export default {
         :name="contact.name"
         :status="contact.availability_status"
         :size="120"
+        solido
         hide-offline-status
         rounded-full
       />
