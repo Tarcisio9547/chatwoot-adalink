@@ -167,8 +167,8 @@ export default {
           ghost
           :disabled="disabled || isEditorDisabled"
           :class="{
-            'text-n-violet-9 hover:enabled:!bg-n-violet-3': !showCopilotMenu,
-            'text-n-violet-9 bg-n-violet-3': showCopilotMenu,
+            'text-n-blue-9 hover:enabled:!bg-n-blue-3': !showCopilotMenu,
+            'text-n-blue-9 bg-n-blue-3': showCopilotMenu,
           }"
           sm
           icon="i-ph-sparkle-fill"
