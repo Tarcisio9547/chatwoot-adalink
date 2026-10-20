@@ -655,5 +655,21 @@
         "SEND": "Enviar ({keyCode})"
       }
     }
+  },
+  "TRAMA_CONTATO": {
+    "TITULO": "Dados do contato",
+    "FECHAR": "Fechar",
+    "SEM_RESPONSAVEL": "Sem responsável",
+    "COM_RESPONSAVEL": "Com {nome}",
+    "COM_VOCE": "Com você",
+    "ATRIBUIR_A_MIM": "Atribuir a mim",
+    "CRIAR_NEGOCIO": "Criar negócio",
+    "COPIAR_NUMERO": "Copiar número",
+    "COPIAR": "Copiar",
+    "RESPONSAVEL": "Responsável pelo atendimento",
+    "CONVERSAS_ANTERIORES": "Conversas anteriores",
+    "QTD_CONVERSAS": "{n} conversa(s)",
+    "MAIS_OPCOES": "Mais opções",
+    "MAIS_OPCOES_DICA": "Time, prioridade, etiquetas, macros, notas e atributos"
   }
 }

@@ -179,6 +179,7 @@ useEmitter(CMD_RESOLVE_CONVERSATION, onCmdResolveConversation);
       <Button
         v-if="isOpen"
         :label="t('CONVERSATION.HEADER.RESOLVE_ACTION')"
+        icon="i-lucide-circle-check"
         size="sm"
         color="slate"
         no-animation

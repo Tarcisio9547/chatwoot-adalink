@@ -657,5 +657,21 @@
         "SEND": "Send ({keyCode})"
       }
     }
+  },
+  "TRAMA_CONTATO": {
+    "TITULO": "Contact details",
+    "FECHAR": "Close",
+    "SEM_RESPONSAVEL": "Unassigned",
+    "COM_RESPONSAVEL": "With {nome}",
+    "COM_VOCE": "With you",
+    "ATRIBUIR_A_MIM": "Assign to me",
+    "CRIAR_NEGOCIO": "Create deal",
+    "COPIAR_NUMERO": "Copy number",
+    "COPIAR": "Copy",
+    "RESPONSAVEL": "Assigned agent",
+    "CONVERSAS_ANTERIORES": "Previous conversations",
+    "QTD_CONVERSAS": "{n} conversation(s)",
+    "MAIS_OPCOES": "More options",
+    "MAIS_OPCOES_DICA": "Team, priority, labels, macros, notes and attributes"
   }
 }

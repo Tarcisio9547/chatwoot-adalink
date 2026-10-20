@@ -20,10 +20,12 @@ import CustomAttributes from './customAttributes/CustomAttributes.vue';
 import Draggable from 'vuedraggable';
 import MacrosList from './Macros/List.vue';
 import ShopifyOrdersList from 'dashboard/components/widgets/conversation/ShopifyOrdersList.vue';
-import SidebarActionsHeader from 'dashboard/components-next/SidebarActionsHeader.vue';
 import LinearIssuesList from 'dashboard/components/widgets/conversation/linear/IssuesList.vue';
 import LinearSetupCTA from 'dashboard/components/widgets/conversation/linear/LinearSetupCTA.vue';
 import { buildCriarNegocioMessage } from './helpers/criarNegocioMessage';
+import { useTramaAtribuirAMim } from 'dashboard/composables/useTramaAtribuirAMim';
+import { useAlert } from 'dashboard/composables';
+import { copyTextToClipboard } from 'shared/helpers/clipboard';
 import {
   podeNaoReceberCampanhas,
   solicitarNaoReceberCampanhas,
@@ -146,6 +148,15 @@ const criarNegocio = () => {
 // solicitarNaoReceberCampanhas, a mesma função do item do menu de clique direito.
 // Etapas: null (botão) -> 'confirmando' -> 'enviando' -> 'feito' | 'erro'.
 const naoReceberEtapa = ref(null);
+// Textos do fluxo (pt-BR fixo do Trama, como as mensagens de resultado abaixo).
+const TEXTOS_NAO_RECEBER = Object.freeze({
+  botao: 'Não receber campanhas de WhatsApp',
+  confirmacao:
+    'Este número deixa de receber campanhas de WhatsApp (a fila de ligação não muda). Para voltar a receber, um administrador precisa reativar. Confirmar?',
+  confirmar: 'Sim, tirar das campanhas',
+  cancelar: 'Cancelar',
+  enviando: 'Tirando o número das campanhas...',
+});
 const naoReceberMensagem = ref('');
 const podeNaoReceber = computed(() => podeNaoReceberCampanhas(contact.value));
 // Pedido em andamento (para cancelar ao trocar de contato ou desmontar).
@@ -195,6 +206,35 @@ watch(contactId, () => {
   naoReceberMensagem.value = '';
 });
 
+// Trama: ações rápidas do perfil e blocos do painel (protótipo aprovado em 19/10).
+// "Atribuir a mim" usa as mesmas chamadas do botão de ConversationAction.
+const { souResponsavel, atribuirAMim } = useTramaAtribuirAMim();
+
+const copiarNumero = async mensagemSucesso => {
+  const telefone = contact.value?.phone_number;
+  if (!telefone) return;
+  await copyTextToClipboard(telefone);
+  useAlert(mensagemSucesso);
+};
+
+// Quantas conversas anteriores (só quando a lista já foi carregada).
+const contactConversationsGetter = useMapGetter(
+  'contactConversations/getContactConversation'
+);
+const qtdConversasAnteriores = computed(() => {
+  const getter = contactConversationsGetter.value;
+  if (typeof getter !== 'function' || !contactId.value) return 0;
+  const conversas = getter(contactId.value) || [];
+  return conversas.filter(c => c.id !== Number(props.conversationId)).length;
+});
+
+const conversasAnterioresAbertas = computed(() =>
+  isContactSidebarItemOpen('is_previous_conv_open')
+);
+const maisOpcoesAbertas = computed(() =>
+  isContactSidebarItemOpen('is_trama_mais_opcoes_open')
+);
+
 onMounted(() => {
   conversationSidebarItems.value = conversationSidebarItemsOrder.value;
   getContactDetails();
@@ -209,257 +249,351 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="w-full">
-    <SidebarActionsHeader
-      :title="$t('CONVERSATION.SIDEBAR.CONTACT')"
-      @close="closeContactPanel"
-    />
-    <ContactInfo :contact="contact" :channel-type="channelType" />
-
-    <!-- Adalink: Criar Negócio button -->
-    <div class="px-4 py-2">
+  <div class="w-full trama-contato">
+    <div class="trama-contato-h">
       <button
-        class="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium bg-[rgb(30,58,95)] text-white hover:bg-[rgb(22,49,82)] transition-all"
-        @click="criarNegocio"
+        type="button"
+        class="trama-ib"
+        :aria-label="$t('TRAMA_CONTATO.FECHAR')"
+        :title="$t('TRAMA_CONTATO.FECHAR')"
+        @click="closeContactPanel"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-        Criar Negócio
+        <span class="i-lucide-x size-5" aria-hidden="true" />
       </button>
+      <h3>{{ $t('TRAMA_CONTATO.TITULO') }}</h3>
+    </div>
+
+    <div class="trama-contato-blk trama-contato-perfil">
+      <ContactInfo :contact="contact" :channel-type="channelType" />
+
+      <div class="trama-contato-quick">
+        <!-- Adalink: Criar Negócio -->
+        <button
+          type="button"
+          class="trama-contato-qb is-marca"
+          data-testid="criar-negocio"
+          @click="criarNegocio"
+        >
+          <span class="i-lucide-briefcase size-5" aria-hidden="true" />
+          {{ $t('TRAMA_CONTATO.CRIAR_NEGOCIO') }}
+        </button>
+        <button
+          type="button"
+          class="trama-contato-qb"
+          data-testid="painel-atribuir-a-mim"
+          :disabled="souResponsavel"
+          @click="atribuirAMim($t('CONVERSATION.CHANGE_AGENT'))"
+        >
+          <span class="i-lucide-user size-5" aria-hidden="true" />
+          {{
+            souResponsavel
+              ? $t('TRAMA_CONTATO.COM_VOCE')
+              : $t('TRAMA_CONTATO.ATRIBUIR_A_MIM')
+          }}
+        </button>
+        <button
+          type="button"
+          class="trama-contato-qb"
+          data-testid="painel-copiar-numero"
+          :disabled="!contact.phone_number"
+          @click="copiarNumero($t('CONTACT_PANEL.COPY_SUCCESSFUL'))"
+        >
+          <span class="i-lucide-copy size-5" aria-hidden="true" />
+          {{ $t('TRAMA_CONTATO.COPIAR_NUMERO') }}
+        </button>
+      </div>
+    </div>
+
+    <div class="trama-contato-blk">
+      <h4>{{ $t('TRAMA_CONTATO.RESPONSAVEL') }}</h4>
+      <ConversationAction
+        :conversation-id="conversationId"
+        :inbox-id="inboxId"
+        secao="responsavel"
+      />
+    </div>
+
+    <div v-if="contact.id" class="trama-contato-blk">
+      <button
+        type="button"
+        class="trama-contato-li !py-0.5"
+        :aria-expanded="conversasAnterioresAbertas"
+        @click="toggleSidebarUIState('is_previous_conv_open')"
+      >
+        <span
+          class="i-lucide-history size-5 flex-shrink-0"
+          aria-hidden="true"
+        />
+        <span class="flex-1 min-w-0">
+          {{ $t('TRAMA_CONTATO.CONVERSAS_ANTERIORES') }}
+          <small v-if="qtdConversasAnteriores">
+            {{
+              $t('TRAMA_CONTATO.QTD_CONVERSAS', { n: qtdConversasAnteriores })
+            }}
+          </small>
+        </span>
+        <span
+          class="size-4 flex-shrink-0"
+          :class="
+            conversasAnterioresAbertas
+              ? 'i-lucide-chevron-up'
+              : 'i-lucide-chevron-down'
+          "
+          aria-hidden="true"
+        />
+      </button>
+      <div v-if="conversasAnterioresAbertas" class="mt-2 -mx-6">
+        <ContactConversations
+          :contact-id="contact.id"
+          :conversation-id="conversationId"
+        />
+      </div>
     </div>
 
     <!-- Adalink: Não receber campanhas (WhatsApp) -->
     <div
       v-if="podeNaoReceber"
-      class="px-4 pb-2"
+      class="trama-contato-blk"
       data-testid="nao-receber-campanhas"
     >
       <button
         v-if="!naoReceberEtapa || naoReceberEtapa === 'erro'"
-        class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-[rgb(30,58,95)] text-[rgb(30,58,95)] bg-transparent hover:bg-[rgba(30,58,95,0.08)] transition-all"
+        type="button"
+        class="trama-contato-li is-perigo"
         @click="pedirNaoReceber"
       >
-        Não receber campanhas de WhatsApp
+        <span class="i-lucide-ban size-5 flex-shrink-0" aria-hidden="true" />
+        <span>{{ TEXTOS_NAO_RECEBER.botao }}</span>
       </button>
       <div
         v-else-if="naoReceberEtapa === 'confirmando'"
-        class="rounded-lg border border-[rgb(203,213,225)] p-3 text-sm text-[rgb(51,65,85)]"
+        class="trama-contato-confirma"
       >
-        <p class="m-0 mb-2">
-          Este número deixa de receber campanhas de WhatsApp (a fila de ligação
-          não muda). Para voltar a receber, um administrador precisa reativar.
-          Confirmar?
-        </p>
+        <p>{{ TEXTOS_NAO_RECEBER.confirmacao }}</p>
         <div class="flex gap-2">
           <button
-            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-[rgb(30,58,95)] text-white hover:bg-[rgb(22,49,82)]"
+            type="button"
+            class="trama-contato-btn is-perigo"
             @click="confirmarNaoReceber"
           >
-            Sim, tirar
+            {{ TEXTOS_NAO_RECEBER.confirmar }}
           </button>
           <button
-            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium border border-[rgb(203,213,225)] text-[rgb(51,65,85)] hover:bg-[rgb(241,245,249)]"
+            type="button"
+            class="trama-contato-btn is-contorno"
             @click="cancelarNaoReceber"
           >
-            Cancelar
+            {{ TEXTOS_NAO_RECEBER.cancelar }}
           </button>
         </div>
       </div>
       <p
         v-else-if="naoReceberEtapa === 'enviando'"
-        class="m-0 text-sm text-[rgb(100,116,139)] text-center"
+        class="m-0 trama-contato-li !text-[var(--trama-wa-texto-2)]"
       >
-        Tirando o número das campanhas...
+        <span
+          class="i-lucide-loader-circle size-5 flex-shrink-0 animate-spin"
+          aria-hidden="true"
+        />
+        <span>{{ TEXTOS_NAO_RECEBER.enviando }}</span>
       </p>
       <p
         v-else-if="naoReceberEtapa === 'feito'"
-        class="m-0 text-sm text-[rgb(21,128,61)] text-center"
+        class="m-0 trama-contato-li !text-[var(--trama-wa-verde-escuro)]"
         role="status"
       >
-        {{ naoReceberMensagem }}
+        <span
+          class="i-lucide-circle-check size-5 flex-shrink-0"
+          aria-hidden="true"
+        />
+        <span>{{ naoReceberMensagem }}</span>
       </p>
       <p
         v-if="naoReceberEtapa === 'erro'"
-        class="m-0 mt-2 text-sm text-[rgb(185,28,28)] text-center"
+        class="m-0 mb-2 text-sm text-[var(--trama-wa-perigo)]"
         role="alert"
       >
         {{ naoReceberMensagem }}
       </p>
     </div>
 
-    <div class="px-2 pb-8 list-group">
-      <Draggable
-        :list="conversationSidebarItems"
-        animation="200"
-        ghost-class="ghost"
-        handle=".drag-handle"
-        item-key="name"
-        class="flex flex-col gap-3"
-        @start="dragging = true"
-        @end="onDragEnd"
+    <!-- Trama: o resto do painel do Chatwoot (time, prioridade, etiquetas,
+         macros, participantes, informações, atributos, notas, Linear, Shopify)
+         fica aqui, recolhido por padrão. -->
+    <div class="trama-contato-blk">
+      <button
+        type="button"
+        class="trama-contato-li !py-0.5"
+        data-testid="mais-opcoes"
+        :aria-expanded="maisOpcoesAbertas"
+        @click="toggleSidebarUIState('is_trama_mais_opcoes_open')"
       >
-        <template #item="{ element }">
-          <div
-            v-if="element.name === 'conversation_actions'"
-            class="conversation--actions"
-          >
-            <AccordionItem
-              :title="$t('CONVERSATION_SIDEBAR.ACCORDION.CONVERSATION_ACTIONS')"
-              :is-open="isContactSidebarItemOpen('is_conv_actions_open')"
-              @toggle="
-                value => toggleSidebarUIState('is_conv_actions_open', value)
-              "
+        <span
+          class="i-lucide-sliders-horizontal size-5 flex-shrink-0"
+          aria-hidden="true"
+        />
+        <span class="flex-1 min-w-0">
+          {{ $t('TRAMA_CONTATO.MAIS_OPCOES') }}
+          <small>{{ $t('TRAMA_CONTATO.MAIS_OPCOES_DICA') }}</small>
+        </span>
+        <span
+          class="size-4 flex-shrink-0"
+          :class="
+            maisOpcoesAbertas ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'
+          "
+          aria-hidden="true"
+        />
+      </button>
+      <div v-if="maisOpcoesAbertas" class="pt-3 pb-2 -mx-4 list-group">
+        <Draggable
+          :list="conversationSidebarItems"
+          animation="200"
+          ghost-class="ghost"
+          handle=".drag-handle"
+          item-key="name"
+          class="flex flex-col gap-3"
+          @start="dragging = true"
+          @end="onDragEnd"
+        >
+          <template #item="{ element }">
+            <div
+              v-if="element.name === 'conversation_actions'"
+              class="conversation--actions"
             >
-              <ConversationAction
-                :conversation-id="conversationId"
-                :inbox-id="inboxId"
-              />
-            </AccordionItem>
-          </div>
-          <div
-            v-else-if="element.name === 'conversation_participants'"
-            class="conversation--actions"
-          >
-            <AccordionItem
-              :title="$t('CONVERSATION_PARTICIPANTS.SIDEBAR_TITLE')"
-              :is-open="isContactSidebarItemOpen('is_conv_participants_open')"
-              @toggle="
-                value =>
-                  toggleSidebarUIState('is_conv_participants_open', value)
-              "
-            >
-              <ConversationParticipant
-                :conversation-id="conversationId"
-                :inbox-id="inboxId"
-              />
-            </AccordionItem>
-          </div>
-          <div v-else-if="element.name === 'conversation_info'">
-            <AccordionItem
-              :title="$t('CONVERSATION_SIDEBAR.ACCORDION.CONVERSATION_INFO')"
-              :is-open="isContactSidebarItemOpen('is_conv_details_open')"
-              compact
-              @toggle="
-                value => toggleSidebarUIState('is_conv_details_open', value)
-              "
-            >
-              <ConversationInfo
-                :conversation-attributes="conversationAdditionalAttributes"
-                :contact-attributes="contactAdditionalAttributes"
-              />
-            </AccordionItem>
-          </div>
-          <div v-else-if="element.name === 'contact_attributes'">
-            <AccordionItem
-              :title="$t('CONVERSATION_SIDEBAR.ACCORDION.CONTACT_ATTRIBUTES')"
-              :is-open="isContactSidebarItemOpen('is_contact_attributes_open')"
-              compact
-              @toggle="
-                value =>
-                  toggleSidebarUIState('is_contact_attributes_open', value)
-              "
-            >
-              <CustomAttributes
-                attribute-type="contact_attribute"
-                attribute-from="conversation_contact_panel"
-                :contact-id="contact.id"
-                :empty-state-message="
-                  $t('CONVERSATION_CUSTOM_ATTRIBUTES.NO_RECORDS_FOUND')
+              <AccordionItem
+                :title="
+                  $t('CONVERSATION_SIDEBAR.ACCORDION.CONVERSATION_ACTIONS')
                 "
-              />
-            </AccordionItem>
-          </div>
-          <div v-else-if="element.name === 'previous_conversation'">
-            <AccordionItem
-              v-if="contact.id"
-              :title="
-                $t('CONVERSATION_SIDEBAR.ACCORDION.PREVIOUS_CONVERSATION')
-              "
-              :is-open="isContactSidebarItemOpen('is_previous_conv_open')"
-              compact
-              @toggle="
-                value => toggleSidebarUIState('is_previous_conv_open', value)
+                :is-open="isContactSidebarItemOpen('is_conv_actions_open')"
+                @toggle="
+                  value => toggleSidebarUIState('is_conv_actions_open', value)
+                "
+              >
+                <ConversationAction
+                  :conversation-id="conversationId"
+                  :inbox-id="inboxId"
+                  secao="resto"
+                />
+              </AccordionItem>
+            </div>
+            <div
+              v-else-if="element.name === 'conversation_participants'"
+              class="conversation--actions"
+            >
+              <AccordionItem
+                :title="$t('CONVERSATION_PARTICIPANTS.SIDEBAR_TITLE')"
+                :is-open="isContactSidebarItemOpen('is_conv_participants_open')"
+                @toggle="
+                  value =>
+                    toggleSidebarUIState('is_conv_participants_open', value)
+                "
+              >
+                <ConversationParticipant
+                  :conversation-id="conversationId"
+                  :inbox-id="inboxId"
+                />
+              </AccordionItem>
+            </div>
+            <div v-else-if="element.name === 'conversation_info'">
+              <AccordionItem
+                :title="$t('CONVERSATION_SIDEBAR.ACCORDION.CONVERSATION_INFO')"
+                :is-open="isContactSidebarItemOpen('is_conv_details_open')"
+                compact
+                @toggle="
+                  value => toggleSidebarUIState('is_conv_details_open', value)
+                "
+              >
+                <ConversationInfo
+                  :conversation-attributes="conversationAdditionalAttributes"
+                  :contact-attributes="contactAdditionalAttributes"
+                />
+              </AccordionItem>
+            </div>
+            <div v-else-if="element.name === 'contact_attributes'">
+              <AccordionItem
+                :title="$t('CONVERSATION_SIDEBAR.ACCORDION.CONTACT_ATTRIBUTES')"
+                :is-open="
+                  isContactSidebarItemOpen('is_contact_attributes_open')
+                "
+                compact
+                @toggle="
+                  value =>
+                    toggleSidebarUIState('is_contact_attributes_open', value)
+                "
+              >
+                <CustomAttributes
+                  attribute-type="contact_attribute"
+                  attribute-from="conversation_contact_panel"
+                  :contact-id="contact.id"
+                  :empty-state-message="
+                    $t('CONVERSATION_CUSTOM_ATTRIBUTES.NO_RECORDS_FOUND')
+                  "
+                />
+              </AccordionItem>
+            </div>
+            <woot-feature-toggle
+              v-else-if="element.name === 'macros'"
+              feature-key="macros"
+            >
+              <AccordionItem
+                :title="$t('CONVERSATION_SIDEBAR.ACCORDION.MACROS')"
+                :is-open="isContactSidebarItemOpen('is_macro_open')"
+                compact
+                @toggle="value => toggleSidebarUIState('is_macro_open', value)"
+              >
+                <MacrosList :conversation-id="conversationId" />
+              </AccordionItem>
+            </woot-feature-toggle>
+            <div
+              v-else-if="
+                element.name === 'linear_issues' &&
+                isLinearFeatureEnabled &&
+                isLinearClientIdConfigured
               "
             >
-              <ContactConversations
-                :contact-id="contact.id"
-                :conversation-id="conversationId"
-              />
-            </AccordionItem>
-          </div>
-          <woot-feature-toggle
-            v-else-if="element.name === 'macros'"
-            feature-key="macros"
-          >
-            <AccordionItem
-              :title="$t('CONVERSATION_SIDEBAR.ACCORDION.MACROS')"
-              :is-open="isContactSidebarItemOpen('is_macro_open')"
-              compact
-              @toggle="value => toggleSidebarUIState('is_macro_open', value)"
-            >
-              <MacrosList :conversation-id="conversationId" />
-            </AccordionItem>
-          </woot-feature-toggle>
-          <div
-            v-else-if="
-              element.name === 'linear_issues' &&
-              isLinearFeatureEnabled &&
-              isLinearClientIdConfigured
-            "
-          >
-            <AccordionItem
-              :title="$t('CONVERSATION_SIDEBAR.ACCORDION.LINEAR_ISSUES')"
-              :is-open="isContactSidebarItemOpen('is_linear_issues_open')"
-              compact
-              @toggle="
-                value => toggleSidebarUIState('is_linear_issues_open', value)
+              <AccordionItem
+                :title="$t('CONVERSATION_SIDEBAR.ACCORDION.LINEAR_ISSUES')"
+                :is-open="isContactSidebarItemOpen('is_linear_issues_open')"
+                compact
+                @toggle="
+                  value => toggleSidebarUIState('is_linear_issues_open', value)
+                "
+              >
+                <LinearSetupCTA v-if="!isLinearConnected" />
+                <LinearIssuesList v-else :conversation-id="conversationId" />
+              </AccordionItem>
+            </div>
+            <div
+              v-else-if="
+                element.name === 'shopify_orders' && isShopifyFeatureEnabled
               "
             >
-              <LinearSetupCTA v-if="!isLinearConnected" />
-              <LinearIssuesList v-else :conversation-id="conversationId" />
-            </AccordionItem>
-          </div>
-          <div
-            v-else-if="
-              element.name === 'shopify_orders' && isShopifyFeatureEnabled
-            "
-          >
-            <AccordionItem
-              :title="$t('CONVERSATION_SIDEBAR.ACCORDION.SHOPIFY_ORDERS')"
-              :is-open="isContactSidebarItemOpen('is_shopify_orders_open')"
-              compact
-              @toggle="
-                value => toggleSidebarUIState('is_shopify_orders_open', value)
-              "
-            >
-              <ShopifyOrdersList :contact-id="contactId" />
-            </AccordionItem>
-          </div>
-          <div v-else-if="element.name === 'contact_notes'">
-            <AccordionItem
-              :title="$t('CONVERSATION_SIDEBAR.ACCORDION.CONTACT_NOTES')"
-              :is-open="isContactSidebarItemOpen('is_contact_notes_open')"
-              compact
-              @toggle="
-                value => toggleSidebarUIState('is_contact_notes_open', value)
-              "
-            >
-              <ContactNotes :contact-id="contactId" />
-            </AccordionItem>
-          </div>
-        </template>
-      </Draggable>
+              <AccordionItem
+                :title="$t('CONVERSATION_SIDEBAR.ACCORDION.SHOPIFY_ORDERS')"
+                :is-open="isContactSidebarItemOpen('is_shopify_orders_open')"
+                compact
+                @toggle="
+                  value => toggleSidebarUIState('is_shopify_orders_open', value)
+                "
+              >
+                <ShopifyOrdersList :contact-id="contactId" />
+              </AccordionItem>
+            </div>
+            <div v-else-if="element.name === 'contact_notes'">
+              <AccordionItem
+                :title="$t('CONVERSATION_SIDEBAR.ACCORDION.CONTACT_NOTES')"
+                :is-open="isContactSidebarItemOpen('is_contact_notes_open')"
+                compact
+                @toggle="
+                  value => toggleSidebarUIState('is_contact_notes_open', value)
+                "
+              >
+                <ContactNotes :contact-id="contactId" />
+              </AccordionItem>
+            </div>
+          </template>
+        </Draggable>
+      </div>
     </div>
   </div>
 </template>

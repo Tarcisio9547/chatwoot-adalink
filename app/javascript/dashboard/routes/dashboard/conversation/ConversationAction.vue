@@ -23,6 +23,14 @@ export default {
       type: [Number, String],
       required: true,
     },
+    // Trama: o painel "Dados do contato" mostra o seletor de responsável num
+    // bloco próprio ('responsavel') e o resto (time, prioridade, etiquetas) em
+    // "Mais opções" ('resto'). 'tudo' é o comportamento original do Chatwoot.
+    secao: {
+      type: String,
+      default: 'tudo',
+      validator: valor => ['tudo', 'responsavel', 'resto'].includes(valor),
+    },
   },
   setup() {
     const { agentsList } = useAgentsList();
@@ -62,6 +70,12 @@ export default {
     };
   },
   computed: {
+    mostrarResponsavel() {
+      return this.secao !== 'resto';
+    },
+    mostrarResto() {
+      return this.secao !== 'responsavel';
+    },
     ...mapGetters({
       currentChat: 'getSelectedChat',
       currentUser: 'getCurrentUser',
@@ -211,8 +225,9 @@ export default {
 
 <template>
   <div>
-    <div>
+    <div v-if="mostrarResponsavel">
       <ContactDetailsItem
+        v-if="secao === 'tudo'"
         compact
         :title="$t('CONVERSATION_SIDEBAR.ASSIGNEE_LABEL')"
       >
@@ -242,7 +257,7 @@ export default {
         @select="onClickAssignAgent"
       />
     </div>
-    <div>
+    <div v-if="mostrarResto">
       <ContactDetailsItem
         compact
         :title="$t('CONVERSATION_SIDEBAR.TEAM_LABEL')"
@@ -261,7 +276,7 @@ export default {
         @select="onClickAssignTeam"
       />
     </div>
-    <div>
+    <div v-if="mostrarResto">
       <ContactDetailsItem compact :title="$t('CONVERSATION.PRIORITY.TITLE')" />
       <MultiselectDropdown
         :options="priorityOptions"
@@ -280,9 +295,10 @@ export default {
       />
     </div>
     <ContactDetailsItem
+      v-if="mostrarResto"
       compact
       :title="$t('CONVERSATION_SIDEBAR.ACCORDION.CONVERSATION_LABELS')"
     />
-    <ConversationLabels :conversation-id="conversationId" />
+    <ConversationLabels v-if="mostrarResto" :conversation-id="conversationId" />
   </div>
 </template>
