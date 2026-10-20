@@ -260,6 +260,7 @@ const deleteConversation = () => {
         :name="currentContact.name"
         :src="currentContact.thumbnail"
         :size="48"
+        solido
         :status="currentContact.availability_status"
         hide-offline-status
         rounded-full
@@ -308,6 +309,7 @@ const deleteConversation = () => {
             :created-at-timestamp="chat.created_at"
             :conversation-id="chat.id"
             :show-created-at="false"
+            relogio
           />
         </span>
       </div>

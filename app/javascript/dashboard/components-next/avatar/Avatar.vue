@@ -24,6 +24,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Trama: círculo de cor forte com a letra branca (lista, cabeçalho, dados do contato).
+  solido: {
+    type: Boolean,
+    default: false,
+  },
   roundedFull: {
     type: Boolean,
     default: false,
@@ -54,6 +59,18 @@ const { t } = useI18n();
 
 const isImageValid = ref(true);
 const fileInput = ref(null);
+
+// Trama: cores fortes, sem roxo (a marca é azul).
+const TRAMA_CORES_SOLIDAS = [
+  '#3A5BC7',
+  '#008573',
+  '#C2410C',
+  '#BE185D',
+  '#0E7490',
+  '#4D7C0F',
+  '#1E3A5F',
+  '#B45309',
+];
 
 const AVATAR_COLORS = {
   dark: [
@@ -125,19 +142,40 @@ const borderRadiusClass = computed(() => {
   return 'rounded-2xl'; // 16px
 });
 
-const avatarStyles = computed(() => ({
-  ...containerStyles.value,
-  backgroundColor:
-    !showDefaultAvatar.value && (!props.src || !isImageValid.value)
-      ? getColorsByNameLength.value.bg
-      : undefined,
-  color:
-    !showDefaultAvatar.value && (!props.src || !isImageValid.value)
-      ? getColorsByNameLength.value.text
-      : undefined,
-  '--dark-bg': getColorsByNameLength.value.darkBg,
-  '--dark-text': getColorsByNameLength.value.darkText,
-}));
+const corSolida = computed(
+  () =>
+    TRAMA_CORES_SOLIDAS[(props.name || '').length % TRAMA_CORES_SOLIDAS.length]
+);
+
+const avatarStyles = computed(() => {
+  const base = {
+    ...containerStyles.value,
+    backgroundColor:
+      !showDefaultAvatar.value && (!props.src || !isImageValid.value)
+        ? getColorsByNameLength.value.bg
+        : undefined,
+    color:
+      !showDefaultAvatar.value && (!props.src || !isImageValid.value)
+        ? getColorsByNameLength.value.text
+        : undefined,
+    '--dark-bg': getColorsByNameLength.value.darkBg,
+    '--dark-text': getColorsByNameLength.value.darkText,
+  };
+  if (
+    props.solido &&
+    !showDefaultAvatar.value &&
+    (!props.src || !isImageValid.value)
+  ) {
+    return {
+      ...base,
+      backgroundColor: corSolida.value,
+      color: '#ffffff',
+      '--dark-bg': corSolida.value,
+      '--dark-text': '#ffffff',
+    };
+  }
+  return base;
+});
 
 const badgeStyles = computed(() => {
   const badgeSize = Math.max(props.size * 0.35, 8); // 35% of avatar size, minimum 8px
@@ -154,7 +192,8 @@ const iconStyles = computed(() => ({
 }));
 
 const initialsStyles = computed(() => ({
-  fontSize: `${Math.min(props.size / 2.5, 24)}px`,
+  fontSize: `${props.solido ? Math.min(props.size / 2.8, 44) : Math.min(props.size / 2.5, 24)}px`,
+  ...(props.solido ? { fontWeight: 700 } : {}),
 }));
 
 const invalidateCurrentImage = () => {

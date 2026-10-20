@@ -933,3 +933,78 @@ body .trama-wa-aviso.woot-banner.banner {
     color: var(--trama-wa-texto);
   }
 }
+
+/* acabamento */
+// Acabamento para ficar igual ao protótipo (20/10): balão compacto, hora pequena
+// dentro do balão, nome de quem enviou no lugar da bolinha do atendente, citação
+// com traço verde e menos espaço entre mensagens.
+:root {
+  --trama-wa-autor: #008069;
+  --trama-wa-meta: #667781;
+  --trama-wa-citacao: rgba(11, 20, 26, 0.05);
+  --trama-wa-citacao-traco: #00a884;
+}
+
+.dark {
+  --trama-wa-autor: #00a884;
+  --trama-wa-meta: #8696a0;
+  --trama-wa-citacao: rgba(255, 255, 255, 0.06);
+}
+
+.trama-chat-fundo {
+  padding: 12px 6% 8px;
+}
+
+// primeira mensagem de cada sequência ganha um respiro; as seguidas ficam coladas
+.message-bubble-container:not(.group-with-next + .message-bubble-container) {
+  margin-top: 8px;
+}
+
+.trama-bolha-texto {
+  padding: 6px 9px 6px;
+  font-size: 14.2px;
+  line-height: 19px;
+}
+
+.trama-autor {
+  font-size: 12.8px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--trama-wa-autor);
+  margin-bottom: 1px;
+}
+
+.group-with-next + .message-bubble-container .trama-autor {
+  display: none;
+}
+
+.trama-citacao {
+  position: relative;
+  margin: 2px -3px 5px;
+  padding: 5px 8px 6px 12px;
+  border-radius: 6px;
+  background-color: var(--trama-wa-citacao);
+  font-size: 13px;
+  line-height: 18px;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background-color: var(--trama-wa-citacao-traco);
+  }
+}
+
+.trama-meta {
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--trama-wa-meta);
+}
+
+.trama-meta-linha {
+  margin-top: 2px;
+}

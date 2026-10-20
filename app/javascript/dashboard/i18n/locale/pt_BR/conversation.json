@@ -313,6 +313,10 @@
       "REJECT_CALL": "Recusar",
       "JOIN_CALL": "Entrar na chamada",
       "END_CALL": "Encerrar chamada"
+    },
+    "TRAMA_LISTA": {
+      "NOVA_CONVERSA": "Nova conversa",
+      "CONFIGURACOES": "Configurações do atendimento"
     }
   },
   "EMAIL_TRANSCRIPT": {

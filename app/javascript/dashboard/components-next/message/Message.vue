@@ -251,7 +251,7 @@ const flexOrientationClass = computed(() => {
 const gridClass = computed(() => {
   const map = {
     [ORIENTATION.LEFT]: 'grid grid-cols-1fr',
-    [ORIENTATION.RIGHT]: 'grid grid-cols-[1fr_24px]',
+    [ORIENTATION.RIGHT]: 'grid grid-cols-1fr',
   };
 
   return map[orientation.value];
@@ -264,8 +264,8 @@ const gridTemplate = computed(() => {
       "meta"
     `,
     [ORIENTATION.RIGHT]: `
-      "bubble avatar"
-      "meta spacer"
+      "bubble"
+      "meta"
     `,
   };
 
@@ -278,12 +278,8 @@ const shouldGroupWithNext = computed(() => {
   return props.groupWithNext;
 });
 
-const shouldShowAvatar = computed(() => {
-  if (props.messageType === MESSAGE_TYPES.ACTIVITY) return false;
-  if (orientation.value === ORIENTATION.LEFT) return false;
-
-  return true;
-});
+// Trama: sem a bolinha do atendente ao lado da mensagem (o nome vai dentro do balão).
+const shouldShowAvatar = computed(() => false);
 
 const componentToRender = computed(() => {
   if (props.isEmailInbox && !props.private) {
@@ -521,7 +517,7 @@ provideMessageContext({
   <div
     v-if="shouldRenderMessage"
     :id="`message${props.id}`"
-    class="flex w-full mb-2 message-bubble-container"
+    class="flex w-full mb-0.5 message-bubble-container"
     :data-message-id="props.id"
     :data-source-id="props.sourceId || undefined"
     :data-inbox-id="props.inboxId || undefined"

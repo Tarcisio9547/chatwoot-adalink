@@ -61,6 +61,15 @@ export default {
       showCreateAccountModal: false,
       showShortcutModal: false,
       isMobileSidebarOpen: false,
+      // Trama: dentro do CRM (iframe) o menu lateral do Chatwoot some; nova conversa e
+      // configurações ficam no topo da lista. Acesso direto ao Chatwoot continua igual.
+      tramaEmbutido: (() => {
+        try {
+          return window.self !== window.top;
+        } catch (e) {
+          return true;
+        }
+      })(),
     };
   },
   computed: {
@@ -132,6 +141,7 @@ export default {
 <template>
   <div class="flex flex-grow overflow-hidden text-n-slate-12">
     <NextSidebar
+      v-if="!tramaEmbutido"
       :is-mobile-sidebar-open="isMobileSidebarOpen"
       @toggle-account-modal="toggleAccountModal"
       @open-key-shortcut-modal="toggleKeyShortcutModal"

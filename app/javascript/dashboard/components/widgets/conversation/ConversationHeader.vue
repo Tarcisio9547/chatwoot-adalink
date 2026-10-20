@@ -152,6 +152,7 @@ const onAtribuirAMim = () => {
         :name="currentContact.name"
         :src="currentContact.thumbnail"
         :size="40"
+        solido
         :status="currentContact.availability_status"
         hide-offline-status
         rounded-full

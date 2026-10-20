@@ -313,6 +313,10 @@
       "REJECT_CALL": "Reject",
       "JOIN_CALL": "Join call",
       "END_CALL": "End call"
+    },
+    "TRAMA_LISTA": {
+      "NOVA_CONVERSA": "New conversation",
+      "CONFIGURACOES": "Inbox settings"
     }
   },
   "EMAIL_TRANSCRIPT": {

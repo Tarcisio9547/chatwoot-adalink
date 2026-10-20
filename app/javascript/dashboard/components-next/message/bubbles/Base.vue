@@ -15,7 +15,7 @@ const props = defineProps({
   hideMeta: { type: Boolean, default: false },
 });
 
-const { variant, orientation, inReplyTo, shouldGroupWithNext } =
+const { variant, orientation, inReplyTo, shouldGroupWithNext, sender } =
   useMessageContext();
 const { t } = useI18n();
 
@@ -68,6 +68,14 @@ const scrollToMessage = () => {
   });
 };
 
+// Trama: nome de quem enviou dentro do balão (no lugar da bolinha do atendente).
+// O CSS esconde nas mensagens seguidas do mesmo remetente.
+const nomeAutor = computed(() => {
+  if (orientation.value !== ORIENTATION.RIGHT) return '';
+  if (variant.value === MESSAGE_VARIANTS.ACTIVITY) return '';
+  return sender?.value?.available_name || sender?.value?.name || '';
+});
+
 const shouldShowMeta = computed(
   () =>
     !props.hideMeta &&
@@ -102,9 +110,10 @@ const replyToPreview = computed(() => {
       },
     ]"
   >
+    <div v-if="nomeAutor" class="trama-autor">{{ nomeAutor }}</div>
     <div
       v-if="inReplyTo"
-      class="p-2 -mx-1 mb-2 rounded-lg cursor-pointer bg-n-alpha-black1"
+      class="trama-citacao cursor-pointer"
       @click="scrollToMessage"
     >
       <div
@@ -116,13 +125,14 @@ const replyToPreview = computed(() => {
     <MessageMeta
       v-if="shouldShowMeta"
       :class="[
-        flexOrientationClass,
-        variant === MESSAGE_VARIANTS.EMAIL ? 'px-3 pb-3' : '',
+        variant === MESSAGE_VARIANTS.EMAIL
+          ? `${flexOrientationClass} px-3 pb-3`
+          : 'justify-end',
         variant === MESSAGE_VARIANTS.PRIVATE
           ? 'text-n-amber-12/50'
           : 'text-n-slate-11',
       ]"
-      class="mt-2"
+      class="trama-meta-linha"
     />
   </div>
 </template>
