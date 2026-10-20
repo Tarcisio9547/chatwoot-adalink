@@ -40,10 +40,6 @@ export default {
       type: [String, Number],
       default: 0,
     },
-    showAssignee: {
-      type: Boolean,
-      default: false,
-    },
   },
 };
 </script>
@@ -56,7 +52,6 @@ export default {
     :chat="source"
     :conversation-type="conversationType"
     :selected="isConversationSelected(source.id)"
-    :show-assignee="showAssignee"
     enable-context-menu
     @select-conversation="selectConversation"
     @de-select-conversation="deSelectConversation"

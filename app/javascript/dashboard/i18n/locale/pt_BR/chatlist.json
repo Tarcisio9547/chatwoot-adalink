@@ -11,13 +11,14 @@
     "MENTION_HEADING": "Menções",
     "UNATTENDED_HEADING": "Não Atendidas",
     "SEARCH": {
-      "INPUT": "Pesquisar pessoas, conversas, respostas salvas .."
+      "INPUT": "Pesquisar pessoas, conversas, respostas salvas ..",
+      "LIST_PLACEHOLDER": "Pesquisar conversa ou mensagem"
     },
     "FILTER_ALL": "Todos",
     "ASSIGNEE_TYPE_TABS": {
       "me": "Minhas",
-      "unassigned": "Não atribuídas",
-      "all": "Todos"
+      "unassigned": "Sem responsável",
+      "all": "Todas"
     },
     "CHAT_STATUS_FILTER_ITEMS": {
       "open": {

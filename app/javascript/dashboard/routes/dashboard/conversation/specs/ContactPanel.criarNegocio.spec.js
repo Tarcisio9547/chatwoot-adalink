@@ -79,7 +79,7 @@ describe('ContactPanel: botão Criar Negócio', () => {
 
   it('manda ao CRM o contato, a conversa e a caixa abertas', async () => {
     const painel = montar({ conversationId: 321, inboxId: 12 });
-    await painel.find('button').trigger('click');
+    await painel.find('[data-testid="criar-negocio"]').trigger('click');
 
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(postMessage).toHaveBeenCalledWith(
@@ -100,7 +100,7 @@ describe('ContactPanel: botão Criar Negócio', () => {
 
   it('sem inboxId na prop, a mensagem segue sem esse campo (CRM tolera)', async () => {
     const painel = montar({ conversationId: 321 });
-    await painel.find('button').trigger('click');
+    await painel.find('[data-testid="criar-negocio"]').trigger('click');
 
     const [mensagem] = postMessage.mock.calls[0];
     expect(mensagem.conversationId).toBe(321);

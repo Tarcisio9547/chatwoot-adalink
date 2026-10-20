@@ -46,19 +46,25 @@ useKeyboardEvents(keyboardEvents);
 </script>
 
 <template>
-  <woot-tabs
-    :index="activeTabIndex"
-    class="w-full px-3 -mt-1 py-0 [&_ul]:p-0 h-10"
-    @change="onTabChange"
+  <!-- Trama: abas sublinhadas com cara de WhatsApp (contagem como número simples). -->
+  <div
+    role="tablist"
+    class="trama-lista-abas flex w-full gap-5 px-[18px] pt-1 overflow-x-auto"
   >
-    <woot-tabs-item
+    <button
       v-for="(item, index) in items"
       :key="item.key"
-      class="text-sm [&_a]:font-medium"
-      :index="index"
-      :name="item.name"
-      :count="item.count"
-      is-compact
-    />
-  </woot-tabs>
+      type="button"
+      role="tab"
+      class="trama-lista-aba flex items-center flex-shrink-0 gap-1.5 pt-2 pb-2.5 text-sm font-semibold select-none"
+      :class="{ 'trama-lista-aba--ativa': index === activeTabIndex }"
+      :aria-selected="index === activeTabIndex"
+      @click="onTabChange(index)"
+    >
+      {{ item.name }}
+      <span class="trama-lista-aba-numero text-[12.5px] font-medium">
+        {{ item.count }}
+      </span>
+    </button>
+  </div>
 </template>

@@ -28,6 +28,12 @@ export default {
       type: [String, Number],
       default: '',
     },
+    // Trama: a lista com cara de WhatsApp mostra só a última atividade; a data
+    // de criação continua no tooltip.
+    showCreatedAt: {
+      type: Boolean,
+      default: true,
+    },
   },
   data() {
     return {
@@ -65,6 +71,10 @@ export default {
         : `${this.$t(
             'CHAT_LIST.CHAT_TIME_STAMP.LAST_ACTIVITY.NOT_ACTIVE'
           )} ${dateFormat(this.lastActivityTimestamp)}`;
+    },
+    displayText() {
+      if (!this.showCreatedAt) return this.lastActivityTime;
+      return `${this.createdAtTime} • ${this.lastActivityTime}`;
     },
     tooltipText() {
       return `${this.createdAt}
@@ -127,6 +137,6 @@ export default {
     }"
     class="ml-auto leading-4 text-xxs text-n-slate-10 hover:text-n-slate-11"
   >
-    <span>{{ `${createdAtTime} • ${lastActivityTime}` }}</span>
+    <span>{{ displayText }}</span>
   </div>
 </template>

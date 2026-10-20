@@ -14,6 +14,11 @@ defineProps({
     type: Boolean,
     required: true,
   },
+  // Trama: mostra o status atual ("Abertas ⌄") como texto em vez do ícone.
+  showStatusTrigger: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(['changeFilter']);
@@ -136,7 +141,24 @@ const handleSortChange = value => {
 
 <template>
   <div class="relative flex">
+    <button
+      v-if="showStatusTrigger"
+      v-tooltip.bottom="$t('CHAT_LIST.SORT_TOOLTIP_LABEL')"
+      type="button"
+      class="trama-lista-status flex items-center gap-1 h-[34px] px-2.5 rounded-lg text-[13.5px] font-semibold"
+      :aria-expanded="showActionsDropdown"
+      @click="toggleDropdown()"
+    >
+      <span class="truncate">
+        {{
+          activeChatStatusLabel ||
+          $t('CHAT_LIST.CHAT_STATUS_FILTER_ITEMS.open.TEXT')
+        }}
+      </span>
+      <span class="i-lucide-chevron-down size-4 flex-shrink-0" />
+    </button>
     <NextButton
+      v-else
       v-tooltip.right="$t('CHAT_LIST.SORT_TOOLTIP_LABEL')"
       icon="i-lucide-arrow-up-down"
       slate
@@ -149,8 +171,8 @@ const handleSortChange = value => {
       v-on-click-outside="() => toggleDropdown()"
       class="mt-1 bg-n-alpha-3 backdrop-blur-[100px] border border-n-weak w-72 rounded-xl p-4 absolute z-40 top-full"
       :class="{
-        'ltr:left-0 rtl:right-0': !isOnExpandedLayout,
-        'ltr:right-0 rtl:left-0': isOnExpandedLayout,
+        'ltr:left-0 rtl:right-0': !isOnExpandedLayout && !showStatusTrigger,
+        'ltr:right-0 rtl:left-0': isOnExpandedLayout || showStatusTrigger,
       }"
     >
       <div class="flex items-center justify-between last:mt-4 gap-2">

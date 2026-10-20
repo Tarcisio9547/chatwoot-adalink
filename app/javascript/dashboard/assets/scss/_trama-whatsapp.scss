@@ -112,3 +112,824 @@
 .trama-lido {
   color: var(--trama-wa-lido);
 }
+
+/* lista */
+// Lista de conversas com cara de WhatsApp (protótipo aprovado em 19/10):
+// linhas de 74px, avatar 48px, hora/contagem verdes quando não lida, abas
+// sublinhadas e campo de busca cinza. Só aparência.
+
+:root {
+  --trama-wa-lista-fundo: #ffffff;
+  --trama-wa-lista-hover: #f5f6f6;
+  --trama-wa-lista-selecionada: #f0f2f5;
+  --trama-wa-lista-divisoria: #e9edef;
+  --trama-wa-lista-campo: #f0f2f5;
+  --trama-wa-lista-texto: #111b21;
+  --trama-wa-lista-texto2: #667781;
+  --trama-wa-lista-acento: #00a884;
+  --trama-wa-lista-acento-texto: #008069;
+}
+
+.dark {
+  --trama-wa-lista-fundo: #111b21;
+  --trama-wa-lista-hover: #202c33;
+  --trama-wa-lista-selecionada: #2a3942;
+  --trama-wa-lista-divisoria: #222d34;
+  --trama-wa-lista-campo: #202c33;
+  --trama-wa-lista-texto: #e9edef;
+  --trama-wa-lista-texto2: #8696a0;
+  --trama-wa-lista-acento: #00a884;
+  --trama-wa-lista-acento-texto: #00a884;
+}
+
+.trama-lista {
+  background-color: var(--trama-wa-lista-fundo);
+  color: var(--trama-wa-lista-texto);
+}
+
+// Cabeçalho: título "Conversas" + status ("Abertas ⌄") como texto
+.trama-lista-topo--com-filtro {
+  border-bottom: 1px solid var(--trama-wa-lista-divisoria);
+}
+
+.trama-lista-titulo {
+  color: var(--trama-wa-lista-texto);
+}
+
+.trama-lista-contagem {
+  color: var(--trama-wa-lista-texto2);
+}
+
+.trama-lista-status {
+  color: var(--trama-wa-lista-texto2);
+
+  &:hover {
+    background-color: var(--trama-wa-lista-hover);
+  }
+}
+
+// Campo de busca
+.trama-lista-busca-campo {
+  background-color: var(--trama-wa-lista-campo);
+  color: var(--trama-wa-lista-texto);
+  outline: none;
+  box-shadow: none;
+
+  &::placeholder {
+    color: var(--trama-wa-lista-texto2);
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--trama-wa-lista-acento);
+    outline-offset: 0;
+  }
+}
+
+.trama-lista-busca-icone {
+  color: var(--trama-wa-lista-texto2);
+}
+
+// Abas sublinhadas (Minhas / Sem responsável / Todas)
+.trama-lista-abas {
+  border-bottom: 1px solid var(--trama-wa-lista-divisoria);
+  scrollbar-width: none;
+}
+
+.trama-lista-aba {
+  color: var(--trama-wa-lista-texto2);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+
+  &:hover {
+    color: var(--trama-wa-lista-texto);
+  }
+
+  &.trama-lista-aba--ativa {
+    color: var(--trama-wa-lista-acento-texto);
+    border-bottom-color: var(--trama-wa-lista-acento);
+  }
+}
+
+// Linha da conversa
+.trama-lista-linha {
+  min-height: 74px;
+
+  &:hover {
+    background-color: var(--trama-wa-lista-hover);
+  }
+
+  &.trama-lista-linha--ativa,
+  &.trama-lista-linha--selecionada {
+    background-color: var(--trama-wa-lista-selecionada);
+  }
+
+  // Divisória fina começando depois do avatar; some no hover e na selecionada
+  .trama-lista-corpo {
+    border-bottom: 1px solid var(--trama-wa-lista-divisoria);
+  }
+
+  &:hover .trama-lista-corpo,
+  &.trama-lista-linha--ativa .trama-lista-corpo {
+    border-bottom-color: transparent;
+  }
+
+  &.trama-lista-linha--compacta {
+    min-height: 0;
+  }
+}
+
+.trama-lista-nome {
+  font-size: 16px;
+  line-height: 21px;
+  color: var(--trama-wa-lista-texto);
+}
+
+.trama-lista-hora > div,
+.trama-lista-hora > div:hover {
+  margin-left: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--trama-wa-lista-texto2);
+}
+
+.trama-lista-linha--nao-lida .trama-lista-hora > div {
+  color: var(--trama-wa-lista-acento-texto);
+  font-weight: 600;
+}
+
+.trama-lista-previa {
+  font-size: 14px;
+  line-height: 20px;
+  height: 20px;
+  color: var(--trama-wa-lista-texto2);
+}
+
+.trama-lista-contador {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background-color: var(--trama-wa-lista-acento);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+/* barra */
+// Barra de resposta estilo WhatsApp (protótipo aprovado, entrega 3).
+// Só aparência: envio, anexos, áudio, modelos, nota privada e IA usam as mesmas
+// funções de antes (ReplyBox / ReplyBottomPanel / ReplyTopPanel).
+:root {
+  --trama-wa-barra: #f0f2f5;
+  --trama-wa-barra-nota: #fff1c2;
+  --trama-wa-nota-texto: #7a5c00;
+  --trama-wa-nota-enviar: #b88a00;
+  --trama-wa-nota-enviar-hover: #9a7400;
+  --trama-wa-campo: #ffffff;
+  --trama-wa-icone: #667781;
+  --trama-wa-icone-hover: rgba(11, 20, 26, 0.07);
+  --trama-wa-verde: #00a884;
+  --trama-wa-verde-hover: #008069;
+  --trama-wa-aviso-fundo: #ffffff;
+  --trama-wa-aviso-icone: #b45309;
+  --trama-wa-aviso-acao: #008069;
+  --trama-wa-pop-fundo: #ffffff;
+  --trama-wa-pop-hover: #f5f6f6;
+  --trama-wa-pop-sombra: 0 12px 32px rgba(11, 20, 26, 0.18);
+  --trama-wa-divisor: #e9edef;
+}
+
+.dark {
+  --trama-wa-barra: #202c33;
+  --trama-wa-barra-nota: #3d3417;
+  --trama-wa-nota-texto: #f2d27a;
+  --trama-wa-nota-enviar: #b88a00;
+  --trama-wa-nota-enviar-hover: #d19f0b;
+  --trama-wa-campo: #2a3942;
+  --trama-wa-icone: #8696a0;
+  --trama-wa-icone-hover: rgba(255, 255, 255, 0.08);
+  --trama-wa-verde: #00a884;
+  --trama-wa-verde-hover: #06cf9c;
+  --trama-wa-aviso-fundo: #111b21;
+  --trama-wa-aviso-icone: #fbbf24;
+  --trama-wa-aviso-acao: #00a884;
+  --trama-wa-pop-fundo: #233138;
+  --trama-wa-pop-hover: #182229;
+  --trama-wa-pop-sombra: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --trama-wa-divisor: #2a3942;
+}
+
+// Faixa onde ficam avisos + barra (sem margem nem borda, cor da barra)
+.trama-wa-area {
+  background-color: var(--trama-wa-barra);
+}
+
+// A barra em si (era o cartão com borda do Chatwoot)
+.reply-box.trama-wa-barra {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 14px 10px;
+  background-color: var(--trama-wa-barra);
+  color: var(--trama-wa-texto);
+
+  &.is-private {
+    background-color: var(--trama-wa-barra-nota);
+  }
+}
+
+// Expandido (popout): mesma barra, com cantos arredondados no meio da tela
+.modal-mask .reply-box.trama-wa-barra {
+  border-radius: 12px;
+}
+
+// Linha "Nota privada: só a equipe vê…" + "Voltar a responder"
+.trama-wa-privbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--trama-wa-nota-texto);
+}
+
+.trama-wa-privbar-voltar {
+  font-weight: 600;
+  text-decoration: underline;
+  white-space: nowrap;
+  color: inherit;
+}
+
+// Linha única: [+][emoji][cadeado] [campo] [enviar/microfone]
+.trama-wa-linha {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+
+  // O painel de baixo (ReplyBottomPanel) "se desmancha" para os botões
+  // virarem vizinhos do campo de texto.
+  > .trama-wa-acoes {
+    display: contents;
+  }
+
+  .trama-wa-esquerda {
+    order: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+
+  .trama-wa-campo {
+    order: 2;
+  }
+
+  .trama-wa-direita {
+    order: 3;
+    display: flex;
+    flex-shrink: 0;
+  }
+
+  // Modo IA (copiloto): volta a empilhar campo e botões da IA
+  &.is-copilot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+// Campo de texto: branco, arredondado, sem borda
+.trama-wa-campo {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 8px;
+  background-color: var(--trama-wa-campo);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  // border-box: 44px = 12px + 20px (uma linha) + 12px
+  .ProseMirror-woot-style {
+    min-height: 44px;
+    max-height: 140px;
+  }
+
+  .ProseMirror-menubar-wrapper > .ProseMirror {
+    padding: 12px 0;
+    font-size: 15px;
+    line-height: 20px;
+    color: var(--trama-wa-texto);
+
+    p {
+      color: var(--trama-wa-texto);
+    }
+  }
+
+  // O editor do Chatwoot põe 10px embaixo do último parágrafo
+  &.reply-box__top .popover-prosemirror-menu .ProseMirror p:last-child {
+    margin-bottom: 0 !important;
+  }
+
+  .ProseMirror p.empty-node:first-child::before {
+    color: var(--trama-wa-icone);
+  }
+}
+
+// Botões redondos de ícone (+, emoji, cadeado, cancelar áudio)
+.trama-wa-icone-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  color: var(--trama-wa-icone);
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+
+  &:hover:not(:disabled),
+  &.is-active {
+    background-color: var(--trama-wa-icone-hover);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--trama-wa-verde);
+    outline-offset: 2px;
+  }
+}
+
+// Botão verde da direita: microfone (vazio) ou avião de papel (enviar)
+.trama-wa-enviar {
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #ffffff;
+  background-color: var(--trama-wa-verde);
+  transition: background-color 0.15s ease;
+
+  &:hover:not(:disabled) {
+    background-color: var(--trama-wa-verde-hover);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--trama-wa-verde);
+    outline-offset: 2px;
+  }
+}
+
+.trama-wa-barra.is-private .trama-wa-enviar {
+  background-color: var(--trama-wa-nota-enviar);
+
+  &:hover:not(:disabled) {
+    background-color: var(--trama-wa-nota-enviar-hover);
+  }
+}
+
+// Menu do "+" (anexos, modelo do WhatsApp e ações menos usadas)
+.trama-wa-pop {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  z-index: 40;
+  width: 260px;
+  padding: 6px;
+  border-radius: 12px;
+  background-color: var(--trama-wa-pop-fundo);
+  box-shadow: var(--trama-wa-pop-sombra);
+  color: var(--trama-wa-texto);
+
+  [dir='rtl'] & {
+    left: auto;
+    right: 0;
+  }
+}
+
+.trama-wa-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  text-align: start;
+  font-size: 14.5px;
+  line-height: 20px;
+  color: var(--trama-wa-texto);
+
+  &:hover,
+  &:focus-visible {
+    background-color: var(--trama-wa-pop-hover);
+    outline: none;
+  }
+
+  &.is-secundario {
+    padding: 8px 12px 8px 20px;
+    font-size: 13.5px;
+    color: var(--trama-wa-icone);
+    gap: 20px;
+  }
+}
+
+.trama-wa-pop-circulo {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.trama-wa-pop-divisor {
+  height: 1px;
+  margin: 6px 8px;
+  background-color: var(--trama-wa-divisor);
+}
+
+// Avisos (atribuir a mim, devolver do robô, janela de 24 h) como cartão
+// branco acima da barra. Sobrepõe as cores do Banner do Chatwoot.
+body .trama-wa-aviso.woot-banner.banner {
+  justify-content: flex-start;
+  height: auto;
+  min-height: 0;
+  margin: 8px 14px 0;
+  padding: 10px 12px;
+  gap: 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 13.5px;
+  line-height: 18px;
+  background-color: var(--trama-wa-aviso-fundo);
+  color: var(--trama-wa-texto);
+  box-shadow: var(--trama-wa-sombra);
+
+  &::before {
+    content: '';
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    background-color: var(--trama-wa-aviso-icone);
+    -webkit-mask: var(--trama-wa-aviso-svg) center / contain no-repeat;
+    mask: var(--trama-wa-aviso-svg) center / contain no-repeat;
+  }
+
+  .banner-message {
+    display: block;
+    flex: 1;
+    min-width: 0;
+  }
+
+  a {
+    margin-left: 4px;
+    font-size: inherit;
+    font-weight: 700;
+    color: var(--trama-wa-aviso-acao);
+  }
+
+  .actions button {
+    font-weight: 700;
+    color: var(--trama-wa-aviso-acao);
+  }
+}
+
+:root {
+  --trama-wa-aviso-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
+}
+
+/* contato */
+// Cabeçalho da conversa e painel "Dados do contato" (protótipo aprovado em 19/10).
+// Só aparência: as ações continuam as mesmas do Chatwoot.
+:root {
+  --trama-wa-cabecalho: #f0f2f5;
+  --trama-wa-painel: #ffffff;
+  --trama-wa-faixa: #f0f2f5;
+  --trama-wa-linha: #e9edef;
+  --trama-wa-hover: #f5f6f6;
+  --trama-wa-selecionado: #f0f2f5;
+  --trama-wa-texto-2: #667781;
+  --trama-wa-verde: #00a884;
+  --trama-wa-verde-escuro: #008069;
+  --trama-wa-alerta: #b45309;
+  --trama-wa-perigo: #ea0038;
+  --trama-wa-marca: #1e3a5f;
+  --trama-wa-marca-hover: #163152;
+}
+
+.dark {
+  --trama-wa-cabecalho: #202c33;
+  --trama-wa-painel: #111b21;
+  --trama-wa-faixa: #202c33;
+  --trama-wa-linha: #222d34;
+  --trama-wa-hover: #202c33;
+  --trama-wa-selecionado: #2a3942;
+  --trama-wa-texto-2: #8696a0;
+  --trama-wa-verde-escuro: #00a884;
+  --trama-wa-alerta: #fbbf24;
+  --trama-wa-perigo: #f15c6d;
+  --trama-wa-marca: #1e3a5f;
+  --trama-wa-marca-hover: #26476f;
+}
+
+// Cabeçalho da conversa
+.trama-conv-h {
+  height: 60px;
+  background-color: var(--trama-wa-cabecalho);
+  color: var(--trama-wa-texto);
+}
+
+// O ConversationBox põe !pt-2 no cabeçalho; aqui ele fica centrado em 60px.
+.conversation-details-wrap > .trama-conv-h {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.trama-conv-who-nome {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 21px;
+  color: var(--trama-wa-texto);
+}
+
+.trama-conv-who-sub {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--trama-wa-texto-2);
+}
+
+.trama-conv-sem-resp {
+  color: var(--trama-wa-alerta);
+  font-weight: 600;
+}
+
+.trama-hbtn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  font-weight: 600;
+  font-size: 13.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  border: 1px solid var(--trama-wa-linha);
+  background-color: var(--trama-wa-painel);
+  color: var(--trama-wa-texto);
+
+  &:hover {
+    background-color: var(--trama-wa-hover);
+  }
+}
+
+.trama-hbtn--verde {
+  background-color: var(--trama-wa-verde);
+  border-color: transparent;
+  color: #fff;
+
+  &:hover {
+    background-color: var(--trama-wa-verde-escuro);
+  }
+}
+
+.trama-ib {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--trama-wa-texto-2);
+
+  &:hover {
+    background-color: var(--trama-wa-hover);
+  }
+
+  &.is-on {
+    background-color: var(--trama-wa-selecionado);
+    color: var(--trama-wa-texto);
+  }
+}
+
+// "Resolver" (com a setinha de reabrir/adiar/pendente) como botão de contorno arredondado
+.trama-conv-h .resolve-actions > div:first-child {
+  height: 36px;
+  border-radius: 18px;
+  overflow: hidden;
+  outline: 0 !important;
+  box-shadow: none !important;
+  border: 1px solid var(--trama-wa-linha);
+  background-color: var(--trama-wa-painel);
+
+  > button {
+    height: 34px !important;
+    border-radius: 0 !important;
+    background-color: transparent !important;
+    color: var(--trama-wa-texto) !important;
+    font-weight: 600;
+    font-size: 13.5px;
+
+    &:hover:not(:disabled) {
+      background-color: var(--trama-wa-hover) !important;
+    }
+  }
+
+  > button + button {
+    border-left: 1px solid var(--trama-wa-linha) !important;
+  }
+}
+
+// "⋮" redondo, igual aos outros ícones do cabeçalho
+.trama-conv-h .actions--container > .group > button {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 9999px !important;
+  color: var(--trama-wa-texto-2);
+}
+
+// Painel "Dados do contato"
+.trama-contato {
+  min-height: 100%;
+  background-color: var(--trama-wa-faixa);
+  color: var(--trama-wa-texto);
+}
+
+.trama-contato-h {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  background-color: var(--trama-wa-painel);
+
+  h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--trama-wa-texto);
+  }
+}
+
+.trama-contato-blk {
+  background-color: var(--trama-wa-painel);
+  margin-bottom: 10px;
+  padding: 14px 24px;
+
+  > h4 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--trama-wa-texto-2);
+  }
+}
+
+.trama-contato-perfil {
+  text-align: center;
+  padding: 26px 24px 20px;
+}
+
+.trama-contato-nome {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 14px 0 4px;
+  color: var(--trama-wa-texto);
+  overflow-wrap: anywhere;
+}
+
+.trama-contato-tel {
+  color: var(--trama-wa-texto-2);
+  font-size: 15.5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+
+  &.is-email {
+    font-size: 14px;
+  }
+
+  button {
+    color: var(--trama-wa-texto-2);
+    display: inline-grid;
+    place-items: center;
+    padding: 3px;
+    border-radius: 6px;
+
+    &:hover {
+      background-color: var(--trama-wa-hover);
+    }
+  }
+}
+
+.trama-contato-quick {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.trama-contato-qb {
+  flex: 1 1 0;
+  max-width: 104px;
+  min-width: 0;
+  padding: 12px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--trama-wa-linha);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--trama-wa-verde-escuro);
+
+  &:hover:not(:disabled) {
+    background-color: var(--trama-wa-hover);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &.is-marca {
+    background-color: var(--trama-wa-marca);
+    border-color: transparent;
+    color: #fff;
+
+    &:hover:not(:disabled) {
+      background-color: var(--trama-wa-marca-hover);
+    }
+  }
+}
+
+.trama-contato-li {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 13px 0;
+  text-align: left;
+  font-size: 15px;
+  color: var(--trama-wa-texto);
+
+  small {
+    display: block;
+    color: var(--trama-wa-texto-2);
+    font-size: 13px;
+  }
+
+  &.is-perigo {
+    color: var(--trama-wa-perigo);
+  }
+}
+
+.trama-contato-confirma {
+  padding: 10px 0 4px;
+  font-size: 14px;
+
+  p {
+    margin: 0 0 12px;
+    color: var(--trama-wa-texto-2);
+  }
+}
+
+.trama-contato-btn {
+  flex: 1;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 19px;
+  font-weight: 600;
+  font-size: 14px;
+
+  &.is-perigo {
+    background-color: var(--trama-wa-perigo);
+    color: #fff;
+  }
+
+  &.is-contorno {
+    border: 1px solid var(--trama-wa-linha);
+    color: var(--trama-wa-texto);
+  }
+}

@@ -198,6 +198,22 @@
       "CLICK_HERE": "Click here to update",
       "WHATSAPP_TEMPLATES": "Whatsapp Templates"
     },
+    "TRAMA_BARRA": {
+      "NOTA_AVISO": "Private note: only your team sees it. The customer does not receive it.",
+      "VOLTAR_RESPONDER": "Back to reply",
+      "NOTA_ALTERNAR": "Private note (only your team sees it)",
+      "MAIS_ACOES": "Attach and more",
+      "FOTOS_VIDEOS": "Photos and videos",
+      "DOCUMENTO": "Document",
+      "GRAVAR_AUDIO": "Record audio",
+      "CANCELAR_AUDIO": "Cancel recording",
+      "MODELO_WHATSAPP": "WhatsApp template",
+      "MODELOS_CONTEUDO": "Content templates",
+      "ASSISTENTE_IA": "AI assistant",
+      "EXPANDIR": "Expand editor",
+      "PLACEHOLDER": "Type a message",
+      "PLACEHOLDER_NOTA": "Write a note for your team (use @ to mention)"
+    },
     "REPLYBOX": {
       "REPLY": "Reply",
       "PRIVATE_NOTE": "Private Note",

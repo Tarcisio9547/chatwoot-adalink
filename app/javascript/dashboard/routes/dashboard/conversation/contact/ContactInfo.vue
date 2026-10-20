@@ -10,6 +10,7 @@ import EditContact from './EditContact.vue';
 import ContactMergeModal from 'dashboard/modules/contact/ContactMergeModal.vue';
 import ComposeConversation from 'dashboard/components-next/NewConversation/ComposeConversation.vue';
 import { BUS_EVENTS } from 'shared/constants/busEvents';
+import { copyTextToClipboard } from 'shared/helpers/clipboard';
 import NextButton from 'dashboard/components-next/button/Button.vue';
 import VoiceCallButton from 'dashboard/components-next/Contacts/VoiceCallButton.vue';
 
@@ -170,6 +171,11 @@ export default {
         );
       }
     },
+    async copiar(valor) {
+      if (!valor) return;
+      await copyTextToClipboard(valor);
+      useAlert(this.$t('CONTACT_PANEL.COPY_SUCCESSFUL'));
+    },
     openMergeModal() {
       this.$refs.mergeModal?.open();
     },
@@ -178,92 +184,110 @@ export default {
 </script>
 
 <template>
-  <div class="relative items-center w-full p-4">
-    <div class="flex flex-col w-full gap-2 text-left rtl:text-right">
-      <div class="flex flex-row justify-between">
-        <Avatar
-          v-if="showAvatar"
-          :src="contact.thumbnail"
-          :name="contact.name"
-          :status="contact.availability_status"
-          :size="48"
-          hide-offline-status
-          rounded-full
+  <!-- Trama: perfil centralizado (protótipo aprovado em 19/10). Mesmos dados e ações de antes. -->
+  <div class="relative w-full">
+    <div class="flex flex-col items-center w-full text-center">
+      <Avatar
+        v-if="showAvatar"
+        :src="contact.thumbnail"
+        :name="contact.name"
+        :status="contact.availability_status"
+        :size="120"
+        hide-offline-status
+        rounded-full
+      />
+      <div
+        v-if="showAvatar"
+        class="flex items-center justify-center w-full min-w-0 gap-2"
+      >
+        <h2 class="trama-contato-nome font-sora">
+          {{ contact.name }}
+        </h2>
+        <span
+          v-if="contact.created_at"
+          v-tooltip.left="
+            `${$t('CONTACT_PANEL.CREATED_AT_LABEL')} ${dynamicTime(
+              contact.created_at
+            )}`
+          "
+          class="flex-shrink-0 mt-2.5 i-lucide-info text-sm text-n-slate-10"
+        />
+        <a
+          :href="contactProfileLink"
+          target="_blank"
+          rel="noopener nofollow noreferrer"
+          class="flex-shrink-0 mt-2.5 leading-3"
+        >
+          <span class="i-lucide-external-link text-sm text-n-slate-10" />
+        </a>
+      </div>
+
+      <div v-if="contact.phone_number" class="trama-contato-tel">
+        <a :href="`tel:${contact.phone_number}`" class="truncate">
+          {{ contact.phone_number }}
+        </a>
+        <button
+          type="button"
+          :aria-label="$t('TRAMA_CONTATO.COPIAR')"
+          :title="$t('TRAMA_CONTATO.COPIAR')"
+          @click="copiar(contact.phone_number)"
+        >
+          <span class="i-lucide-copy size-[15px]" aria-hidden="true" />
+        </button>
+      </div>
+      <div v-if="contact.email" class="trama-contato-tel is-email">
+        <a :href="`mailto:${contact.email}`" class="truncate">
+          {{ contact.email }}
+        </a>
+        <button
+          type="button"
+          :aria-label="$t('TRAMA_CONTATO.COPIAR')"
+          :title="$t('TRAMA_CONTATO.COPIAR')"
+          @click="copiar(contact.email)"
+        >
+          <span class="i-lucide-copy size-[13px]" aria-hidden="true" />
+        </button>
+      </div>
+
+      <p
+        v-if="additionalAttributes.description"
+        class="break-words mt-2 mb-0.5 text-sm text-n-slate-11"
+      >
+        {{ additionalAttributes.description }}
+      </p>
+      <div
+        v-if="
+          contact.identifier ||
+          additionalAttributes.company_name ||
+          location ||
+          additionalAttributes.location
+        "
+        class="flex flex-col items-start w-full gap-2 mt-3 text-start"
+      >
+        <ContactInfoRow
+          v-if="contact.identifier"
+          :value="contact.identifier"
+          icon="contact-identify"
+          emoji="🪪"
+          :title="$t('CONTACT_PANEL.IDENTIFIER')"
+        />
+        <ContactInfoRow
+          v-if="additionalAttributes.company_name"
+          :value="additionalAttributes.company_name"
+          icon="building-bank"
+          emoji="🏢"
+          :title="$t('CONTACT_PANEL.COMPANY')"
+        />
+        <ContactInfoRow
+          v-if="location || additionalAttributes.location"
+          :value="location || additionalAttributes.location"
+          icon="map"
+          emoji="🌍"
+          :title="$t('CONTACT_PANEL.LOCATION')"
         />
       </div>
-
-      <div class="flex flex-col items-start gap-1.5 min-w-0 w-full">
-        <div v-if="showAvatar" class="flex items-center w-full min-w-0 gap-3">
-          <h3
-            class="flex-shrink max-w-full min-w-0 my-0 text-base capitalize break-words text-n-slate-12"
-          >
-            {{ contact.name }}
-          </h3>
-          <div class="flex flex-row items-center gap-2">
-            <span
-              v-if="contact.created_at"
-              v-tooltip.left="
-                `${$t('CONTACT_PANEL.CREATED_AT_LABEL')} ${dynamicTime(
-                  contact.created_at
-                )}`
-              "
-              class="i-lucide-info text-sm text-n-slate-10"
-            />
-            <a
-              :href="contactProfileLink"
-              target="_blank"
-              rel="noopener nofollow noreferrer"
-              class="leading-3"
-            >
-              <span class="i-lucide-external-link text-sm text-n-slate-10" />
-            </a>
-          </div>
-        </div>
-
-        <p v-if="additionalAttributes.description" class="break-words mb-0.5">
-          {{ additionalAttributes.description }}
-        </p>
-        <div class="flex flex-col items-start w-full gap-2">
-          <ContactInfoRow
-            :href="contact.email ? `mailto:${contact.email}` : ''"
-            :value="contact.email"
-            icon="mail"
-            emoji="✉️"
-            :title="$t('CONTACT_PANEL.EMAIL_ADDRESS')"
-            show-copy
-          />
-          <ContactInfoRow
-            :href="contact.phone_number ? `tel:${contact.phone_number}` : ''"
-            :value="contact.phone_number"
-            icon="call"
-            emoji="📞"
-            :title="$t('CONTACT_PANEL.PHONE_NUMBER')"
-            show-copy
-          />
-          <ContactInfoRow
-            v-if="contact.identifier"
-            :value="contact.identifier"
-            icon="contact-identify"
-            emoji="🪪"
-            :title="$t('CONTACT_PANEL.IDENTIFIER')"
-          />
-          <ContactInfoRow
-            :value="additionalAttributes.company_name"
-            icon="building-bank"
-            emoji="🏢"
-            :title="$t('CONTACT_PANEL.COMPANY')"
-          />
-          <ContactInfoRow
-            v-if="location || additionalAttributes.location"
-            :value="location || additionalAttributes.location"
-            icon="map"
-            emoji="🌍"
-            :title="$t('CONTACT_PANEL.LOCATION')"
-          />
-          <SocialIcons :social-profiles="socialProfiles" />
-        </div>
-      </div>
-      <div class="flex items-center w-full mt-0.5 gap-2">
+      <SocialIcons :social-profiles="socialProfiles" class="mt-2" />
+      <div class="flex items-center justify-center w-full mt-3 gap-2">
         <ComposeConversation
           :contact-id="String(contact.id)"
           is-modal
