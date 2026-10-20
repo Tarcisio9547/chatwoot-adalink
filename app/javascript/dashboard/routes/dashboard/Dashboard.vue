@@ -140,8 +140,11 @@ export default {
 
 <template>
   <div class="flex flex-grow overflow-hidden text-n-slate-12">
+    <!-- Trama: v-show (não v-if): o menu precisa continuar montado porque é ele
+         que carrega caixas, etiquetas, times e notificações (Sidebar.vue). Sem
+         isso a barra de resposta perde anexos e modelos. -->
     <NextSidebar
-      v-if="!tramaEmbutido"
+      v-show="!tramaEmbutido"
       :is-mobile-sidebar-open="isMobileSidebarOpen"
       @toggle-account-modal="toggleAccountModal"
       @open-key-shortcut-modal="toggleKeyShortcutModal"
