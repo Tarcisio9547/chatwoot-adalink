@@ -1,5 +1,6 @@
 <script>
 import { ref } from 'vue';
+import { vOnClickOutside } from '@vueuse/components';
 import { useUISettings } from 'dashboard/composables/useUISettings';
 import { useKeyboardEvents } from 'dashboard/composables/useKeyboardEvents';
 import FileUpload from 'vue-upload-component';
@@ -16,6 +17,9 @@ import NextButton from 'dashboard/components-next/button/Button.vue';
 export default {
   name: 'ReplyBottomPanel',
   components: { NextButton, FileUpload, VideoCallButton },
+  directives: {
+    OnClickOutside: vOnClickOutside,
+  },
   mixins: [inboxMixin],
   props: {
     isNote: {
@@ -126,6 +130,16 @@ export default {
       type: Boolean,
       default: false,
     },
+    // Trama (barra estilo WhatsApp): ações que saíram do painel de cima
+    // e agora ficam no menu "+".
+    showCopilotAction: {
+      type: Boolean,
+      default: false,
+    },
+    showPopoutAction: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: [
     'replaceText',
@@ -133,6 +147,9 @@ export default {
     'selectWhatsappTemplate',
     'selectContentTemplate',
     'toggleQuotedReply',
+    'togglePrivateNote',
+    'openCopilot',
+    'togglePopout',
   ],
   setup(props) {
     const { setSignatureFlagForInbox, fetchSignatureFlagFromUISettings } =
@@ -170,6 +187,9 @@ export default {
   data() {
     return {
       ALLOWED_FILE_TYPES,
+      showActionsMenu: false,
+      // Filtro temporário do seletor de arquivos ("Fotos e vídeos").
+      uploadAcceptOverride: '',
     };
   },
   computed: {
@@ -264,6 +284,55 @@ export default {
     isFetchingAppIntegrations() {
       return this.uiFlags.isFetching;
     },
+    hasTypedContent() {
+      return !!(this.message && this.message.trim());
+    },
+    // Microfone no lugar do "enviar" quando não há nada para mandar (WhatsApp).
+    showMicInSendSlot() {
+      return (
+        this.showAudioRecorderButton &&
+        !this.isRecordingAudio &&
+        this.isSendDisabled &&
+        !this.hasTypedContent
+      );
+    },
+    mediaFileTypes() {
+      return this.allowedFileTypes
+        .split(',')
+        .map(type => type.trim())
+        .filter(type => type.startsWith('image/') || type.startsWith('video/'))
+        .join(', ');
+    },
+    uploadAccept() {
+      return this.uploadAcceptOverride || this.allowedFileTypes;
+    },
+    showPrivateNoteToggle() {
+      return !this.isNote && !this.isRecordingAudio;
+    },
+    hasMainMenuItems() {
+      return (
+        this.showAttachButton ||
+        (this.showAudioRecorderButton && !this.isRecordingAudio) ||
+        this.enableWhatsAppTemplates ||
+        this.enableContentTemplates
+      );
+    },
+    hasExtraMenuItems() {
+      return (
+        this.showMessageSignatureButton ||
+        this.showQuotedReplyToggle ||
+        !!this.enableInsertArticleInReply ||
+        this.showCopilotAction ||
+        this.showPopoutAction
+      );
+    },
+    showActionsMenuButton() {
+      if (this.isRecordingAudio) return false;
+      return this.hasMainMenuItems || this.hasExtraMenuItems;
+    },
+    sendIcon() {
+      return this.isNote ? 'i-ph-check-bold' : 'i-ph-paper-plane-right-fill';
+    },
     quotedReplyToggleTooltip() {
       return this.quotedReplyEnabled
         ? this.$t('CONVERSATION.REPLYBOX.QUOTED_REPLY.DISABLE_TOOLTIP')
@@ -283,29 +352,217 @@ export default {
     toggleInsertArticle() {
       this.$emit('toggleInsertArticle');
     },
+    toggleActionsMenu() {
+      this.showActionsMenu = !this.showActionsMenu;
+    },
+    closeActionsMenu() {
+      this.showActionsMenu = false;
+    },
+    runMenuAction(action) {
+      this.closeActionsMenu();
+      action();
+    },
+    // Abre o mesmo seletor de arquivos de antes (input #conversationAttachment);
+    // "Fotos e vídeos" só filtra a lista de tipos do diálogo.
+    openFilePicker(onlyMedia = false) {
+      this.closeActionsMenu();
+      this.uploadAcceptOverride = onlyMedia ? this.mediaFileTypes : '';
+      this.$nextTick(() => {
+        const input = document.querySelector('#conversationAttachment');
+        if (input) input.click();
+        this.$nextTick(() => {
+          this.uploadAcceptOverride = '';
+        });
+      });
+    },
   },
 };
 </script>
 
 <template>
-  <div class="flex justify-between p-3" :class="wrapClass">
-    <div class="left-wrap">
-      <NextButton
-        v-if="!isEditorDisabled"
-        v-tooltip.top-end="$t('CONVERSATION.REPLYBOX.TIP_EMOJI_ICON')"
-        icon="i-ph-smiley-sticker"
-        slate
-        faded
-        sm
+  <div class="trama-wa-acoes" :class="wrapClass">
+    <!-- Trama: o painel de baixo virou a barra estilo WhatsApp. A raiz usa
+         display: contents para os botões ficarem na mesma linha do campo de
+         texto (ver "barra" em _trama-whatsapp.scss). -->
+    <div class="left-wrap trama-wa-esquerda">
+      <div v-if="showActionsMenuButton" class="relative">
+        <button
+          v-tooltip.top-start="$t('CONVERSATION.TRAMA_BARRA.MAIS_ACOES')"
+          type="button"
+          class="trama-wa-icone-btn"
+          :class="{ 'is-active': showActionsMenu }"
+          :aria-label="$t('CONVERSATION.TRAMA_BARRA.MAIS_ACOES')"
+          :aria-expanded="showActionsMenu"
+          aria-haspopup="menu"
+          data-test-id="trama-barra-mais"
+          @click="toggleActionsMenu"
+        >
+          <span class="i-ph-plus size-6" />
+        </button>
+        <div
+          v-if="showActionsMenu"
+          v-on-click-outside="closeActionsMenu"
+          class="trama-wa-pop"
+          role="menu"
+          @keydown.esc="closeActionsMenu"
+        >
+          <button
+            v-if="showAttachButton"
+            type="button"
+            role="menuitem"
+            class="trama-wa-pop-item"
+            data-test-id="trama-barra-fotos"
+            @click="openFilePicker(true)"
+          >
+            <span class="trama-wa-pop-circulo bg-[#007bfc]">
+              <span class="i-ph-image size-4" />
+            </span>
+            {{ $t('CONVERSATION.TRAMA_BARRA.FOTOS_VIDEOS') }}
+          </button>
+          <button
+            v-if="showAttachButton"
+            type="button"
+            role="menuitem"
+            class="trama-wa-pop-item"
+            data-test-id="trama-barra-documento"
+            @click="openFilePicker(false)"
+          >
+            <span class="trama-wa-pop-circulo bg-[#1e3a5f]">
+              <span class="i-ph-file-text size-4" />
+            </span>
+            {{ $t('CONVERSATION.TRAMA_BARRA.DOCUMENTO') }}
+          </button>
+          <button
+            v-if="showAudioRecorderButton && !isRecordingAudio"
+            type="button"
+            role="menuitem"
+            class="trama-wa-pop-item"
+            data-test-id="trama-barra-gravar"
+            @click="runMenuAction(toggleAudioRecorder)"
+          >
+            <span class="trama-wa-pop-circulo bg-[#e5533d]">
+              <span class="i-ph-microphone size-4" />
+            </span>
+            {{ $t('CONVERSATION.TRAMA_BARRA.GRAVAR_AUDIO') }}
+          </button>
+          <button
+            v-if="enableWhatsAppTemplates"
+            type="button"
+            role="menuitem"
+            class="trama-wa-pop-item"
+            data-test-id="trama-barra-modelo"
+            @click="runMenuAction(() => $emit('selectWhatsappTemplate'))"
+          >
+            <span class="trama-wa-pop-circulo bg-[#00a884]">
+              <span class="i-ph-whatsapp-logo size-4" />
+            </span>
+            {{ $t('CONVERSATION.TRAMA_BARRA.MODELO_WHATSAPP') }}
+          </button>
+          <button
+            v-if="enableContentTemplates"
+            type="button"
+            role="menuitem"
+            class="trama-wa-pop-item"
+            data-test-id="trama-barra-modelo-conteudo"
+            @click="runMenuAction(() => $emit('selectContentTemplate'))"
+          >
+            <span class="trama-wa-pop-circulo bg-[#00a884]">
+              <span class="i-ph-whatsapp-logo size-4" />
+            </span>
+            {{ $t('CONVERSATION.TRAMA_BARRA.MODELOS_CONTEUDO') }}
+          </button>
+          <div
+            v-if="hasMainMenuItems && hasExtraMenuItems"
+            class="trama-wa-pop-divisor"
+          />
+          <button
+            v-if="showMessageSignatureButton"
+            type="button"
+            role="menuitem"
+            class="trama-wa-pop-item is-secundario"
+            data-test-id="trama-barra-assinatura"
+            @click="runMenuAction(toggleMessageSignature)"
+          >
+            <span class="i-ph-signature size-5" />
+            {{ signatureToggleTooltip }}
+          </button>
+          <button
+            v-if="showQuotedReplyToggle"
+            type="button"
+            role="menuitem"
+            class="trama-wa-pop-item is-secundario"
+            :aria-pressed="quotedReplyEnabled"
+            @click="runMenuAction(() => $emit('toggleQuotedReply'))"
+          >
+            <span class="i-ph-quotes size-5" />
+            {{ quotedReplyToggleTooltip }}
+          </button>
+          <button
+            v-if="enableInsertArticleInReply"
+            type="button"
+            role="menuitem"
+            class="trama-wa-pop-item is-secundario"
+            @click="runMenuAction(toggleInsertArticle)"
+          >
+            <span class="i-ph-article-ny-times size-5" />
+            {{ $t('HELP_CENTER.ARTICLE_SEARCH.OPEN_ARTICLE_SEARCH') }}
+          </button>
+          <button
+            v-if="showCopilotAction"
+            type="button"
+            role="menuitem"
+            class="trama-wa-pop-item is-secundario"
+            data-test-id="trama-barra-ia"
+            @click="runMenuAction(() => $emit('openCopilot'))"
+          >
+            <span class="i-ph-sparkle-fill size-5 text-n-blue-9" />
+            {{ $t('CONVERSATION.TRAMA_BARRA.ASSISTENTE_IA') }}
+          </button>
+          <button
+            v-if="showPopoutAction"
+            type="button"
+            role="menuitem"
+            class="trama-wa-pop-item is-secundario"
+            data-test-id="trama-barra-expandir"
+            @click="runMenuAction(() => $emit('togglePopout'))"
+          >
+            <span class="i-lucide-maximize-2 size-5" />
+            {{ $t('CONVERSATION.TRAMA_BARRA.EXPANDIR') }}
+          </button>
+        </div>
+      </div>
+      <button
+        v-if="!isRecordingAudio"
+        v-tooltip.top-start="$t('CONVERSATION.REPLYBOX.TIP_EMOJI_ICON')"
+        type="button"
+        class="trama-wa-icone-btn"
+        :disabled="isEditorDisabled"
+        :aria-label="$t('CONVERSATION.REPLYBOX.TIP_EMOJI_ICON')"
+        data-test-id="trama-barra-emoji"
         @click="toggleEmojiPicker"
-      />
+      >
+        <span class="i-ph-smiley size-6" />
+      </button>
+      <button
+        v-if="showPrivateNoteToggle"
+        v-tooltip.top-start="$t('CONVERSATION.TRAMA_BARRA.NOTA_ALTERNAR')"
+        type="button"
+        class="trama-wa-icone-btn"
+        :aria-label="$t('CONVERSATION.TRAMA_BARRA.NOTA_ALTERNAR')"
+        data-test-id="trama-barra-nota"
+        @click="$emit('togglePrivateNote')"
+      >
+        <span class="i-ph-lock-simple size-6" />
+      </button>
+      <!-- Mesmo seletor de arquivos de antes (id, tipos aceitos, arrastar e
+           soltar). Fica invisível: quem abre é o menu "+" ou Ctrl+Alt+A. -->
       <FileUpload
         v-if="showAttachButton"
         ref="uploadRef"
-        v-tooltip.top-end="$t('CONVERSATION.REPLYBOX.TIP_ATTACH_ICON')"
+        class="trama-wa-upload-oculto"
         input-id="conversationAttachment"
         :size="4096 * 4096"
-        :accept="allowedFileTypes"
+        :accept="uploadAccept"
         :multiple="enableMultipleFileUpload"
         :drop="enableDragAndDrop"
         :drop-directory="false"
@@ -314,25 +571,18 @@ export default {
           direct_upload: true,
         }"
         @input-file="onFileUpload"
-      >
-        <NextButton
-          v-if="showAttachButton"
-          v-tooltip.top-end="$t('CONVERSATION.REPLYBOX.TIP_ATTACH_ICON')"
-          icon="i-ph-paperclip"
-          slate
-          faded
-          sm
-        />
-      </FileUpload>
-      <NextButton
-        v-if="showAudioRecorderButton"
-        v-tooltip.top-end="$t('CONVERSATION.REPLYBOX.TIP_AUDIORECORDER_ICON')"
-        :icon="!isRecordingAudio ? 'i-ph-microphone' : 'i-ph-microphone-slash'"
-        slate
-        faded
-        sm
-        @click="toggleAudioRecorder"
       />
+      <button
+        v-if="showAudioRecorderButton && isRecordingAudio"
+        v-tooltip.top-start="$t('CONVERSATION.TRAMA_BARRA.CANCELAR_AUDIO')"
+        type="button"
+        class="trama-wa-icone-btn"
+        :aria-label="$t('CONVERSATION.TRAMA_BARRA.CANCELAR_AUDIO')"
+        data-test-id="trama-barra-cancelar-audio"
+        @click="toggleAudioRecorder"
+      >
+        <span class="i-ph-trash size-6" />
+      </button>
       <NextButton
         v-if="showAudioPlayStopButton"
         :icon="audioRecorderPlayStopIcon"
@@ -341,43 +591,6 @@ export default {
         sm
         :label="recordingAudioDurationText"
         @click="toggleAudioRecorderPlayPause"
-      />
-      <NextButton
-        v-if="showMessageSignatureButton"
-        v-tooltip.top-end="signatureToggleTooltip"
-        icon="i-ph-signature"
-        slate
-        faded
-        sm
-        @click="toggleMessageSignature"
-      />
-      <NextButton
-        v-if="showQuotedReplyToggle"
-        v-tooltip.top-end="quotedReplyToggleTooltip"
-        icon="i-ph-quotes"
-        :variant="quotedReplyEnabled ? 'solid' : 'faded'"
-        color="slate"
-        sm
-        :aria-pressed="quotedReplyEnabled"
-        @click="$emit('toggleQuotedReply')"
-      />
-      <NextButton
-        v-if="enableWhatsAppTemplates"
-        v-tooltip.top-end="$t('CONVERSATION.FOOTER.WHATSAPP_TEMPLATES')"
-        icon="i-ph-whatsapp-logo"
-        slate
-        faded
-        sm
-        @click="$emit('selectWhatsappTemplate')"
-      />
-      <NextButton
-        v-if="enableContentTemplates"
-        v-tooltip.top-end="'Content Templates'"
-        icon="i-ph-whatsapp-logo"
-        slate
-        faded
-        sm
-        @click="$emit('selectContentTemplate')"
       />
       <VideoCallButton
         v-if="
@@ -398,46 +611,38 @@ export default {
           </h4>
         </div>
       </transition>
-      <NextButton
-        v-if="enableInsertArticleInReply"
-        v-tooltip.top-end="$t('HELP_CENTER.ARTICLE_SEARCH.OPEN_ARTICLE_SEARCH')"
-        icon="i-ph-article-ny-times"
-        slate
-        faded
-        sm
-        @click="toggleInsertArticle"
-      />
     </div>
-    <div class="right-wrap">
-      <NextButton
-        :label="sendButtonText"
+    <div class="right-wrap trama-wa-direita">
+      <button
+        v-if="showMicInSendSlot"
+        v-tooltip.top-end="$t('CONVERSATION.REPLYBOX.TIP_AUDIORECORDER_ICON')"
+        type="button"
+        class="trama-wa-enviar"
+        :aria-label="$t('CONVERSATION.REPLYBOX.TIP_AUDIORECORDER_ICON')"
+        data-test-id="trama-barra-microfone"
+        @click="toggleAudioRecorder"
+      >
+        <span class="i-ph-microphone size-6" />
+      </button>
+      <button
+        v-else
+        v-tooltip.top-end="sendButtonText"
         type="submit"
-        sm
-        :color="isNote ? 'amber' : 'blue'"
+        class="trama-wa-enviar"
         :disabled="isSendDisabled"
-        class="flex-shrink-0"
+        :aria-label="sendButtonText"
+        data-test-id="trama-barra-enviar"
         @click="onSend"
-      />
+      >
+        <span class="size-6" :class="sendIcon" />
+      </button>
     </div>
   </div>
 </template>
 
 <style lang="scss" scoped>
-.left-wrap {
-  @apply items-center flex gap-2;
-}
-
-.right-wrap {
-  @apply flex;
-}
-
-::v-deep .file-uploads {
-  label {
-    @apply cursor-pointer;
-  }
-
-  &:hover button {
-    @apply enabled:bg-n-slate-9/20;
-  }
+// O visual da barra fica em _trama-whatsapp.scss (bloco "barra").
+.trama-wa-upload-oculto {
+  @apply absolute size-px overflow-hidden opacity-0 pointer-events-none;
 }
 </style>

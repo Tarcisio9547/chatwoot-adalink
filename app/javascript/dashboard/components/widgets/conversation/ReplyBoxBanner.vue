@@ -109,11 +109,12 @@ const onClickBotHandoff = async () => {
 </script>
 
 <template>
+  <!-- Trama: avisos como cartão branco acima da barra (estilo em _trama-whatsapp.scss). -->
   <Banner
     v-if="showSelfAssignBanner && !showBotHandoffBanner"
     action-button-variant="ghost"
     color-scheme="secondary"
-    class="mx-2 mb-2 rounded-lg !py-2"
+    class="trama-wa-aviso"
     :banner-message="$t('CONVERSATION.NOT_ASSIGNED_TO_YOU')"
     has-action-button
     :action-button-label="$t('CONVERSATION.ASSIGN_TO_ME')"
@@ -123,7 +124,7 @@ const onClickBotHandoff = async () => {
     v-if="showBotHandoffBanner"
     action-button-variant="ghost"
     color-scheme="secondary"
-    class="mx-2 mb-2 rounded-lg !py-2"
+    class="trama-wa-aviso"
     :banner-message="$t('CONVERSATION.BOT_HANDOFF_MESSAGE')"
     has-action-button
     :action-button-label="botHandoffActionLabel"

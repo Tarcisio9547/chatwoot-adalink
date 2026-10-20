@@ -6,14 +6,12 @@ import { useTrack } from 'dashboard/composables';
 import { vOnClickOutside } from '@vueuse/components';
 import { REPLY_EDITOR_MODES, CHAR_LENGTH_WARNING } from './constants';
 import { CAPTAIN_EVENTS } from 'dashboard/helper/AnalyticsHelper/events';
-import NextButton from 'dashboard/components-next/button/Button.vue';
 import EditorModeToggle from './EditorModeToggle.vue';
 import CopilotMenuBar from './CopilotMenuBar.vue';
 
 export default {
   name: 'ReplyTopPanel',
   components: {
-    NextButton,
     EditorModeToggle,
     CopilotMenuBar,
   },
@@ -54,7 +52,7 @@ export default {
       default: undefined,
     },
   },
-  emits: ['setReplyMode', 'togglePopout', 'executeCopilotAction'],
+  emits: ['setReplyMode', 'executeCopilotAction'],
   setup(props, { emit }) {
     const setReplyMode = mode => {
       emit('setReplyMode', mode);
@@ -84,6 +82,8 @@ export default {
 
     const toggleCopilotMenu = () => {
       const isOpening = !showCopilotMenu.value;
+      // Mesmo bloqueio do antigo botão da IA (agora acionado pelo menu "+").
+      if (isOpening && (props.disabled || props.isEditorDisabled)) return;
       if (isOpening) {
         useTrack(CAPTAIN_EVENTS.EDITOR_AI_MENU_OPENED, {
           conversationId: props.conversationId,
@@ -145,37 +145,31 @@ export default {
 </script>
 
 <template>
-  <div
-    class="flex justify-between gap-2 h-[3.25rem] items-center ltr:pl-3 ltr:pr-2 rtl:pr-3 rtl:pl-2"
-  >
+  <div class="relative flex items-center justify-end min-h-0">
+    <!-- Trama (barra estilo WhatsApp): este painel ficou "invisível".
+         - Abas Responder / Mensagem Privada: escondidas; quem alterna agora é o
+           cadeado da barra (mesmo setReplyMode). Atalhos Alt+P / Alt+L seguem aqui.
+         - IA e Expandir: viraram itens do menu "+" (ReplyBottomPanel). O menu da
+           IA continua abrindo daqui (toggleCopilotMenu), acima da barra.
+         - Aviso de limite de caracteres: continua aparecendo quando necessário. -->
     <EditorModeToggle
+      class="!hidden"
       :mode="mode"
       :disabled="disabled"
       :is-reply-restricted="isReplyRestricted"
       @toggle-mode="handleModeToggle"
     />
-    <div class="flex items-center mx-4 my-0">
-      <div v-if="isMessageLengthReachingThreshold" class="text-xs">
-        <span :class="charLengthClass">
-          {{ characterLengthWarning }}
-        </span>
-      </div>
+    <div v-if="isMessageLengthReachingThreshold" class="px-1 pb-1.5 text-xs">
+      <span :class="charLengthClass">
+        {{ characterLengthWarning }}
+      </span>
     </div>
-    <div v-if="captainTasksEnabled" class="flex items-center gap-2">
+    <div
+      v-if="captainTasksEnabled && showCopilotMenu"
+      class="absolute top-0 ltr:right-0 rtl:left-0"
+    >
       <div class="relative">
-        <NextButton
-          ghost
-          :disabled="disabled || isEditorDisabled"
-          :class="{
-            'text-n-blue-9 hover:enabled:!bg-n-blue-3': !showCopilotMenu,
-            'text-n-blue-9 bg-n-blue-3': showCopilotMenu,
-          }"
-          sm
-          icon="i-ph-sparkle-fill"
-          @click="toggleCopilotMenu"
-        />
         <CopilotMenuBar
-          v-if="showCopilotMenu"
           v-on-click-outside="handleClickOutside"
           :has-selection="false"
           :editor-content="editorContent"
@@ -184,13 +178,6 @@ export default {
           @execute-copilot-action="handleCopilotAction"
         />
       </div>
-      <NextButton
-        ghost
-        class="text-n-slate-11"
-        sm
-        icon="i-lucide-maximize-2"
-        @click="$emit('togglePopout')"
-      />
     </div>
   </div>
 </template>

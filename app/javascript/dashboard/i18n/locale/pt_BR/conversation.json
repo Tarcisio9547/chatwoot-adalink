@@ -198,6 +198,22 @@
       "CLICK_HERE": "Clique aqui para atualizar",
       "WHATSAPP_TEMPLATES": "Modelos do Whatsapp"
     },
+    "TRAMA_BARRA": {
+      "NOTA_AVISO": "Nota privada: só a equipe vê. O cliente não recebe.",
+      "VOLTAR_RESPONDER": "Voltar a responder",
+      "NOTA_ALTERNAR": "Nota privada (só a equipe vê)",
+      "MAIS_ACOES": "Anexar e mais",
+      "FOTOS_VIDEOS": "Fotos e vídeos",
+      "DOCUMENTO": "Documento",
+      "GRAVAR_AUDIO": "Gravar áudio",
+      "CANCELAR_AUDIO": "Cancelar gravação",
+      "MODELO_WHATSAPP": "Modelo do WhatsApp",
+      "MODELOS_CONTEUDO": "Modelos de conteúdo",
+      "ASSISTENTE_IA": "Assistente de IA",
+      "EXPANDIR": "Expandir editor",
+      "PLACEHOLDER": "Digite uma mensagem",
+      "PLACEHOLDER_NOTA": "Escreva a nota para a equipe (use @ para mencionar)"
+    },
     "REPLYBOX": {
       "REPLY": "Responder",
       "PRIVATE_NOTE": "Mensagem Privada",

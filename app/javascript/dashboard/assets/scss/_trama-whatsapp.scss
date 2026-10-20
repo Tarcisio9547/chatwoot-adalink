@@ -278,3 +278,341 @@
   font-weight: 700;
   line-height: 20px;
 }
+
+/* barra */
+// Barra de resposta estilo WhatsApp (protótipo aprovado, entrega 3).
+// Só aparência: envio, anexos, áudio, modelos, nota privada e IA usam as mesmas
+// funções de antes (ReplyBox / ReplyBottomPanel / ReplyTopPanel).
+:root {
+  --trama-wa-barra: #f0f2f5;
+  --trama-wa-barra-nota: #fff1c2;
+  --trama-wa-nota-texto: #7a5c00;
+  --trama-wa-nota-enviar: #b88a00;
+  --trama-wa-nota-enviar-hover: #9a7400;
+  --trama-wa-campo: #ffffff;
+  --trama-wa-icone: #667781;
+  --trama-wa-icone-hover: rgba(11, 20, 26, 0.07);
+  --trama-wa-verde: #00a884;
+  --trama-wa-verde-hover: #008069;
+  --trama-wa-aviso-fundo: #ffffff;
+  --trama-wa-aviso-icone: #b45309;
+  --trama-wa-aviso-acao: #008069;
+  --trama-wa-pop-fundo: #ffffff;
+  --trama-wa-pop-hover: #f5f6f6;
+  --trama-wa-pop-sombra: 0 12px 32px rgba(11, 20, 26, 0.18);
+  --trama-wa-divisor: #e9edef;
+}
+
+.dark {
+  --trama-wa-barra: #202c33;
+  --trama-wa-barra-nota: #3d3417;
+  --trama-wa-nota-texto: #f2d27a;
+  --trama-wa-nota-enviar: #b88a00;
+  --trama-wa-nota-enviar-hover: #d19f0b;
+  --trama-wa-campo: #2a3942;
+  --trama-wa-icone: #8696a0;
+  --trama-wa-icone-hover: rgba(255, 255, 255, 0.08);
+  --trama-wa-verde: #00a884;
+  --trama-wa-verde-hover: #06cf9c;
+  --trama-wa-aviso-fundo: #111b21;
+  --trama-wa-aviso-icone: #fbbf24;
+  --trama-wa-aviso-acao: #00a884;
+  --trama-wa-pop-fundo: #233138;
+  --trama-wa-pop-hover: #182229;
+  --trama-wa-pop-sombra: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --trama-wa-divisor: #2a3942;
+}
+
+// Faixa onde ficam avisos + barra (sem margem nem borda, cor da barra)
+.trama-wa-area {
+  background-color: var(--trama-wa-barra);
+}
+
+// A barra em si (era o cartão com borda do Chatwoot)
+.reply-box.trama-wa-barra {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 14px 10px;
+  background-color: var(--trama-wa-barra);
+  color: var(--trama-wa-texto);
+
+  &.is-private {
+    background-color: var(--trama-wa-barra-nota);
+  }
+}
+
+// Expandido (popout): mesma barra, com cantos arredondados no meio da tela
+.modal-mask .reply-box.trama-wa-barra {
+  border-radius: 12px;
+}
+
+// Linha "Nota privada: só a equipe vê…" + "Voltar a responder"
+.trama-wa-privbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--trama-wa-nota-texto);
+}
+
+.trama-wa-privbar-voltar {
+  font-weight: 600;
+  text-decoration: underline;
+  white-space: nowrap;
+  color: inherit;
+}
+
+// Linha única: [+][emoji][cadeado] [campo] [enviar/microfone]
+.trama-wa-linha {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+
+  // O painel de baixo (ReplyBottomPanel) "se desmancha" para os botões
+  // virarem vizinhos do campo de texto.
+  > .trama-wa-acoes {
+    display: contents;
+  }
+
+  .trama-wa-esquerda {
+    order: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+
+  .trama-wa-campo {
+    order: 2;
+  }
+
+  .trama-wa-direita {
+    order: 3;
+    display: flex;
+    flex-shrink: 0;
+  }
+
+  // Modo IA (copiloto): volta a empilhar campo e botões da IA
+  &.is-copilot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+// Campo de texto: branco, arredondado, sem borda
+.trama-wa-campo {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 8px;
+  background-color: var(--trama-wa-campo);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  // border-box: 44px = 12px + 20px (uma linha) + 12px
+  .ProseMirror-woot-style {
+    min-height: 44px;
+    max-height: 140px;
+  }
+
+  .ProseMirror-menubar-wrapper > .ProseMirror {
+    padding: 12px 0;
+    font-size: 15px;
+    line-height: 20px;
+    color: var(--trama-wa-texto);
+
+    p {
+      color: var(--trama-wa-texto);
+    }
+  }
+
+  // O editor do Chatwoot põe 10px embaixo do último parágrafo
+  &.reply-box__top .popover-prosemirror-menu .ProseMirror p:last-child {
+    margin-bottom: 0 !important;
+  }
+
+  .ProseMirror p.empty-node:first-child::before {
+    color: var(--trama-wa-icone);
+  }
+}
+
+// Botões redondos de ícone (+, emoji, cadeado, cancelar áudio)
+.trama-wa-icone-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  color: var(--trama-wa-icone);
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+
+  &:hover:not(:disabled),
+  &.is-active {
+    background-color: var(--trama-wa-icone-hover);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--trama-wa-verde);
+    outline-offset: 2px;
+  }
+}
+
+// Botão verde da direita: microfone (vazio) ou avião de papel (enviar)
+.trama-wa-enviar {
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #ffffff;
+  background-color: var(--trama-wa-verde);
+  transition: background-color 0.15s ease;
+
+  &:hover:not(:disabled) {
+    background-color: var(--trama-wa-verde-hover);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--trama-wa-verde);
+    outline-offset: 2px;
+  }
+}
+
+.trama-wa-barra.is-private .trama-wa-enviar {
+  background-color: var(--trama-wa-nota-enviar);
+
+  &:hover:not(:disabled) {
+    background-color: var(--trama-wa-nota-enviar-hover);
+  }
+}
+
+// Menu do "+" (anexos, modelo do WhatsApp e ações menos usadas)
+.trama-wa-pop {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  z-index: 40;
+  width: 260px;
+  padding: 6px;
+  border-radius: 12px;
+  background-color: var(--trama-wa-pop-fundo);
+  box-shadow: var(--trama-wa-pop-sombra);
+  color: var(--trama-wa-texto);
+
+  [dir='rtl'] & {
+    left: auto;
+    right: 0;
+  }
+}
+
+.trama-wa-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  text-align: start;
+  font-size: 14.5px;
+  line-height: 20px;
+  color: var(--trama-wa-texto);
+
+  &:hover,
+  &:focus-visible {
+    background-color: var(--trama-wa-pop-hover);
+    outline: none;
+  }
+
+  &.is-secundario {
+    padding: 8px 12px 8px 20px;
+    font-size: 13.5px;
+    color: var(--trama-wa-icone);
+    gap: 20px;
+  }
+}
+
+.trama-wa-pop-circulo {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.trama-wa-pop-divisor {
+  height: 1px;
+  margin: 6px 8px;
+  background-color: var(--trama-wa-divisor);
+}
+
+// Avisos (atribuir a mim, devolver do robô, janela de 24 h) como cartão
+// branco acima da barra. Sobrepõe as cores do Banner do Chatwoot.
+body .trama-wa-aviso.woot-banner.banner {
+  justify-content: flex-start;
+  height: auto;
+  min-height: 0;
+  margin: 8px 14px 0;
+  padding: 10px 12px;
+  gap: 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 13.5px;
+  line-height: 18px;
+  background-color: var(--trama-wa-aviso-fundo);
+  color: var(--trama-wa-texto);
+  box-shadow: var(--trama-wa-sombra);
+
+  &::before {
+    content: '';
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    background-color: var(--trama-wa-aviso-icone);
+    -webkit-mask: var(--trama-wa-aviso-svg) center / contain no-repeat;
+    mask: var(--trama-wa-aviso-svg) center / contain no-repeat;
+  }
+
+  .banner-message {
+    display: block;
+    flex: 1;
+    min-width: 0;
+  }
+
+  a {
+    margin-left: 4px;
+    font-size: inherit;
+    font-weight: 700;
+    color: var(--trama-wa-aviso-acao);
+  }
+
+  .actions button {
+    font-weight: 700;
+    color: var(--trama-wa-aviso-acao);
+  }
+}
+
+:root {
+  --trama-wa-aviso-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
+}
