@@ -184,7 +184,10 @@ class Message < ApplicationRecord
       message_type: message_type,
       private: private,
       sender: sender.try(:webhook_data),
-      source_id: source_id
+      source_id: source_id,
+      # Trama: status do canal (sent/delivered/read/failed). O CRM usa delivered/read para mostrar entregue/lido
+      # nas campanhas de WhatsApp; antes o payload de message_updated não dizia o que tinha mudado.
+      status: status
     }
     data[:attachments] = attachments.map(&:push_event_data) if attachments.present?
     data
