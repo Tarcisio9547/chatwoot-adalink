@@ -4,7 +4,6 @@ import { useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import { useElementSize } from '@vueuse/core';
 import BackButton from '../BackButton.vue';
-import InboxName from '../InboxName.vue';
 import MoreActions from './MoreActions.vue';
 import Avatar from 'next/avatar/Avatar.vue';
 import SLACardLabel from './components/SLACardLabel.vue';
@@ -12,6 +11,8 @@ import wootConstants from 'dashboard/constants/globals';
 import { conversationListPageURL } from 'dashboard/helper/URLHelper';
 import { snoozedReopenTime } from 'dashboard/helper/snoozeHelpers';
 import { useInbox } from 'dashboard/composables/useInbox';
+import { useUISettings } from 'dashboard/composables/useUISettings';
+import { useTramaAtribuirAMim } from 'dashboard/composables/useTramaAtribuirAMim';
 import { useI18n } from 'vue-i18n';
 
 const props = defineProps({
@@ -85,41 +86,79 @@ const inbox = computed(() => {
   return store.getters['inboxes/getInbox'](inboxId);
 });
 
-const hasMultipleInboxes = computed(
-  () => store.getters['inboxes/getInboxes'].length > 1
+const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
+
+// Trama: cabeçalho com cara de WhatsApp (protótipo aprovado em 19/10).
+// Clicar no nome/avatar ou no (i) abre e fecha "Dados do contato", usando a
+// mesma preferência do Chatwoot (is_contact_sidebar_open).
+const { uiSettings, updateUISettings } = useUISettings();
+const painelContatoAberto = computed(
+  () => !!uiSettings.value?.is_contact_sidebar_open
+);
+const alternarPainelContato = () => {
+  updateUISettings({
+    is_contact_sidebar_open: !painelContatoAberto.value,
+    is_copilot_panel_open: false,
+  });
+};
+
+const { responsavel, souResponsavel, atribuirAMim } = useTramaAtribuirAMim();
+
+const conversaAtiva = computed(() =>
+  [wootConstants.STATUS_TYPE.OPEN, wootConstants.STATUS_TYPE.PENDING].includes(
+    currentChat.value.status
+  )
 );
 
-const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
+// "Atribuir a mim" só aparece quando a conversa está sem responsável.
+const mostrarAtribuirAMim = computed(
+  () => conversaAtiva.value && !responsavel.value
+);
+
+const textoResponsavel = computed(() => {
+  if (responsavel.value) {
+    return souResponsavel.value
+      ? t('TRAMA_CONTATO.COM_VOCE')
+      : t('TRAMA_CONTATO.COM_RESPONSAVEL', {
+          nome: responsavel.value.available_name || responsavel.value.name,
+        });
+  }
+  return '';
+});
+
+const cabecalhoCompacto = computed(() => width.value > 0 && width.value < 560);
+
+const SEPARADOR = ' · ';
+
+const onAtribuirAMim = () => {
+  atribuirAMim(t('CONVERSATION.CHANGE_AGENT'));
+};
 </script>
 
 <template>
   <div
     ref="conversationHeader"
-    class="flex flex-col gap-3 items-center justify-between flex-1 w-full min-w-0 xl:flex-row px-3 pt-3 pb-2 h-24 xl:h-12"
+    class="trama-conv-h flex items-center flex-1 w-full min-w-0 gap-3 ltr:pl-4 ltr:pr-2.5 rtl:pr-4 rtl:pl-2.5"
   >
-    <div
-      class="flex items-center justify-start w-full xl:w-auto max-w-full min-w-0 xl:flex-1"
+    <BackButton v-if="showBackButton" :back-url="backButtonUrl" />
+    <button
+      type="button"
+      class="flex items-center flex-1 min-w-0 gap-3 p-0 text-start bg-transparent border-0 cursor-pointer"
+      :title="t('TRAMA_CONTATO.TITULO')"
+      data-testid="trama-conv-who"
+      @click="alternarPainelContato"
     >
-      <BackButton
-        v-if="showBackButton"
-        :back-url="backButtonUrl"
-        class="ltr:mr-2 rtl:ml-2"
-      />
       <Avatar
         :name="currentContact.name"
         :src="currentContact.thumbnail"
-        :size="32"
+        :size="40"
         :status="currentContact.availability_status"
         hide-offline-status
         rounded-full
       />
-      <div
-        class="flex flex-col items-start min-w-0 ml-2 overflow-hidden rtl:ml-0 rtl:mr-2"
-      >
-        <div class="flex flex-row items-center max-w-full gap-1 p-0 m-0">
-          <span
-            class="text-sm font-medium truncate leading-tight text-n-slate-12"
-          >
+      <span class="flex flex-col min-w-0 overflow-hidden">
+        <span class="flex items-center max-w-full min-w-0 gap-1">
+          <span class="truncate trama-conv-who-nome">
             {{ currentContact.name }}
           </span>
           <fluent-icon
@@ -129,21 +168,29 @@ const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
             class="text-n-amber-10 my-0 mx-0 min-w-[14px] flex-shrink-0"
             icon="warning"
           />
-        </div>
-
-        <div
-          class="flex items-center gap-2 overflow-hidden text-xs conversation--header--actions text-ellipsis whitespace-nowrap"
-        >
-          <InboxName v-if="hasMultipleInboxes" :inbox="inbox" class="!mx-0" />
-          <span v-if="isSnoozed" class="font-medium text-n-amber-10">
-            {{ snoozedDisplayText }}
+        </span>
+        <span class="truncate trama-conv-who-sub">
+          <span
+            v-if="mostrarAtribuirAMim"
+            class="trama-conv-sem-resp"
+            data-testid="trama-sem-responsavel"
+          >
+            {{ t('TRAMA_CONTATO.SEM_RESPONSAVEL') }}
           </span>
-        </div>
-      </div>
-    </div>
-    <div
-      class="flex flex-row items-center justify-start xl:justify-end flex-shrink-0 gap-2 w-full xl:w-auto header-actions-wrap"
-    >
+          <span v-else-if="textoResponsavel">{{ textoResponsavel }}</span>
+          <template v-if="inbox && inbox.name">
+            <span v-if="mostrarAtribuirAMim || textoResponsavel">
+              {{ SEPARADOR }}
+            </span>
+            <span>{{ inbox.name }}</span>
+          </template>
+          <span v-if="isSnoozed" class="font-medium text-n-amber-10">
+            {{ SEPARADOR }}{{ snoozedDisplayText }}
+          </span>
+        </span>
+      </span>
+    </button>
+    <div class="flex items-center flex-shrink-0 gap-2">
       <SLACardLabel
         v-if="hasSlaPolicyId"
         :chat="chat"
@@ -151,7 +198,34 @@ const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
         :parent-width="width"
         class="hidden md:flex"
       />
-      <MoreActions :conversation-id="currentChat.id" />
+      <button
+        v-if="mostrarAtribuirAMim"
+        type="button"
+        class="trama-hbtn trama-hbtn--verde"
+        :title="t('TRAMA_CONTATO.ATRIBUIR_A_MIM')"
+        data-testid="trama-atribuir-a-mim"
+        @click="onAtribuirAMim"
+      >
+        <span class="i-lucide-user size-4" aria-hidden="true" />
+        <span v-if="!cabecalhoCompacto">
+          {{ t('TRAMA_CONTATO.ATRIBUIR_A_MIM') }}
+        </span>
+      </button>
+      <MoreActions :conversation-id="currentChat.id">
+        <template #antesDoMenu>
+          <button
+            type="button"
+            class="trama-ib"
+            :class="{ 'is-on': painelContatoAberto }"
+            :aria-label="t('TRAMA_CONTATO.TITULO')"
+            :title="t('TRAMA_CONTATO.TITULO')"
+            :aria-pressed="painelContatoAberto"
+            @click="alternarPainelContato"
+          >
+            <span class="i-lucide-info size-5" aria-hidden="true" />
+          </button>
+        </template>
+      </MoreActions>
     </div>
   </div>
 </template>

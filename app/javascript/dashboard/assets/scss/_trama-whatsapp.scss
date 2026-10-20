@@ -616,3 +616,320 @@ body .trama-wa-aviso.woot-banner.banner {
 :root {
   --trama-wa-aviso-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
 }
+
+/* contato */
+// Cabeçalho da conversa e painel "Dados do contato" (protótipo aprovado em 19/10).
+// Só aparência: as ações continuam as mesmas do Chatwoot.
+:root {
+  --trama-wa-cabecalho: #f0f2f5;
+  --trama-wa-painel: #ffffff;
+  --trama-wa-faixa: #f0f2f5;
+  --trama-wa-linha: #e9edef;
+  --trama-wa-hover: #f5f6f6;
+  --trama-wa-selecionado: #f0f2f5;
+  --trama-wa-texto-2: #667781;
+  --trama-wa-verde: #00a884;
+  --trama-wa-verde-escuro: #008069;
+  --trama-wa-alerta: #b45309;
+  --trama-wa-perigo: #ea0038;
+  --trama-wa-marca: #1e3a5f;
+  --trama-wa-marca-hover: #163152;
+}
+
+.dark {
+  --trama-wa-cabecalho: #202c33;
+  --trama-wa-painel: #111b21;
+  --trama-wa-faixa: #202c33;
+  --trama-wa-linha: #222d34;
+  --trama-wa-hover: #202c33;
+  --trama-wa-selecionado: #2a3942;
+  --trama-wa-texto-2: #8696a0;
+  --trama-wa-verde-escuro: #00a884;
+  --trama-wa-alerta: #fbbf24;
+  --trama-wa-perigo: #f15c6d;
+  --trama-wa-marca: #1e3a5f;
+  --trama-wa-marca-hover: #26476f;
+}
+
+// Cabeçalho da conversa
+.trama-conv-h {
+  height: 60px;
+  background-color: var(--trama-wa-cabecalho);
+  color: var(--trama-wa-texto);
+}
+
+// O ConversationBox põe !pt-2 no cabeçalho; aqui ele fica centrado em 60px.
+.conversation-details-wrap > .trama-conv-h {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.trama-conv-who-nome {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 21px;
+  color: var(--trama-wa-texto);
+}
+
+.trama-conv-who-sub {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--trama-wa-texto-2);
+}
+
+.trama-conv-sem-resp {
+  color: var(--trama-wa-alerta);
+  font-weight: 600;
+}
+
+.trama-hbtn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  font-weight: 600;
+  font-size: 13.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  border: 1px solid var(--trama-wa-linha);
+  background-color: var(--trama-wa-painel);
+  color: var(--trama-wa-texto);
+
+  &:hover {
+    background-color: var(--trama-wa-hover);
+  }
+}
+
+.trama-hbtn--verde {
+  background-color: var(--trama-wa-verde);
+  border-color: transparent;
+  color: #fff;
+
+  &:hover {
+    background-color: var(--trama-wa-verde-escuro);
+  }
+}
+
+.trama-ib {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--trama-wa-texto-2);
+
+  &:hover {
+    background-color: var(--trama-wa-hover);
+  }
+
+  &.is-on {
+    background-color: var(--trama-wa-selecionado);
+    color: var(--trama-wa-texto);
+  }
+}
+
+// "Resolver" (com a setinha de reabrir/adiar/pendente) como botão de contorno arredondado
+.trama-conv-h .resolve-actions > div:first-child {
+  height: 36px;
+  border-radius: 18px;
+  overflow: hidden;
+  outline: 0 !important;
+  box-shadow: none !important;
+  border: 1px solid var(--trama-wa-linha);
+  background-color: var(--trama-wa-painel);
+
+  > button {
+    height: 34px !important;
+    border-radius: 0 !important;
+    background-color: transparent !important;
+    color: var(--trama-wa-texto) !important;
+    font-weight: 600;
+    font-size: 13.5px;
+
+    &:hover:not(:disabled) {
+      background-color: var(--trama-wa-hover) !important;
+    }
+  }
+
+  > button + button {
+    border-left: 1px solid var(--trama-wa-linha) !important;
+  }
+}
+
+// "⋮" redondo, igual aos outros ícones do cabeçalho
+.trama-conv-h .actions--container > .group > button {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 9999px !important;
+  color: var(--trama-wa-texto-2);
+}
+
+// Painel "Dados do contato"
+.trama-contato {
+  min-height: 100%;
+  background-color: var(--trama-wa-faixa);
+  color: var(--trama-wa-texto);
+}
+
+.trama-contato-h {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  background-color: var(--trama-wa-painel);
+
+  h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--trama-wa-texto);
+  }
+}
+
+.trama-contato-blk {
+  background-color: var(--trama-wa-painel);
+  margin-bottom: 10px;
+  padding: 14px 24px;
+
+  > h4 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--trama-wa-texto-2);
+  }
+}
+
+.trama-contato-perfil {
+  text-align: center;
+  padding: 26px 24px 20px;
+}
+
+.trama-contato-nome {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 14px 0 4px;
+  color: var(--trama-wa-texto);
+  overflow-wrap: anywhere;
+}
+
+.trama-contato-tel {
+  color: var(--trama-wa-texto-2);
+  font-size: 15.5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+
+  &.is-email {
+    font-size: 14px;
+  }
+
+  button {
+    color: var(--trama-wa-texto-2);
+    display: inline-grid;
+    place-items: center;
+    padding: 3px;
+    border-radius: 6px;
+
+    &:hover {
+      background-color: var(--trama-wa-hover);
+    }
+  }
+}
+
+.trama-contato-quick {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.trama-contato-qb {
+  flex: 1 1 0;
+  max-width: 104px;
+  min-width: 0;
+  padding: 12px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--trama-wa-linha);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--trama-wa-verde-escuro);
+
+  &:hover:not(:disabled) {
+    background-color: var(--trama-wa-hover);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &.is-marca {
+    background-color: var(--trama-wa-marca);
+    border-color: transparent;
+    color: #fff;
+
+    &:hover:not(:disabled) {
+      background-color: var(--trama-wa-marca-hover);
+    }
+  }
+}
+
+.trama-contato-li {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 13px 0;
+  text-align: left;
+  font-size: 15px;
+  color: var(--trama-wa-texto);
+
+  small {
+    display: block;
+    color: var(--trama-wa-texto-2);
+    font-size: 13px;
+  }
+
+  &.is-perigo {
+    color: var(--trama-wa-perigo);
+  }
+}
+
+.trama-contato-confirma {
+  padding: 10px 0 4px;
+  font-size: 14px;
+
+  p {
+    margin: 0 0 12px;
+    color: var(--trama-wa-texto-2);
+  }
+}
+
+.trama-contato-btn {
+  flex: 1;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 19px;
+  font-weight: 600;
+  font-size: 14px;
+
+  &.is-perigo {
+    background-color: var(--trama-wa-perigo);
+    color: #fff;
+  }
+
+  &.is-contorno {
+    border: 1px solid var(--trama-wa-linha);
+    color: var(--trama-wa-texto);
+  }
+}

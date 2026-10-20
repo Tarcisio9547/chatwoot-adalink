@@ -96,6 +96,8 @@ onUnmounted(() => {
       :conversation-id="currentChat.id"
       :status="currentChat.status"
     />
+    <!-- Trama: o cabeçalho põe aqui o ícone que abre "Dados do contato" -->
+    <slot name="antesDoMenu" />
     <div
       v-on-clickaway="() => toggleDropdown(false)"
       class="relative flex items-center group"
