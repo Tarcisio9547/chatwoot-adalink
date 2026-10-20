@@ -1,0 +1,114 @@
+// Trama: conversa com cara de WhatsApp (protótipo aprovado em 19/10, entrega 1).
+// Só aparência: fundo da conversa com textura, balões com rabinho, cores de
+// enviada/recebida/nota e ✓✓ azul. A lógica das mensagens não muda.
+// As cores ficam em variáveis próprias (--trama-wa-*) para não mexer na paleta
+// do resto do Chatwoot.
+
+:root {
+  --trama-wa-fundo: #efeae2;
+  --trama-wa-recebida: #ffffff;
+  --trama-wa-enviada: #d9fdd3;
+  --trama-wa-nota: #fff1c2;
+  --trama-wa-texto: #111b21;
+  --trama-wa-sombra: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  --trama-wa-sistema: #ffffff;
+  --trama-wa-sistema-texto: #54656f;
+  --trama-wa-lido: #53bdeb;
+  --trama-wa-textura: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 140 140' fill='none' stroke='%23000' stroke-opacity='0.07' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 34l12-10 12 10v14H14z M22 48v-8h8v8'/%3E%3Ccircle cx='96' cy='22' r='6'/%3E%3Cpath d='M101 26l12 12m-4-4l4-4m-8 0l4-4'/%3E%3Cpath d='M66 86a12 12 0 1 0-5 9.7L54 98l2.6-6.6A12 12 0 0 1 66 86z'/%3E%3Cpath d='M112 92c-3-6-12-6-12 1 0 6 12 12 12 12s12-6 12-12c0-7-9-7-12-1z'/%3E%3Crect x='20' y='100' width='22' height='16' rx='3'/%3E%3Cpath d='M20 104l11 7 11-7'/%3E%3Cpath d='M84 124l6-14 6 14m-10-4h8'/%3E%3C/svg%3E");
+}
+
+.dark {
+  --trama-wa-fundo: #0b141a;
+  --trama-wa-recebida: #202c33;
+  --trama-wa-enviada: #005c4b;
+  --trama-wa-nota: #3d3417;
+  --trama-wa-texto: #e9edef;
+  --trama-wa-sombra: 0 1px 0.5px rgba(0, 0, 0, 0.4);
+  --trama-wa-sistema: #182229;
+  --trama-wa-sistema-texto: #8696a0;
+  --trama-wa-textura: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 140 140' fill='none' stroke='%23fff' stroke-opacity='0.05' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 34l12-10 12 10v14H14z M22 48v-8h8v8'/%3E%3Ccircle cx='96' cy='22' r='6'/%3E%3Cpath d='M101 26l12 12m-4-4l4-4m-8 0l4-4'/%3E%3Cpath d='M66 86a12 12 0 1 0-5 9.7L54 98l2.6-6.6A12 12 0 0 1 66 86z'/%3E%3Cpath d='M112 92c-3-6-12-6-12 1 0 6 12 12 12 12s12-6 12-12c0-7-9-7-12-1z'/%3E%3Crect x='20' y='100' width='22' height='16' rx='3'/%3E%3Cpath d='M20 104l11 7 11-7'/%3E%3Cpath d='M84 124l6-14 6 14m-10-4h8'/%3E%3C/svg%3E");
+}
+
+// Fundo da conversa
+.trama-chat-fundo {
+  background-color: var(--trama-wa-fundo);
+  background-image: var(--trama-wa-textura);
+  background-size: 260px 260px;
+}
+
+// Balões
+.trama-bolha-recebida,
+.trama-bolha-enviada,
+.trama-bolha-nota {
+  position: relative;
+  color: var(--trama-wa-texto);
+  box-shadow: var(--trama-wa-sombra);
+  border-radius: 7.5px;
+}
+
+.trama-bolha-recebida {
+  background-color: var(--trama-wa-recebida);
+}
+
+.trama-bolha-enviada {
+  background-color: var(--trama-wa-enviada);
+}
+
+.trama-bolha-nota {
+  background-color: var(--trama-wa-nota);
+}
+
+// Rabinho só na PRIMEIRA mensagem de cada sequência do mesmo remetente
+// (o Chatwoot marca a mensagem que agrupa com a seguinte como .group-with-next).
+.message-bubble-container:not(.group-with-next + .message-bubble-container) {
+  .left-bubble.trama-bolha-recebida {
+    border-top-left-radius: 0;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -8px;
+      width: 8px;
+      height: 13px;
+      background-color: var(--trama-wa-recebida);
+      clip-path: polygon(0 0, 100% 0, 100% 100%);
+    }
+  }
+
+  .right-bubble.trama-bolha-enviada,
+  .right-bubble.trama-bolha-nota {
+    border-top-right-radius: 0;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: -8px;
+      width: 8px;
+      height: 13px;
+      clip-path: polygon(0 0, 100% 0, 0 100%);
+    }
+  }
+
+  .right-bubble.trama-bolha-enviada::before {
+    background-color: var(--trama-wa-enviada);
+  }
+
+  .right-bubble.trama-bolha-nota::before {
+    background-color: var(--trama-wa-nota);
+  }
+}
+
+// Avisos do sistema ("Conversa marcada como resolvida…")
+.trama-sistema {
+  background-color: var(--trama-wa-sistema);
+  color: var(--trama-wa-sistema-texto);
+  box-shadow: var(--trama-wa-sombra);
+  border-radius: 7.5px;
+}
+
+// ✓✓ azul quando o cliente leu
+.trama-lido {
+  color: var(--trama-wa-lido);
+}
