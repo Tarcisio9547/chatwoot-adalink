@@ -20,13 +20,14 @@ const { variant, orientation, inReplyTo, shouldGroupWithNext } =
 const { t } = useI18n();
 
 const varaintBaseMap = {
-  [MESSAGE_VARIANTS.AGENT]: 'bg-n-solid-blue text-n-slate-12',
+  // Trama: cores de WhatsApp (assets/scss/_trama-whatsapp.scss)
+  [MESSAGE_VARIANTS.AGENT]: 'trama-bolha-enviada',
   [MESSAGE_VARIANTS.PRIVATE]:
-    'bg-n-solid-amber text-n-amber-12 [&_.prosemirror-mention-node]:font-semibold',
-  [MESSAGE_VARIANTS.USER]: 'bg-n-slate-4 text-n-slate-12',
-  [MESSAGE_VARIANTS.ACTIVITY]: 'bg-n-alpha-1 text-n-slate-11 text-sm',
-  [MESSAGE_VARIANTS.BOT]: 'bg-n-solid-iris text-n-slate-12',
-  [MESSAGE_VARIANTS.TEMPLATE]: 'bg-n-solid-iris text-n-slate-12',
+    'trama-bolha-nota [&_.prosemirror-mention-node]:font-semibold',
+  [MESSAGE_VARIANTS.USER]: 'trama-bolha-recebida',
+  [MESSAGE_VARIANTS.ACTIVITY]: 'trama-sistema text-sm',
+  [MESSAGE_VARIANTS.BOT]: 'trama-bolha-enviada',
+  [MESSAGE_VARIANTS.TEMPLATE]: 'trama-bolha-enviada',
   [MESSAGE_VARIANTS.ERROR]: 'bg-n-ruby-4 text-n-ruby-12',
   [MESSAGE_VARIANTS.EMAIL]: 'w-full',
   [MESSAGE_VARIANTS.UNSUPPORTED]:
@@ -34,10 +35,8 @@ const varaintBaseMap = {
 };
 
 const orientationMap = {
-  [ORIENTATION.LEFT]:
-    'left-bubble rounded-xl ltr:rounded-bl-sm rtl:rounded-br-sm',
-  [ORIENTATION.RIGHT]:
-    'right-bubble rounded-xl ltr:rounded-br-sm rtl:rounded-bl-sm',
+  [ORIENTATION.LEFT]: 'left-bubble',
+  [ORIENTATION.RIGHT]: 'right-bubble',
   [ORIENTATION.CENTER]: 'rounded-md',
 };
 
