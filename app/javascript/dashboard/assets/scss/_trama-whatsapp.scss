@@ -1008,3 +1008,57 @@ body .trama-wa-aviso.woot-banner.banner {
 .trama-meta-linha {
   margin-top: 2px;
 }
+
+/* retratil */
+// Lista retrátil (20/10): botão para recolher a lista deixando só as fotos.
+.trama-lista-alternar {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--trama-wa-meta);
+
+  &:hover {
+    background-color: rgba(11, 20, 26, 0.06);
+  }
+}
+
+.trama-lista--recolhida {
+  .trama-lista-topo {
+    justify-content: center;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .trama-lista-busca,
+  .trama-lista-abas,
+  .trama-lista-corpo {
+    display: none !important;
+  }
+
+  .trama-lista-linha {
+    justify-content: center;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  // não lida: anel verde em volta da foto
+  .trama-lista-linha--nao-lida [role='img'] {
+    box-shadow:
+      0 0 0 2px var(--trama-wa-lista-fundo, #fff),
+      0 0 0 4px #00a884;
+  }
+}
+
+/* respiro no cabecalho */
+.trama-conv-h {
+  height: 68px;
+  min-height: 68px;
+  flex-shrink: 0;
+  gap: 14px;
+}
+
+.trama-conv-who-sub {
+  margin-top: 2px;
+}

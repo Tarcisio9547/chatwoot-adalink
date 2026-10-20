@@ -18,6 +18,7 @@ const props = defineProps({
   isOnExpandedLayout: { type: Boolean, required: true },
   conversationStats: { type: Object, required: true },
   isListLoading: { type: Boolean, required: true },
+  listaRecolhida: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -26,6 +27,7 @@ const emit = defineEmits([
   'resetFilters',
   'basicFilterChange',
   'filtersModal',
+  'alternarLista',
 ]);
 
 const { uiSettings, updateUISettings } = useUISettings();
@@ -81,7 +83,17 @@ const toggleConversationLayout = () => {
       'trama-lista-topo--com-filtro': hasAppliedFiltersOrActiveFolders,
     }"
   >
-    <div class="flex items-baseline min-w-0 gap-2">
+    <button
+      v-if="listaRecolhida"
+      v-tooltip.right="$t('CONVERSATION.TRAMA_LISTA.ABRIR_LISTA')"
+      type="button"
+      class="trama-lista-alternar"
+      :aria-label="$t('CONVERSATION.TRAMA_LISTA.ABRIR_LISTA')"
+      @click="emit('alternarLista')"
+    >
+      <span class="i-lucide-panel-left-open size-5" aria-hidden="true" />
+    </button>
+    <div v-else class="flex items-baseline min-w-0 gap-2">
       <h1
         class="trama-lista-titulo my-0 font-sora text-[21px] font-bold tracking-[-0.01em] truncate"
         :title="pageTitle"
@@ -98,7 +110,16 @@ const toggleConversationLayout = () => {
         {{ formattedAllCount }}
       </span>
     </div>
-    <div class="flex items-center gap-1">
+    <div v-if="!listaRecolhida" class="flex items-center gap-1">
+      <button
+        v-tooltip.top-end="$t('CONVERSATION.TRAMA_LISTA.RECOLHER_LISTA')"
+        type="button"
+        class="trama-lista-alternar"
+        :aria-label="$t('CONVERSATION.TRAMA_LISTA.RECOLHER_LISTA')"
+        @click="emit('alternarLista')"
+      >
+        <span class="i-lucide-panel-left-close size-4" aria-hidden="true" />
+      </button>
       <template v-if="hasAppliedFilters && !hasActiveFolders">
         <div class="relative">
           <NextButton

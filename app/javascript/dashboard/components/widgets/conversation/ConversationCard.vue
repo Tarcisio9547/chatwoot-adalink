@@ -238,6 +238,7 @@ const deleteConversation = () => {
 
 <template>
   <div
+    :title="currentContact.name"
     class="trama-lista-linha relative flex items-center w-full max-w-full cursor-pointer conversation group"
     :class="{
       'active animate-card-select trama-lista-linha--ativa': isActiveChat,
