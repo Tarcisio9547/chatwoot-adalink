@@ -937,7 +937,7 @@ useEmitter(BUS_EVENTS.INSERT_INTO_RICH_EDITOR, insertContentIntoEditor);
       }
 
       .ProseMirror-copilot svg {
-        @apply fill-n-violet-9 text-n-violet-9 stroke-none;
+        @apply fill-n-blue-9 text-n-blue-9 stroke-none;
       }
     }
   }
@@ -1095,7 +1095,7 @@ useEmitter(BUS_EVENTS.INSERT_INTO_RICH_EDITOR, insertContentIntoEditor);
         }
 
         .ProseMirror-copilot svg {
-          @apply fill-n-violet-9 text-n-violet-9 stroke-none;
+          @apply fill-n-blue-9 text-n-blue-9 stroke-none;
         }
       }
 

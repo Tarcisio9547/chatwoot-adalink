@@ -64,8 +64,8 @@ useKeyboardEvents(keyboardEvents);
       sm
       class="!rounded-full !w-10 !h-10 transition-all duration-[250ms] ease-out active:!scale-95 active:duration-75 shadow-lg"
       :class="isContactSidebarOpen
-        ? '!bg-[rgb(124,58,237)] !text-white shadow-[rgb(124,58,237)]/30'
-        : '!bg-[rgb(124,58,237)]/15 !text-[rgb(124,58,237)] !border !border-[rgb(124,58,237)]/30 hover:!bg-[rgb(124,58,237)] hover:!text-white'"
+        ? '!bg-[rgb(30,58,95)] !text-white shadow-[rgb(30,58,95)]/30'
+        : '!bg-[rgb(30,58,95)]/15 !text-[rgb(30,58,95)] !border !border-[rgb(30,58,95)]/30 hover:!bg-[rgb(30,58,95)] hover:!text-white'"
       icon="i-ph-user-bold"
       @click="handleConversationSidebarToggle"
     />

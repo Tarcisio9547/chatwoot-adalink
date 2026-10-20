@@ -219,7 +219,7 @@ onBeforeUnmount(() => {
     <!-- Adalink: Criar Negócio button -->
     <div class="px-4 py-2">
       <button
-        class="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium bg-[rgb(124,58,237)] text-white hover:bg-[rgb(109,40,217)] transition-all"
+        class="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium bg-[rgb(30,58,95)] text-white hover:bg-[rgb(22,49,82)] transition-all"
         @click="criarNegocio"
       >
         <svg
@@ -247,7 +247,7 @@ onBeforeUnmount(() => {
     >
       <button
         v-if="!naoReceberEtapa || naoReceberEtapa === 'erro'"
-        class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-[rgb(124,58,237)] text-[rgb(124,58,237)] bg-transparent hover:bg-[rgba(124,58,237,0.1)] transition-all"
+        class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-[rgb(30,58,95)] text-[rgb(30,58,95)] bg-transparent hover:bg-[rgba(30,58,95,0.08)] transition-all"
         @click="pedirNaoReceber"
       >
         Não receber campanhas de WhatsApp
@@ -263,7 +263,7 @@ onBeforeUnmount(() => {
         </p>
         <div class="flex gap-2">
           <button
-            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-[rgb(124,58,237)] text-white hover:bg-[rgb(109,40,217)]"
+            class="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-[rgb(30,58,95)] text-white hover:bg-[rgb(22,49,82)]"
             @click="confirmarNaoReceber"
           >
             Sim, tirar
