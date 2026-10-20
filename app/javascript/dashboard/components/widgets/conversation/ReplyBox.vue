@@ -52,6 +52,7 @@ import {
   getEffectiveChannelType,
 } from 'dashboard/helper/editorHelper';
 import { useCopilotReply } from 'dashboard/composables/useCopilotReply';
+import { useCaptain } from 'dashboard/composables/useCaptain';
 import { useKbd } from 'dashboard/composables/utils/useKbd';
 import { isFileTypeAllowedForChannel } from 'shared/helpers/FileHelper';
 
@@ -102,6 +103,7 @@ export default {
     const messageEditor = useTemplateRef('messageEditor');
     const copilot = useCopilotReply();
     const shortcutKey = useKbd(['$mod', '+', 'enter']);
+    const { captainTasksEnabled } = useCaptain();
 
     return {
       uiSettings,
@@ -113,6 +115,7 @@ export default {
       messageEditor,
       copilot,
       shortcutKey,
+      captainTasksEnabled,
     };
   },
   data() {
@@ -212,8 +215,8 @@ export default {
         return this.$t('CONVERSATION.FOOTER.MESSAGING_RESTRICTED');
       }
       return this.isPrivate
-        ? this.$t('CONVERSATION.FOOTER.PRIVATE_MSG_INPUT')
-        : this.$t('CONVERSATION.FOOTER.MSG_INPUT');
+        ? this.$t('CONVERSATION.TRAMA_BARRA.PLACEHOLDER_NOTA')
+        : this.$t('CONVERSATION.TRAMA_BARRA.PLACEHOLDER');
     },
     isMessageLengthReachingThreshold() {
       return this.message.length > this.maxLength - 50;
@@ -431,6 +434,17 @@ export default {
     },
     isDefaultEditorMode() {
       return !this.showAudioRecorderEditor && !this.copilot.isActive.value;
+    },
+    // Trama: IA e Expandir saíram do painel de cima e foram para o menu "+".
+    showCopilotAction() {
+      return (
+        this.captainTasksEnabled &&
+        !this.isEditorDisabled &&
+        !this.showAudioRecorderEditor
+      );
+    },
+    showPopoutAction() {
+      return this.captainTasksEnabled;
     },
     isEditorDisabled() {
       return (
@@ -946,6 +960,21 @@ export default {
         this.toggleAudioRecorder();
       }
     },
+    // Trama: cadeado da barra / link "Voltar a responder" usam o mesmo setReplyMode das abas.
+    togglePrivateNote() {
+      this.setReplyMode(
+        this.isOnPrivateNote
+          ? REPLY_EDITOR_MODES.REPLY
+          : REPLY_EDITOR_MODES.NOTE
+      );
+    },
+    backToReply() {
+      if (this.isReplyRestricted) return;
+      this.setReplyMode(REPLY_EDITOR_MODES.REPLY);
+    },
+    openCopilotMenu() {
+      this.$refs.replyTopPanel?.toggleCopilotMenu();
+    },
     clearEditorSelection() {
       this.updateEditorSelectionWith = '';
     },
@@ -1245,8 +1274,31 @@ export default {
 
 <template>
   <ReplyBoxBanner :message="message" :is-on-private-note="isOnPrivateNote" />
-  <div ref="replyEditor" class="reply-box" :class="replyBoxClass">
+  <div
+    ref="replyEditor"
+    class="reply-box trama-wa-barra"
+    :class="replyBoxClass"
+  >
+    <div
+      v-if="isPrivate"
+      class="trama-wa-privbar"
+      data-test-id="trama-barra-aviso-nota"
+    >
+      <span class="i-ph-lock-simple size-4 flex-shrink-0" />
+      <span>{{ $t('CONVERSATION.TRAMA_BARRA.NOTA_AVISO') }}</span>
+      <span class="flex-1" />
+      <button
+        v-if="!isReplyRestricted"
+        type="button"
+        class="trama-wa-privbar-voltar"
+        data-test-id="trama-barra-voltar-responder"
+        @click="backToReply"
+      >
+        {{ $t('CONVERSATION.TRAMA_BARRA.VOLTAR_RESPONDER') }}
+      </button>
+    </div>
     <ReplyTopPanel
+      ref="replyTopPanel"
       :mode="replyType"
       :conversation-id="conversationId"
       :is-reply-restricted="isReplyRestricted"
@@ -1260,7 +1312,6 @@ export default {
       :editor-content="message"
       :popout-reply-box="popOutReplyBox"
       @set-reply-mode="setReplyMode"
-      @toggle-popout="togglePopout"
       @toggle-copilot="copilot.toggleEditor"
       @execute-copilot-action="executeCopilotAction"
     />
@@ -1270,170 +1321,183 @@ export default {
       @insert="handleInsert"
       @close="onSearchPopoverClose"
     />
-    <Transition
-      mode="out-in"
-      enter-active-class="transition-all duration-300 ease-out"
-      enter-from-class="opacity-0 translate-y-2 scale-[0.98]"
-      enter-to-class="opacity-100 translate-y-0 scale-100"
-      leave-active-class="transition-all duration-200 ease-in"
-      leave-from-class="opacity-100 translate-y-0 scale-100"
-      leave-to-class="opacity-0 translate-y-2 scale-[0.98]"
+    <div
+      class="trama-wa-linha"
+      :class="{ 'is-copilot': copilot.isActive.value }"
     >
-      <div :key="copilot.editorTransitionKey.value" class="reply-box__top">
-        <ReplyToMessage
-          v-if="shouldShowReplyToMessage"
-          :message="inReplyTo"
-          @dismiss="resetReplyToMessage"
-        />
-        <EmojiInput
-          v-if="showEmojiPicker"
-          v-on-clickaway="hideEmojiPicker"
-          :class="{
-            'emoji-dialog--expanded': isOnExpandedLayout || popOutReplyBox,
-          }"
-          :on-click="addIntoEditor"
-        />
-        <ReplyEmailHead
-          v-if="showReplyHead && isDefaultEditorMode"
-          v-model:cc-emails="ccEmails"
-          v-model:bcc-emails="bccEmails"
-          v-model:to-emails="toEmails"
-        />
-        <AudioRecorder
-          v-if="showAudioRecorderEditor"
-          ref="audioRecorderInput"
-          :audio-record-format="audioRecordFormat"
-          @recorder-progress-changed="onRecordProgressChanged"
-          @finish-record="onFinishRecorder"
-          @play="recordingAudioState = 'playing'"
-          @pause="recordingAudioState = 'paused'"
-        />
-        <CopilotEditorSection
-          v-if="copilot.isActive.value && !showAudioRecorderEditor"
-          :show-copilot-editor="copilot.showEditor.value"
-          :is-generating-content="copilot.isGenerating.value"
-          :generated-content="copilot.generatedContent.value"
-          :is-popout="popOutReplyBox"
-          :placeholder="$t('CONVERSATION.FOOTER.COPILOT_MSG_INPUT')"
-          @focus="onFocus"
-          @blur="onBlur"
-          @clear-selection="clearEditorSelection"
-          @close="copilot.showEditor.value = false"
-          @content-ready="copilot.setContentReady"
-          @send="copilot.sendFollowUp"
-        />
-        <WootMessageEditor
-          v-else-if="!showAudioRecorderEditor"
-          ref="messageEditor"
-          v-model="message"
-          :conversation-id="conversationId"
-          :editor-id="editorStateId"
-          class="input popover-prosemirror-menu"
-          :is-private="isOnPrivateNote"
-          :placeholder="messagePlaceHolder"
-          :update-selection-with="updateEditorSelectionWith"
-          :min-height="4"
-          :disabled="isEditorDisabled"
-          enable-variables
-          :variables="messageVariables"
-          :signature="messageSignature"
-          allow-signature
-          :channel-type="channelType"
-          :medium="inbox.medium"
-          @typing-off="onTypingOff"
-          @typing-on="onTypingOn"
-          @focus="onFocus"
-          @blur="onBlur"
-          @toggle-user-mention="toggleUserMention"
-          @toggle-canned-menu="toggleCannedMenu"
-          @toggle-variables-menu="toggleVariablesMenu"
-          @clear-selection="clearEditorSelection"
-          @execute-copilot-action="executeCopilotAction"
-        />
-
-        <QuotedEmailPreview
-          v-if="shouldShowQuotedPreview && isDefaultEditorMode"
-          :quoted-email-text="quotedEmailText"
-          :preview-text="quotedEmailPreviewText"
-          class="mb-2"
-          @toggle="toggleQuotedReply"
-        />
-
+      <Transition
+        mode="out-in"
+        enter-active-class="transition-all duration-300 ease-out"
+        enter-from-class="opacity-0 translate-y-2 scale-[0.98]"
+        enter-to-class="opacity-100 translate-y-0 scale-100"
+        leave-active-class="transition-all duration-200 ease-in"
+        leave-from-class="opacity-100 translate-y-0 scale-100"
+        leave-to-class="opacity-0 translate-y-2 scale-[0.98]"
+      >
         <div
-          v-if="hasAttachments && isDefaultEditorMode"
-          class="bg-transparent py-0 mb-2"
-          @paste="onPaste"
+          :key="copilot.editorTransitionKey.value"
+          class="reply-box__top trama-wa-campo"
         >
-          <AttachmentPreview
-            class="mt-2"
-            :attachments="attachedFiles"
-            @remove-attachment="removeAttachment"
+          <ReplyToMessage
+            v-if="shouldShowReplyToMessage"
+            :message="inReplyTo"
+            @dismiss="resetReplyToMessage"
+          />
+          <EmojiInput
+            v-if="showEmojiPicker"
+            v-on-clickaway="hideEmojiPicker"
+            :class="{
+              'emoji-dialog--expanded': isOnExpandedLayout || popOutReplyBox,
+            }"
+            :on-click="addIntoEditor"
+          />
+          <ReplyEmailHead
+            v-if="showReplyHead && isDefaultEditorMode"
+            v-model:cc-emails="ccEmails"
+            v-model:bcc-emails="bccEmails"
+            v-model:to-emails="toEmails"
+          />
+          <AudioRecorder
+            v-if="showAudioRecorderEditor"
+            ref="audioRecorderInput"
+            :audio-record-format="audioRecordFormat"
+            @recorder-progress-changed="onRecordProgressChanged"
+            @finish-record="onFinishRecorder"
+            @play="recordingAudioState = 'playing'"
+            @pause="recordingAudioState = 'paused'"
+          />
+          <CopilotEditorSection
+            v-if="copilot.isActive.value && !showAudioRecorderEditor"
+            :show-copilot-editor="copilot.showEditor.value"
+            :is-generating-content="copilot.isGenerating.value"
+            :generated-content="copilot.generatedContent.value"
+            :is-popout="popOutReplyBox"
+            :placeholder="$t('CONVERSATION.FOOTER.COPILOT_MSG_INPUT')"
+            @focus="onFocus"
+            @blur="onBlur"
+            @clear-selection="clearEditorSelection"
+            @close="copilot.showEditor.value = false"
+            @content-ready="copilot.setContentReady"
+            @send="copilot.sendFollowUp"
+          />
+          <WootMessageEditor
+            v-else-if="!showAudioRecorderEditor"
+            ref="messageEditor"
+            v-model="message"
+            :conversation-id="conversationId"
+            :editor-id="editorStateId"
+            class="input popover-prosemirror-menu"
+            :is-private="isOnPrivateNote"
+            :placeholder="messagePlaceHolder"
+            :update-selection-with="updateEditorSelectionWith"
+            :min-height="4"
+            :disabled="isEditorDisabled"
+            enable-variables
+            :variables="messageVariables"
+            :signature="messageSignature"
+            allow-signature
+            :channel-type="channelType"
+            :medium="inbox.medium"
+            @typing-off="onTypingOff"
+            @typing-on="onTypingOn"
+            @focus="onFocus"
+            @blur="onBlur"
+            @toggle-user-mention="toggleUserMention"
+            @toggle-canned-menu="toggleCannedMenu"
+            @toggle-variables-menu="toggleVariablesMenu"
+            @clear-selection="clearEditorSelection"
+            @execute-copilot-action="executeCopilotAction"
+          />
+
+          <QuotedEmailPreview
+            v-if="shouldShowQuotedPreview && isDefaultEditorMode"
+            :quoted-email-text="quotedEmailText"
+            :preview-text="quotedEmailPreviewText"
+            class="mb-2"
+            @toggle="toggleQuotedReply"
+          />
+
+          <div
+            v-if="hasAttachments && isDefaultEditorMode"
+            class="bg-transparent py-0 mb-2"
+            @paste="onPaste"
+          >
+            <AttachmentPreview
+              class="mt-2"
+              :attachments="attachedFiles"
+              @remove-attachment="removeAttachment"
+            />
+          </div>
+          <MessageSignatureMissingAlert
+            v-if="
+              isSignatureEnabledForInbox &&
+              !isSignatureAvailable &&
+              isDefaultEditorMode
+            "
+            class="mb-2"
           />
         </div>
-        <MessageSignatureMissingAlert
-          v-if="
-            isSignatureEnabledForInbox &&
-            !isSignatureAvailable &&
-            isDefaultEditorMode
-          "
-          class="mb-2"
-        />
-      </div>
-    </Transition>
+      </Transition>
 
-    <Transition
-      mode="out-in"
-      enter-active-class="transition-all duration-300 ease-out"
-      enter-from-class="opacity-0 translate-y-2 scale-[0.98]"
-      enter-to-class="opacity-100 translate-y-0 scale-100"
-      leave-active-class="transition-all duration-200 ease-in"
-      leave-from-class="opacity-100 translate-y-0 scale-100"
-      leave-to-class="opacity-0 translate-y-2 scale-[0.98]"
-    >
-      <CopilotReplyBottomPanel
-        v-if="copilot.isActive.value"
-        key="copilot-bottom-panel"
-        :is-generating-content="copilot.isButtonDisabled.value"
-        @submit="onSubmitCopilotReply"
-        @cancel="copilot.reset"
-      />
-      <ReplyBottomPanel
-        v-else
-        key="reply-bottom-panel"
-        :conversation-id="conversationId"
-        :enable-multiple-file-upload="enableMultipleFileUpload"
-        :enable-whats-app-templates="showWhatsappTemplates"
-        :enable-content-templates="showContentTemplates"
-        :inbox="inbox"
-        :is-on-private-note="isOnPrivateNote"
-        :is-recording-audio="isRecordingAudio"
-        :is-send-disabled="isReplyButtonDisabled"
-        :is-note="isPrivate"
-        :is-editor-disabled="isEditorDisabled"
-        :on-file-upload="onFileUpload"
-        :on-send="onSendReply"
-        :conversation-type="conversationType"
-        :recording-audio-duration-text="recordingAudioDurationText"
-        :recording-audio-state="recordingAudioState"
-        :send-button-text="replyButtonLabel"
-        :show-audio-recorder="showAudioRecorder"
-        :show-emoji-picker="showEmojiPicker"
-        :show-file-upload="showFileUpload"
-        :show-quoted-reply-toggle="shouldShowQuotedReplyToggle"
-        :quoted-reply-enabled="quotedReplyPreference"
-        :toggle-audio-recorder-play-pause="toggleAudioRecorderPlayPause"
-        :toggle-audio-recorder="toggleAudioRecorder"
-        :toggle-emoji-picker="toggleEmojiPicker"
-        :message="message"
-        :portal-slug="connectedPortalSlug"
-        :new-conversation-modal-active="newConversationModalActive"
-        @select-whatsapp-template="openWhatsappTemplateModal"
-        @select-content-template="openContentTemplateModal"
-        @replace-text="replaceText"
-        @toggle-insert-article="toggleInsertArticle"
-        @toggle-quoted-reply="toggleQuotedReply"
-      />
-    </Transition>
+      <Transition
+        mode="out-in"
+        enter-active-class="transition-all duration-300 ease-out"
+        enter-from-class="opacity-0 translate-y-2 scale-[0.98]"
+        enter-to-class="opacity-100 translate-y-0 scale-100"
+        leave-active-class="transition-all duration-200 ease-in"
+        leave-from-class="opacity-100 translate-y-0 scale-100"
+        leave-to-class="opacity-0 translate-y-2 scale-[0.98]"
+      >
+        <CopilotReplyBottomPanel
+          v-if="copilot.isActive.value"
+          key="copilot-bottom-panel"
+          :is-generating-content="copilot.isButtonDisabled.value"
+          @submit="onSubmitCopilotReply"
+          @cancel="copilot.reset"
+        />
+        <ReplyBottomPanel
+          v-else
+          key="reply-bottom-panel"
+          :conversation-id="conversationId"
+          :enable-multiple-file-upload="enableMultipleFileUpload"
+          :enable-whats-app-templates="showWhatsappTemplates"
+          :enable-content-templates="showContentTemplates"
+          :inbox="inbox"
+          :is-on-private-note="isOnPrivateNote"
+          :is-recording-audio="isRecordingAudio"
+          :is-send-disabled="isReplyButtonDisabled"
+          :is-note="isPrivate"
+          :is-editor-disabled="isEditorDisabled"
+          :on-file-upload="onFileUpload"
+          :on-send="onSendReply"
+          :conversation-type="conversationType"
+          :recording-audio-duration-text="recordingAudioDurationText"
+          :recording-audio-state="recordingAudioState"
+          :send-button-text="replyButtonLabel"
+          :show-audio-recorder="showAudioRecorder"
+          :show-emoji-picker="showEmojiPicker"
+          :show-file-upload="showFileUpload"
+          :show-quoted-reply-toggle="shouldShowQuotedReplyToggle"
+          :quoted-reply-enabled="quotedReplyPreference"
+          :toggle-audio-recorder-play-pause="toggleAudioRecorderPlayPause"
+          :toggle-audio-recorder="toggleAudioRecorder"
+          :toggle-emoji-picker="toggleEmojiPicker"
+          :message="message"
+          :portal-slug="connectedPortalSlug"
+          :new-conversation-modal-active="newConversationModalActive"
+          :show-copilot-action="showCopilotAction"
+          :show-popout-action="showPopoutAction"
+          @select-whatsapp-template="openWhatsappTemplateModal"
+          @select-content-template="openContentTemplateModal"
+          @replace-text="replaceText"
+          @toggle-insert-article="toggleInsertArticle"
+          @toggle-quoted-reply="toggleQuotedReply"
+          @toggle-private-note="togglePrivateNote"
+          @open-copilot="openCopilotMenu"
+          @toggle-popout="togglePopout"
+        />
+      </Transition>
+    </div>
 
     <WhatsappTemplates
       :inbox-id="inbox.id"
@@ -1460,41 +1524,27 @@ export default {
 </template>
 
 <style lang="scss" scoped>
-.send-button {
-  @apply mb-0;
-}
-
+// Trama: cores e forma da barra (fundo, campo, botões redondos, nota amarela)
+// ficam em assets/scss/_trama-whatsapp.scss, bloco "barra".
 .reply-box {
-  @apply relative mb-2 mx-2 border border-n-weak rounded-xl bg-n-solid-1;
-
-  &.is-private {
-    @apply bg-n-solid-amber dark:border-n-amber-3/10 border-n-amber-12/5;
-  }
-}
-
-.send-button {
-  @apply mb-0;
+  @apply relative;
 }
 
 .reply-box__top {
-  @apply relative py-0 px-3 -mt-px;
+  @apply relative;
 }
 
+// Emojis abrem acima da barra, alinhados ao botão de emoji.
 .emoji-dialog {
-  @apply top-[unset] -bottom-10 ltr:-left-80 ltr:right-[unset] rtl:left-[unset] rtl:-right-80;
+  @apply top-[unset] bottom-[calc(100%+0.875rem)] ltr:-left-[5.75rem] ltr:right-[unset] rtl:left-[unset] rtl:-right-[5.75rem];
 
   &::before {
-    filter: drop-shadow(0px 4px 4px rgba(0, 0, 0, 0.08));
-    @apply ltr:-right-4 bottom-2 rtl:-left-4 ltr:rotate-[270deg] rtl:rotate-[90deg];
+    @apply hidden;
   }
 }
 
+// Layout expandido: mesma posição (acima da barra), só sobe de camada.
 .emoji-dialog--expanded {
-  @apply left-[unset] bottom-0 absolute z-[100];
-
-  &::before {
-    transform: rotate(0deg);
-    @apply ltr:left-1 rtl:right-1 -bottom-2;
-  }
+  @apply absolute z-[100];
 }
 </style>
