@@ -316,7 +316,9 @@
     },
     "TRAMA_LISTA": {
       "NOVA_CONVERSA": "New conversation",
-      "CONFIGURACOES": "Inbox settings"
+      "CONFIGURACOES": "Inbox settings",
+      "RECOLHER_LISTA": "Collapse list",
+      "ABRIR_LISTA": "Expand conversation list"
     }
   },
   "EMAIL_TRANSCRIPT": {

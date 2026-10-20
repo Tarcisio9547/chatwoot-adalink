@@ -316,7 +316,9 @@
     },
     "TRAMA_LISTA": {
       "NOVA_CONVERSA": "Nova conversa",
-      "CONFIGURACOES": "Configurações do atendimento"
+      "CONFIGURACOES": "Configurações do atendimento",
+      "RECOLHER_LISTA": "Recolher a lista",
+      "ABRIR_LISTA": "Abrir a lista de conversas"
     }
   },
   "EMAIL_TRANSCRIPT": {

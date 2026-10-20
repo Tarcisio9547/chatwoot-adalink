@@ -85,6 +85,28 @@ const route = useRoute();
 const store = useStore();
 
 const resolveAttributesModalRef = ref(null);
+
+// Trama: lista retrátil. Recolhida mostra só as fotos; a escolha fica salva neste navegador.
+const CHAVE_LISTA_RECOLHIDA = 'trama_lista_recolhida';
+const lerListaRecolhida = () => {
+  try {
+    return window.localStorage.getItem(CHAVE_LISTA_RECOLHIDA) === '1';
+  } catch (e) {
+    return false;
+  }
+};
+const listaRecolhida = ref(lerListaRecolhida());
+const alternarLista = () => {
+  listaRecolhida.value = !listaRecolhida.value;
+  try {
+    window.localStorage.setItem(
+      CHAVE_LISTA_RECOLHIDA,
+      listaRecolhida.value ? '1' : '0'
+    );
+  } catch (e) {
+    // sem armazenamento: só não lembra a escolha
+  }
+};
 const conversationListRef = ref(null);
 const virtualListRef = ref(null);
 
@@ -875,7 +897,11 @@ watch(conversationFilters, (newVal, oldVal) => {
     class="flex flex-col flex-shrink-0 conversations-list-wrap trama-lista"
     :class="[
       { hidden: !showConversationList },
-      isOnExpandedLayout ? 'basis-full' : 'w-[340px] 2xl:w-[412px]',
+      isOnExpandedLayout
+        ? 'basis-full'
+        : listaRecolhida
+          ? 'w-[76px] trama-lista--recolhida'
+          : 'w-[340px] 2xl:w-[380px]',
     ]"
   >
     <slot />
@@ -886,6 +912,8 @@ watch(conversationFilters, (newVal, oldVal) => {
       :is-on-expanded-layout="isOnExpandedLayout"
       :conversation-stats="conversationStats"
       :is-list-loading="chatListLoading && !conversationList.length"
+      :lista-recolhida="listaRecolhida && !isOnExpandedLayout"
+      @alternar-lista="alternarLista"
       @add-folders="onClickOpenAddFoldersModal"
       @delete-folders="onClickOpenDeleteFoldersModal"
       @filters-modal="onToggleAdvanceFiltersModal"
