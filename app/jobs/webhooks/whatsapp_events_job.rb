@@ -1,5 +1,8 @@
 class Webhooks::WhatsappEventsJob < ApplicationJob
-  queue_as :low
+  # Mensagem recebida e status (entregue/lido) da Meta. Na fila `low` ficava atras de todo envio em massa
+  # (o Sidekiq so olha `low` quando critical/high/medium estao vazias): num disparo de 582 mensagens os
+  # avisos chegaram a esperar 56 min. `high` e a fila do SendReplyJob, entao anda junto com o envio.
+  queue_as :high
 
   def perform(params = {})
     channel = find_channel_from_whatsapp_business_payload(params)
